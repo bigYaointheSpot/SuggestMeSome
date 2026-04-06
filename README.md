@@ -205,6 +205,21 @@ All new models registered in the ModelContainer at app entry point.
 
 ---
 
+#### Prompt 2 — Tab Bar Navigation & Training Programs Shell
+
+Converted the app from a single-screen layout to a TabView and added the Training Programs tab shell.
+
+- **ContentView** converted to a `TabView` with two tabs: "Workouts" (dumbbell icon) and "Training Programs" (list.clipboard icon)
+- **WorkoutsTab** extracted from the old ContentView — all existing workout history, filtering, and generator flow unchanged
+- **Action button row** updated: "Start Workout", "SuggestMeSome", and "Complete Program Workout" (orange) sit in a single horizontal HStack with equal widths. "Complete Program Workout" only renders when at least one active (not completed) `ProgramRun` exists
+- **TrainingProgramsTab** — new view with "Create Your Own Program" (blue) and "Use Existing Program" (purple) buttons at top, plus a list of all `ProgramRun` records sorted active-first then completed by endDate descending. Each row shows program name, Active/Completed badge, start date, and X/Y workouts count
+- **CreateProgramView / SelectProgramView** — placeholder views ("Coming Soon") for future prompts
+- Tapping a program run row does nothing yet
+
+**Commit:** `feat: add tab bar navigation and training programs tab shell`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
