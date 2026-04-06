@@ -67,6 +67,7 @@ struct DraftExerciseEntry: Identifiable {
 
 struct WorkoutView: View {
     var generatedWorkout: GeneratedWorkout? = nil
+    var programWorkout: ProgramWorkoutContext? = nil
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -129,40 +130,58 @@ struct WorkoutView: View {
             Text("This will save your workout and mark any new personal records.")
         }
         .onAppear {
-            guard let gw = generatedWorkout, exerciseEntries.isEmpty else { return }
-            exerciseEntries = gw.exercises.enumerated().map { index, genExercise in
-                if genExercise.exercise.exerciseType == .cardio {
-                    let totalSeconds = Int(genExercise.effectiveTimeMinutes * 60)
-                    let mins = totalSeconds / 60
-                    let secs = totalSeconds % 60
+            guard exerciseEntries.isEmpty else { return }
+            if let gw = generatedWorkout {
+                exerciseEntries = gw.exercises.enumerated().map { index, genExercise in
+                    if genExercise.exercise.exerciseType == .cardio {
+                        let totalSeconds = Int(genExercise.effectiveTimeMinutes * 60)
+                        let mins = totalSeconds / 60
+                        let secs = totalSeconds % 60
+                        return DraftExerciseEntry(
+                            exerciseName: genExercise.exercise.name,
+                            unit: .lbs,
+                            orderIndex: index,
+                            sets: [],
+                            isCardio: true,
+                            cardioMinutesText: mins > 0 ? "\(mins)" : "",
+                            cardioSecondsText: secs > 0 ? "\(secs)" : ""
+                        )
+                    }
+                    let unit = genExercise.sets.first?.unit ?? .lbs
+                    let draftSets = genExercise.sets.map { genSet in
+                        DraftSet(
+                            setNumber: genSet.setNumber,
+                            repsText: "\(genSet.suggestedReps)",
+                            weightText: formatGeneratedWeight(genSet.suggestedWeight),
+                            isWarmup: genSet.isWarmup
+                        )
+                    }
                     return DraftExerciseEntry(
                         exerciseName: genExercise.exercise.name,
-                        unit: .lbs,
+                        unit: unit,
                         orderIndex: index,
-                        sets: [],
-                        isCardio: true,
-                        cardioMinutesText: mins > 0 ? "\(mins)" : "",
-                        cardioSecondsText: secs > 0 ? "\(secs)" : ""
+                        sets: draftSets
                     )
                 }
-                let unit = genExercise.sets.first?.unit ?? .lbs
-                let draftSets = genExercise.sets.map { genSet in
-                    DraftSet(
-                        setNumber: genSet.setNumber,
-                        repsText: "\(genSet.suggestedReps)",
-                        weightText: formatGeneratedWeight(genSet.suggestedWeight),
-                        isWarmup: genSet.isWarmup
+                startTime = Date.now
+                isActive = true
+            } else if let pw = programWorkout {
+                exerciseEntries = pw.exercises.enumerated().map { index, sessionExercise in
+                    let unit = allPersonalRecords
+                        .first(where: { $0.exerciseName == sessionExercise.exerciseName })?.unit ?? .lbs
+                    let setCount = max(1, sessionExercise.targetSets ?? 3)
+                    let repsText = sessionExercise.targetReps.map { "\($0)" } ?? ""
+                    let sets = (1...setCount).map { DraftSet(setNumber: $0, repsText: repsText) }
+                    return DraftExerciseEntry(
+                        exerciseName: sessionExercise.exerciseName,
+                        unit: unit,
+                        orderIndex: index,
+                        sets: sets
                     )
                 }
-                return DraftExerciseEntry(
-                    exerciseName: genExercise.exercise.name,
-                    unit: unit,
-                    orderIndex: index,
-                    sets: draftSets
-                )
+                startTime = Date.now
+                isActive = true
             }
-            startTime = Date.now
-            isActive = true
         }
     }
 
@@ -315,7 +334,10 @@ struct WorkoutView: View {
             startTime: start,
             durationSeconds: Int(now.timeIntervalSince(start)),
             caloriesBurned: Int(caloriesText),
-            comments: comments.isEmpty ? nil : comments
+            comments: comments.isEmpty ? nil : comments,
+            programRun: programWorkout?.programRun,
+            programWeekNumber: programWorkout?.weekNumber,
+            programSessionNumber: programWorkout?.sessionNumber
         )
         modelContext.insert(workout)
 
@@ -350,7 +372,25 @@ struct WorkoutView: View {
         }
 
         try? modelContext.save()
+
+        if let pw = programWorkout {
+            checkProgramCompletion(run: pw.programRun)
+        }
+
         dismiss()
+    }
+
+    private func checkProgramCompletion(run: ProgramRun) {
+        guard let program = run.program else { return }
+        let expected = program.lengthInWeeks * program.sessionsPerWeek
+        let descriptor = FetchDescriptor<Workout>()
+        guard let all = try? modelContext.fetch(descriptor) else { return }
+        let count = all.filter { $0.programRun?.id == run.id }.count
+        if count >= expected {
+            run.isCompleted = true
+            run.endDate = Date.now
+            try? modelContext.save()
+        }
     }
 
     /// Checks whether `setEntry` is a new personal record and updates the store accordingly.

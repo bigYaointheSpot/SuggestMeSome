@@ -53,6 +53,11 @@ struct WorkoutsTab: View {
     @State private var pendingGeneratedWorkout: GeneratedWorkout?
     @State private var showingGeneratedWorkout = false
 
+    // MARK: Program workout flow
+    @State private var showingCompleteProgramSheet = false
+    @State private var pendingProgramWorkout: ProgramWorkoutContext?
+    @State private var showingProgramWorkout = false
+
     // MARK: - Computed
 
     var exerciseFilterActive: Bool {
@@ -151,6 +156,23 @@ struct WorkoutsTab: View {
             .navigationDestination(isPresented: $showingGeneratedWorkout) {
                 WorkoutView(generatedWorkout: pendingGeneratedWorkout)
             }
+            .sheet(isPresented: $showingCompleteProgramSheet, onDismiss: {
+                if pendingProgramWorkout != nil {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        showingProgramWorkout = true
+                    }
+                }
+            }) {
+                CompleteProgramWorkoutSheet(activeRuns: Array(activeProgramRuns)) { ctx in
+                    pendingProgramWorkout = ctx
+                    showingCompleteProgramSheet = false
+                }
+            }
+            .navigationDestination(isPresented: $showingProgramWorkout) {
+                if let pw = pendingProgramWorkout {
+                    WorkoutView(programWorkout: pw)
+                }
+            }
             .alert("Delete Workout?", isPresented: .init(
                 get: { workoutToDelete != nil },
                 set: { if !$0 { workoutToDelete = nil } }
@@ -199,8 +221,8 @@ struct WorkoutsTab: View {
             }
 
             if !activeProgramRuns.isEmpty {
-                NavigationLink {
-                    WorkoutView()
+                Button {
+                    showingCompleteProgramSheet = true
                 } label: {
                     Label("Complete Program", systemImage: "checkmark.circle")
                         .font(.subheadline.weight(.semibold))

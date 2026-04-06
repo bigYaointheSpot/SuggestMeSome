@@ -87,7 +87,11 @@ struct TrainingProgramsTab: View {
         } else {
             List {
                 ForEach(sortedRuns) { run in
-                    ProgramRunRow(run: run, allWorkouts: allWorkouts)
+                    NavigationLink {
+                        ProgramRunDetailView(run: run)
+                    } label: {
+                        ProgramRunRow(run: run, allWorkouts: allWorkouts)
+                    }
                 }
             }
             .listStyle(.plain)
@@ -137,13 +141,3 @@ struct ProgramRunRow: View {
     }
 }
 
-// MARK: - Placeholder Views
-
-struct SelectProgramView: View {
-    var body: some View {
-        Text("Select Program - Coming Soon")
-            .foregroundStyle(.secondary)
-            .navigationTitle("Use Existing Program")
-            .navigationBarTitleDisplayMode(.inline)
-    }
-}

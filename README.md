@@ -235,6 +235,22 @@ Multi-step wizard for creating a user-defined training program.
 
 ---
 
+#### Prompt 4 — Program Workout Execution
+
+Starting and completing workouts within an active program run.
+
+- **"Use Existing Program" flow:** Replaced placeholder with a real list of all saved `TrainingProgram`s sorted by createdDate descending. Each row shows name, length, sessions/week, and source label (Custom/Template/AI Generated). Tapping a row presents a confirmation dialog; confirming creates a `ProgramRun` linked to that program and navigates back to the Training Programs tab.
+- **Program run detail:** Tapping any row in the Training Programs list navigates to `ProgramRunDetailView` showing program info, progress (X/Y workouts), status, and start/end dates. Active runs show an "End Program Early" button that marks the run as completed.
+- **"Complete Program Workout" button:** Changed from a no-op NavigationLink to a Button that presents `CompleteProgramWorkoutSheet`. The sheet lists all active runs (skips selection if only one active run). After selecting a run, auto-detects the next uncompleted week/session in order (Week 1 Session 1 → Week 1 Session 2 → Week 2 Session 1 etc.). Displays the detected session with exercise list and optional target sets×reps. "Choose Different Session" button opens a picker sheet for manual week/session selection.
+- **WorkoutView handoff:** `WorkoutView` accepts a new `programWorkout: ProgramWorkoutContext?` parameter alongside the existing `generatedWorkout`. On appear, pre-populates exercise entries from the session's `ProgramSessionExercise` list: if `targetSets`/`targetReps` are set, creates that many sets with reps pre-filled; otherwise defaults to 3 empty sets. Unit defaults to the user's last-known unit from PersonalRecords, or lbs.
+- **Saving with program linkage:** When saving a program workout, the `Workout` record is created with `programRun`, `programWeekNumber`, and `programSessionNumber` populated.
+- **Auto-completion:** After saving, checks if all `lengthInWeeks × sessionsPerWeek` sessions now have linked workouts for this run. If so, sets `ProgramRun.isCompleted = true` and `endDate = now`.
+- **New file:** `SuggestMeSome/Views/ProgramWorkoutViews.swift` — contains `ProgramWorkoutContext`, `SelectProgramView`, `ProgramListRow`, `ProgramRunDetailView`, `CompleteProgramWorkoutSheet`, `SessionPickerSheet`.
+
+**Commit:** `feat: add program workout execution with auto-detect and handoff to WorkoutView`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
