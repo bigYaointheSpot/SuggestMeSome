@@ -411,6 +411,29 @@ struct ProgramRunExpandableRow: View {
     @ViewBuilder
     private func sessionWorkoutDetail(workout: Workout) -> some View {
         VStack(alignment: .leading, spacing: 10) {
+            NavigationLink {
+                WorkoutDetailView(workout: workout)
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(workout.date.formatted(date: .abbreviated, time: .omitted))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                        Text(workout.formattedDuration)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Label("View Full Workout", systemImage: "arrow.right.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.blue)
+                }
+                .padding(12)
+                .background(Color(.tertiarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.3), lineWidth: 1))
+            }
+
             ForEach(workout.exerciseEntries.sorted { $0.orderIndex < $1.orderIndex }) { entry in
                 ExerciseDetailCard(entry: entry)
             }
