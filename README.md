@@ -175,7 +175,7 @@ Cardio support in the generator flow.
 
 ### Feature 3 — Training Programs
 
-**Status:** In Progress
+**Status:** Complete
 
 Structured multi-week training programs that link workouts to a prescribed schedule.
 
