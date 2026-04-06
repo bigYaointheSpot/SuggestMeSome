@@ -15,7 +15,7 @@ final class ExerciseEntry {
     var exerciseName: String
     var unit: WeightUnit
     var orderIndex: Int
-    var isCardio: Bool
+    var isCardio: Bool = false
     /// Duration in seconds; only set when isCardio is true.
     var cardioDurationSeconds: Int?
     var workout: Workout?

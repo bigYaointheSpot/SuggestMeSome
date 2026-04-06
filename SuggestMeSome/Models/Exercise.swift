@@ -11,7 +11,7 @@ import SwiftData
 @Model
 final class Exercise {
     var name: String
-    var exerciseType: ExerciseType
+    var exerciseType: ExerciseType = ExerciseType.isolation
     var muscleGroup: MuscleGroup?
 
     var baseTimeMinutes: Int {
