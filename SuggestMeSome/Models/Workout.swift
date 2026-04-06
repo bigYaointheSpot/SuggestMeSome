@@ -21,13 +21,23 @@ final class Workout {
     @Relationship(deleteRule: .cascade, inverse: \ExerciseEntry.workout)
     var exerciseEntries: [ExerciseEntry] = []
 
+    /// The program run this workout belongs to; nil for standalone workouts.
+    var programRun: ProgramRun?
+    /// The week number within the program run; nil for standalone workouts.
+    var programWeekNumber: Int?
+    /// The session number within the program week; nil for standalone workouts.
+    var programSessionNumber: Int?
+
     init(
         id: UUID = UUID(),
         date: Date,
         startTime: Date,
         durationSeconds: Int,
         caloriesBurned: Int? = nil,
-        comments: String? = nil
+        comments: String? = nil,
+        programRun: ProgramRun? = nil,
+        programWeekNumber: Int? = nil,
+        programSessionNumber: Int? = nil
     ) {
         self.id = id
         self.date = date
@@ -35,6 +45,9 @@ final class Workout {
         self.durationSeconds = durationSeconds
         self.caloriesBurned = caloriesBurned
         self.comments = comments
+        self.programRun = programRun
+        self.programWeekNumber = programWeekNumber
+        self.programSessionNumber = programSessionNumber
     }
 
     /// Returns duration formatted as hh:mm:ss.

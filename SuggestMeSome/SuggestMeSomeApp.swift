@@ -18,6 +18,11 @@ struct SuggestMeSomeApp: App {
             ExerciseEntry.self,
             SetEntry.self,
             PersonalRecord.self,
+            TrainingProgram.self,
+            ProgramWeekTemplate.self,
+            ProgramSessionTemplate.self,
+            ProgramSessionExercise.self,
+            ProgramRun.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
