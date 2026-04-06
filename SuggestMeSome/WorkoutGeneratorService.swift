@@ -51,10 +51,12 @@ struct WorkoutGeneratorService {
         Int.random(in: repRange(for: intensity))
     }
 
-    /// intensityFactor = 3.0 - (intensity / 5.0)
-    /// Maps intensity 1 → 2.8x, intensity 5 → 2.0x base time per exercise.
+    /// Per-exercise time multiplier applied to baseTimeMinutes for budget calculations.
+    /// Lower intensity → lighter weights → shorter rest → less time per exercise → more exercises fit (high volume).
+    /// Higher intensity → heavier weights → longer rest → more time per exercise → fewer exercises fit (low volume).
+    /// Maps: intensity 1 → 0.40x, intensity 3 → 0.50x, intensity 5 → 0.60x
     private func intensityFactor(for intensity: Int) -> Double {
-        3.0 - (Double(intensity) / 5.0)
+        0.35 + Double(intensity) * 0.05
     }
 
     private func selectionScore(for exercise: Exercise) -> Int {
