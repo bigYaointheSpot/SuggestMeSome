@@ -11,9 +11,28 @@ import SwiftData
 // MARK: - ContentView
 
 struct ContentView: View {
+    var body: some View {
+        TabView {
+            WorkoutsTab()
+                .tabItem {
+                    Label("Workouts", systemImage: "dumbbell")
+                }
+            TrainingProgramsTab()
+                .tabItem {
+                    Label("Training Programs", systemImage: "list.clipboard")
+                }
+        }
+    }
+}
+
+// MARK: - WorkoutsTab
+
+struct WorkoutsTab: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
     @Query(sort: \MuscleGroup.name) private var muscleGroups: [MuscleGroup]
+    @Query(filter: #Predicate<ProgramRun> { run in run.isCompleted == false })
+    private var activeProgramRuns: [ProgramRun]
 
     // MARK: Filter state
     @State private var filterByDate = false
@@ -62,7 +81,6 @@ struct ContentView: View {
             }
 
             if exerciseFilterActive {
-                // Resolve all exercise names that belong to any selected group
                 let namesFromGroups: Set<String> = selectedGroupNames.reduce(into: []) { result, groupName in
                     if let group = muscleGroups.first(where: { $0.name == groupName }) {
                         result.formUnion(group.exercises.map(\.name))
@@ -84,8 +102,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                startButton
-                suggestButton
+                actionButtonRow
                 filterBar
                 Divider()
                 workoutList
@@ -151,36 +168,54 @@ struct ContentView: View {
 
     // MARK: - Sub-views
 
-    private var startButton: some View {
-        NavigationLink {
-            WorkoutView()
-        } label: {
-            Label("Start New Workout", systemImage: "play.fill")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color.blue)
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+    private var actionButtonRow: some View {
+        HStack(spacing: 8) {
+            NavigationLink {
+                WorkoutView()
+            } label: {
+                Label("Start Workout", systemImage: "play.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.blue)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+
+            Button {
+                showingGeneratorDialog = true
+            } label: {
+                Label("SuggestMeSome", systemImage: "wand.and.stars")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.purple)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+
+            if !activeProgramRuns.isEmpty {
+                NavigationLink {
+                    WorkoutView()
+                } label: {
+                    Label("Complete Program", systemImage: "checkmark.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.orange)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
         }
         .padding(.horizontal)
         .padding(.top, 12)
-        .padding(.bottom, 4)
-    }
-
-    private var suggestButton: some View {
-        Button {
-            showingGeneratorDialog = true
-        } label: {
-            Label("SuggestMeSome", systemImage: "wand.and.stars")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color.purple)
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-        .padding(.horizontal)
         .padding(.bottom, 8)
     }
 
@@ -280,7 +315,7 @@ struct ContentView: View {
                 systemImage: "dumbbell.fill",
                 description: Text(isFiltered
                     ? "Try adjusting your filters."
-                    : "Tap Start New Workout above to begin.")
+                    : "Tap Start Workout above to begin.")
             )
             .frame(maxHeight: .infinity)
         } else {
