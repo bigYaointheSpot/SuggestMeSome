@@ -139,15 +139,6 @@ struct ProgramRunRow: View {
 
 // MARK: - Placeholder Views
 
-struct CreateProgramView: View {
-    var body: some View {
-        Text("Create Program - Coming Soon")
-            .foregroundStyle(.secondary)
-            .navigationTitle("Create Program")
-            .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
 struct SelectProgramView: View {
     var body: some View {
         Text("Select Program - Coming Soon")

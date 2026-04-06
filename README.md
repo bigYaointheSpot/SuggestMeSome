@@ -220,6 +220,21 @@ Converted the app from a single-screen layout to a TabView and added the Trainin
 
 ---
 
+#### Prompt 3 — Program Creation Flow
+
+Multi-step wizard for creating a user-defined training program.
+
+- **Step 1 — Program Basics:** Name text field (required to proceed), length picker (6/8/10/12 weeks), sessions per week picker (2–6). Next button disabled until name is non-empty.
+- **Step 2 — Exercise Selection:** Muscle group → exercise hierarchy using DisclosureGroups with checkmark multi-select. Selected exercises listed in insertion order. Count badge in safeAreaInset. Next button disabled until at least 1 exercise selected.
+- **Step 3 — Assign to Sessions:** Each selected exercise shows session toggle buttons (S1–SN), plus optional Target Sets and Target Reps text fields. Validation ensures every session has at least 1 exercise before proceeding.
+- **Step 4 — Review & Customize:** All weeks auto-populated from the Week 1 template. Weeks collapse/expand with a tap. Expanded weeks show each session with its exercises. Per-session: swipe-to-delete exercises, drag-to-reorder (via EditButton in nav bar), add exercise button (opens `ProgramExercisePickerSheet` with optional sets/reps), inline editing of targetSets/targetReps. "Save Program" button creates all SwiftData objects and dismisses.
+- **ProgramExercisePickerSheet:** Reusable sheet for picking an exercise by muscle group → exercise hierarchy, then specifying optional target sets/reps before adding.
+- **New file:** `SuggestMeSome/Views/CreateProgramView.swift` — contains `DraftSessionExercise`, `DraftSession`, `DraftWeek` value types plus `CreateProgramView` and `ProgramExercisePickerSheet`.
+
+**Commit:** `feat: add training program creation flow with weekly customization`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
