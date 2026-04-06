@@ -249,6 +249,21 @@ Starting and completing workouts within an active program run.
 
 **Commit:** `feat: add program workout execution with auto-detect and handoff to WorkoutView`
 
+#### Prompt 5 — Program Detail View with Week Picker and Session History
+
+Replaced non-functional program run row taps with an inline expandable detail view.
+
+- **Expandable rows:** Program run rows in the Training Programs tab now expand inline (no navigation) with a rotating chevron indicator. The `programRunList` is now a `ScrollView + LazyVStack` for full layout control.
+- **Info section:** Expanded view shows source badge (Custom Program / Template / AI Generated), status with colored dot, start date, end date (if completed), program length in weeks, and progress (N of M workouts completed).
+- **End Program button:** Active program runs show an "End Program" button inside the expanded section with a destructive confirmation alert that marks `isCompleted = true` and sets `endDate`.
+- **Week picker:** Horizontal scrollable capsule-style tab row showing "Week 1" through "Week N" based on `lengthInWeeks`. Selecting a week resets expanded session state.
+- **Session cards:** Each session for the selected week is a collapsible card (collapsed by default). Header shows "Session N" with a green checkmark + "Completed" label if a linked Workout exists, or "Not completed" if not.
+- **Completed session detail:** Expanding a completed session shows all exercises from the actual linked Workout using the existing `ExerciseDetailCard` — full sets/reps/weight table with gold star on PR sets, consistent with the Workouts tab history.
+- **Uncompleted session detail:** Expanding an uncompleted session shows planned exercises from `ProgramSessionTemplate` with targets (e.g., "Bench Press — 4×8 planned", "Squat — 3 sets planned", or just "Planned" if no targets were set).
+- **Reactivity:** Session completion and program end state update automatically via SwiftData `@Query` and `@Bindable`.
+
+**Commit:** `feat: add program detail view with week picker and session history`
+
 ---
 
 ## Project Setup
