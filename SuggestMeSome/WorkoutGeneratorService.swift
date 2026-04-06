@@ -176,27 +176,43 @@ struct WorkoutGeneratorService {
         durationMinutes: Double,
         intensity: Int
     ) -> GeneratedWorkout {
-        // Build pool: all exercises from selected muscle groups + explicitly chosen exercises
+        // Separate cardio from strength so they are handled independently.
         var seenIDs: Set<PersistentIdentifier> = []
-        var pool: [Exercise] = []
+        var strengthPool: [Exercise] = []
+        var cardioPool: [Exercise] = []
 
         for group in muscleGroups {
             for exercise in group.exercises where !seenIDs.contains(exercise.persistentModelID) {
-                pool.append(exercise)
+                if exercise.exerciseType == .cardio { cardioPool.append(exercise) }
+                else                                { strengthPool.append(exercise) }
                 seenIDs.insert(exercise.persistentModelID)
             }
         }
         for exercise in selectedExercises where !seenIDs.contains(exercise.persistentModelID) {
-            pool.append(exercise)
+            if exercise.exerciseType == .cardio { cardioPool.append(exercise) }
+            else                                { strengthPool.append(exercise) }
             seenIDs.insert(exercise.persistentModelID)
         }
 
-        let selected = selectExercises(from: pool, targetMinutes: durationMinutes, intensity: intensity)
-        let generatedExercises = selected.map { generateExercise($0, intensity: intensity) }
-        let totalTime = generatedExercises.reduce(0.0) { $0 + $1.effectiveTimeMinutes }
+        // Select strength exercises against the full time budget.
+        let selectedStrength = selectExercises(from: strengthPool, targetMinutes: durationMinutes, intensity: intensity)
+        var allExercises = selectedStrength.map { generateExercise($0, intensity: intensity) }
+        let usedMinutes = allExercises.reduce(0.0) { $0 + $1.effectiveTimeMinutes }
 
+        // If the Cardio group was included, append one randomly chosen cardio exercise
+        // whose suggested duration equals the remaining time budget.
+        if let cardioExercise = cardioPool.shuffled().first {
+            let remaining = max(1.0, durationMinutes - usedMinutes)
+            allExercises.append(GeneratedExercise(
+                exercise: cardioExercise,
+                sets: [],
+                effectiveTimeMinutes: remaining
+            ))
+        }
+
+        let totalTime = allExercises.reduce(0.0) { $0 + $1.effectiveTimeMinutes }
         return GeneratedWorkout(
-            exercises: generatedExercises,
+            exercises: allExercises,
             totalEstimatedMinutes: totalTime,
             intensity: intensity,
             generationType: .custom

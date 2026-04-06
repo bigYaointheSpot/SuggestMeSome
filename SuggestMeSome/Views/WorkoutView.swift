@@ -131,6 +131,20 @@ struct WorkoutView: View {
         .onAppear {
             guard let gw = generatedWorkout, exerciseEntries.isEmpty else { return }
             exerciseEntries = gw.exercises.enumerated().map { index, genExercise in
+                if genExercise.exercise.exerciseType == .cardio {
+                    let totalSeconds = Int(genExercise.effectiveTimeMinutes * 60)
+                    let mins = totalSeconds / 60
+                    let secs = totalSeconds % 60
+                    return DraftExerciseEntry(
+                        exerciseName: genExercise.exercise.name,
+                        unit: .lbs,
+                        orderIndex: index,
+                        sets: [],
+                        isCardio: true,
+                        cardioMinutesText: mins > 0 ? "\(mins)" : "",
+                        cardioSecondsText: secs > 0 ? "\(secs)" : ""
+                    )
+                }
                 let unit = genExercise.sets.first?.unit ?? .lbs
                 let draftSets = genExercise.sets.map { genSet in
                     DraftSet(

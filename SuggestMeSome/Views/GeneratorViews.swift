@@ -117,7 +117,7 @@ struct CustomWorkoutInputView: View {
                 .font(.headline)
             let columns = [GridItem(.adaptive(minimum: 110), spacing: 8)]
             LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(nonCardioGroups, id: \.name) { group in
+                ForEach(allGroups, id: \.name) { group in
                     chipButton(group.name, isOn: selectedGroupNames.contains(group.name)) {
                         toggle(&selectedGroupNames, value: group.name)
                     }
@@ -516,7 +516,51 @@ struct GeneratedWorkoutPreviewView: View {
 
     // MARK: Exercise card
 
+    @ViewBuilder
     private func previewExerciseCard(_ genExercise: GeneratedExercise) -> some View {
+        if genExercise.exercise.exerciseType == .cardio {
+            cardioPreviewCard(genExercise)
+        } else {
+            strengthPreviewCard(genExercise)
+        }
+    }
+
+    private func cardioPreviewCard(_ genExercise: GeneratedExercise) -> some View {
+        let totalSeconds = Int(genExercise.effectiveTimeMinutes * 60)
+        let mins = totalSeconds / 60
+        let secs = totalSeconds % 60
+        let durationText = secs > 0
+            ? String(format: "%d min %02d sec", mins, secs)
+            : "\(mins) min"
+
+        return HStack(spacing: 12) {
+            Image(systemName: "heart.fill")
+                .foregroundStyle(.red)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(genExercise.exercise.name).font(.headline)
+                Text(durationText).font(.subheadline).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text("Cardio")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color(.tertiarySystemBackground))
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(.separator), lineWidth: 0.5)
+        )
+    }
+
+    private func strengthPreviewCard(_ genExercise: GeneratedExercise) -> some View {
         let warmupSets  = genExercise.sets.filter  { $0.isWarmup }
         let workingSets = genExercise.sets.filter  { !$0.isWarmup }
         let unit        = genExercise.sets.first?.unit ?? .lbs
