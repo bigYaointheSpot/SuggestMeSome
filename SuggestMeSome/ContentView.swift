@@ -27,6 +27,13 @@ struct ContentView: View {
     // MARK: Delete confirmation
     @State private var workoutToDelete: Workout?
 
+    // MARK: Generator flow
+    @State private var showingGeneratorDialog  = false
+    @State private var showingGeneratorSheet   = false
+    @State private var generatorSheetType: WorkoutGenerationType = .fullBody
+    @State private var pendingGeneratedWorkout: GeneratedWorkout?
+    @State private var showingGeneratedWorkout = false
+
     // MARK: - Computed
 
     var exerciseFilterActive: Bool {
@@ -78,6 +85,7 @@ struct ContentView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 startButton
+                suggestButton
                 filterBar
                 Divider()
                 workoutList
@@ -99,6 +107,32 @@ struct ContentView: View {
                     selectedGroupNames: $selectedGroupNames,
                     selectedExerciseNames: $selectedExerciseNames
                 )
+            }
+            .confirmationDialog("What type of workout?", isPresented: $showingGeneratorDialog, titleVisibility: .visible) {
+                Button("Custom Workout") {
+                    generatorSheetType = .custom
+                    showingGeneratorSheet = true
+                }
+                Button("Full Body Workout") {
+                    generatorSheetType = .fullBody
+                    showingGeneratorSheet = true
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .sheet(isPresented: $showingGeneratorSheet, onDismiss: {
+                if pendingGeneratedWorkout != nil {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        showingGeneratedWorkout = true
+                    }
+                }
+            }) {
+                GeneratorSheetRootView(type: generatorSheetType) { gw in
+                    pendingGeneratedWorkout = gw
+                    showingGeneratorSheet = false
+                }
+            }
+            .navigationDestination(isPresented: $showingGeneratedWorkout) {
+                WorkoutView(generatedWorkout: pendingGeneratedWorkout)
             }
             .alert("Delete Workout?", isPresented: .init(
                 get: { workoutToDelete != nil },
@@ -131,6 +165,22 @@ struct ContentView: View {
         }
         .padding(.horizontal)
         .padding(.top, 12)
+        .padding(.bottom, 4)
+    }
+
+    private var suggestButton: some View {
+        Button {
+            showingGeneratorDialog = true
+        } label: {
+            Label("SuggestMeSome", systemImage: "wand.and.stars")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color.purple)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .padding(.horizontal)
         .padding(.bottom, 8)
     }
 

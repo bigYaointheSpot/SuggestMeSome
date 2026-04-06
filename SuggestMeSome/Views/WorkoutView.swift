@@ -17,13 +17,15 @@ struct DraftSet: Identifiable {
     var repsText: String
     var weightText: String
     var isPR: Bool
+    var isWarmup: Bool
 
-    init(setNumber: Int, repsText: String = "", weightText: String = "", isPR: Bool = false) {
+    init(setNumber: Int, repsText: String = "", weightText: String = "", isPR: Bool = false, isWarmup: Bool = false) {
         self.id = UUID()
         self.setNumber = setNumber
         self.repsText = repsText
         self.weightText = weightText
         self.isPR = isPR
+        self.isWarmup = isWarmup
     }
 }
 
@@ -64,6 +66,8 @@ struct DraftExerciseEntry: Identifiable {
 // MARK: - WorkoutView
 
 struct WorkoutView: View {
+    var generatedWorkout: GeneratedWorkout? = nil
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -123,6 +127,28 @@ struct WorkoutView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will save your workout and mark any new personal records.")
+        }
+        .onAppear {
+            guard let gw = generatedWorkout, exerciseEntries.isEmpty else { return }
+            exerciseEntries = gw.exercises.enumerated().map { index, genExercise in
+                let unit = genExercise.sets.first?.unit ?? .lbs
+                let draftSets = genExercise.sets.map { genSet in
+                    DraftSet(
+                        setNumber: genSet.setNumber,
+                        repsText: "\(genSet.suggestedReps)",
+                        weightText: formatGeneratedWeight(genSet.suggestedWeight),
+                        isWarmup: genSet.isWarmup
+                    )
+                }
+                return DraftExerciseEntry(
+                    exerciseName: genExercise.exercise.name,
+                    unit: unit,
+                    orderIndex: index,
+                    sets: draftSets
+                )
+            }
+            startTime = Date.now
+            isActive = true
         }
     }
 
@@ -251,6 +277,11 @@ struct WorkoutView: View {
     }
 
     // MARK: - Helpers
+
+    private func formatGeneratedWeight(_ w: Double?) -> String {
+        guard let w = w else { return "" }
+        return w.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(w)) : String(format: "%.1f", w)
+    }
 
     private var formattedElapsed: String {
         let h = elapsedSeconds / 3600
@@ -462,9 +493,9 @@ struct SetEntryRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text("\(set.setNumber)")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+            Text(set.isWarmup ? "W\(set.setNumber)" : "\(set.setNumber)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(set.isWarmup ? Color(.systemGray3) : .secondary)
                 .frame(width: 36, alignment: .center)
 
             TextField("–", text: $set.repsText)
@@ -474,6 +505,7 @@ struct SetEntryRow: View {
                 .padding(.vertical, 7)
                 .background(Color(.tertiarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                .foregroundStyle(set.isWarmup ? .secondary : .primary)
 
             TextField("–", text: $set.weightText)
                 .keyboardType(.decimalPad)
@@ -482,10 +514,12 @@ struct SetEntryRow: View {
                 .padding(.vertical, 7)
                 .background(Color(.tertiarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                .foregroundStyle(set.isWarmup ? .secondary : .primary)
 
             Image(systemName: set.isPR ? "star.fill" : "star")
                 .foregroundStyle(set.isPR ? .yellow : Color(.systemGray3))
                 .frame(width: 22)
+                .opacity(set.isWarmup ? 0 : 1)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
