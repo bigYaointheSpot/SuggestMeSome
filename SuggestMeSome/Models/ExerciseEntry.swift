@@ -15,6 +15,9 @@ final class ExerciseEntry {
     var exerciseName: String
     var unit: WeightUnit
     var orderIndex: Int
+    var isCardio: Bool
+    /// Duration in seconds; only set when isCardio is true.
+    var cardioDurationSeconds: Int?
     var workout: Workout?
 
     @Relationship(deleteRule: .cascade, inverse: \SetEntry.exerciseEntry)
@@ -24,11 +27,15 @@ final class ExerciseEntry {
         id: UUID = UUID(),
         exerciseName: String,
         unit: WeightUnit,
-        orderIndex: Int
+        orderIndex: Int,
+        isCardio: Bool = false,
+        cardioDurationSeconds: Int? = nil
     ) {
         self.id = id
         self.exerciseName = exerciseName
         self.unit = unit
         self.orderIndex = orderIndex
+        self.isCardio = isCardio
+        self.cardioDurationSeconds = cardioDurationSeconds
     }
 }

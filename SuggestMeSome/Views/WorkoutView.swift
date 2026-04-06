@@ -33,13 +33,31 @@ struct DraftExerciseEntry: Identifiable {
     var unit: WeightUnit
     var orderIndex: Int
     var sets: [DraftSet]
+    var isCardio: Bool
+    var cardioMinutesText: String
+    var cardioSecondsText: String
 
-    init(exerciseName: String, unit: WeightUnit, orderIndex: Int, sets: [DraftSet]) {
+    var cardioDurationSeconds: Int {
+        (Int(cardioMinutesText) ?? 0) * 60 + (Int(cardioSecondsText) ?? 0)
+    }
+
+    init(
+        exerciseName: String,
+        unit: WeightUnit,
+        orderIndex: Int,
+        sets: [DraftSet],
+        isCardio: Bool = false,
+        cardioMinutesText: String = "",
+        cardioSecondsText: String = ""
+    ) {
         self.id = UUID()
         self.exerciseName = exerciseName
         self.unit = unit
         self.orderIndex = orderIndex
         self.sets = sets
+        self.isCardio = isCardio
+        self.cardioMinutesText = cardioMinutesText
+        self.cardioSecondsText = cardioSecondsText
     }
 }
 
@@ -88,12 +106,14 @@ struct WorkoutView: View {
             elapsedSeconds = Int(Date.now.timeIntervalSince(start))
         }
         .sheet(isPresented: $showingExercisePicker) {
-            ExercisePickerSheet(muscleGroups: muscleGroups) { name, setCount in
+            ExercisePickerSheet(muscleGroups: muscleGroups) { name, isCardio, setCount in
+                let sets: [DraftSet] = isCardio ? [] : (1...max(1, setCount)).map { DraftSet(setNumber: $0) }
                 let entry = DraftExerciseEntry(
                     exerciseName: name,
                     unit: .lbs,
                     orderIndex: exerciseEntries.count,
-                    sets: (1...setCount).map { DraftSet(setNumber: $0) }
+                    sets: sets,
+                    isCardio: isCardio
                 )
                 exerciseEntries.append(entry)
             }
@@ -258,10 +278,14 @@ struct WorkoutView: View {
             let entry = ExerciseEntry(
                 exerciseName: draftEntry.exerciseName,
                 unit: draftEntry.unit,
-                orderIndex: draftEntry.orderIndex
+                orderIndex: draftEntry.orderIndex,
+                isCardio: draftEntry.isCardio,
+                cardioDurationSeconds: draftEntry.isCardio ? draftEntry.cardioDurationSeconds : nil
             )
             entry.workout = workout
             modelContext.insert(entry)
+
+            guard !draftEntry.isCardio else { continue }
 
             for draftSet in draftEntry.sets {
                 let reps = Int(draftSet.repsText) ?? 0
@@ -345,13 +369,15 @@ struct ExerciseEntryCard: View {
                     }
                 }
                 Spacer()
-                Picker("Unit", selection: $entry.unit) {
-                    ForEach(WeightUnit.allCases, id: \.self) {
-                        Text($0.rawValue).tag($0)
+                if !entry.isCardio {
+                    Picker("Unit", selection: $entry.unit) {
+                        ForEach(WeightUnit.allCases, id: \.self) {
+                            Text($0.rawValue).tag($0)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .frame(width: 90)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 90)
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .foregroundStyle(.red)
@@ -362,29 +388,61 @@ struct ExerciseEntryCard: View {
             .background(Color(.secondarySystemBackground))
 
             if isExpanded {
-                // Column headers
-                HStack(spacing: 8) {
-                    Text("SET")
-                        .frame(width: 36, alignment: .center)
-                    Text("REPS")
-                        .frame(maxWidth: .infinity)
-                    Text("WEIGHT (\(entry.unit.rawValue))")
-                        .frame(maxWidth: .infinity)
-                    Image(systemName: "star.fill")
-                        .opacity(0)
-                        .frame(width: 22)
-                }
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(.tertiarySystemBackground))
+                if entry.isCardio {
+                    // Cardio: show a single duration input
+                    HStack(spacing: 8) {
+                        Label("Duration", systemImage: "timer")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        TextField("0", text: $entry.cardioMinutesText)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 52)
+                            .padding(.vertical, 7)
+                            .background(Color(.tertiarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        Text("min")
+                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                        TextField("0", text: $entry.cardioSecondsText)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 52)
+                            .padding(.vertical, 7)
+                            .background(Color(.tertiarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        Text("sec")
+                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color(.systemBackground))
+                } else {
+                    // Strength: column headers + set rows
+                    HStack(spacing: 8) {
+                        Text("SET")
+                            .frame(width: 36, alignment: .center)
+                        Text("REPS")
+                            .frame(maxWidth: .infinity)
+                        Text("WEIGHT (\(entry.unit.rawValue))")
+                            .frame(maxWidth: .infinity)
+                        Image(systemName: "star.fill")
+                            .opacity(0)
+                            .frame(width: 22)
+                    }
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color(.tertiarySystemBackground))
 
-                // Set rows
-                ForEach($entry.sets) { $set in
-                    SetEntryRow(set: $set)
-                    if set.id != entry.sets.last?.id {
-                        Divider().padding(.leading, 12)
+                    ForEach($entry.sets) { $set in
+                        SetEntryRow(set: $set)
+                        if set.id != entry.sets.last?.id {
+                            Divider().padding(.leading, 12)
+                        }
                     }
                 }
             }
@@ -439,7 +497,8 @@ struct SetEntryRow: View {
 
 struct ExercisePickerSheet: View {
     let muscleGroups: [MuscleGroup]
-    let onAdd: (String, Int) -> Void
+    /// Called with (exerciseName, isCardio, setCount). setCount is 0 for cardio entries.
+    let onAdd: (String, Bool, Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -466,8 +525,13 @@ struct ExercisePickerSheet: View {
                     ) {
                         ForEach(group.exercises.sorted { $0.name < $1.name }) { exercise in
                             Button {
-                                selectedExercise = exercise.name
-                                showingSetCount = true
+                                if exercise.exerciseType == .cardio {
+                                    onAdd(exercise.name, true, 0)
+                                    dismiss()
+                                } else {
+                                    selectedExercise = exercise.name
+                                    showingSetCount = true
+                                }
                             } label: {
                                 Text(exercise.name)
                                     .foregroundStyle(.primary)
@@ -523,7 +587,7 @@ struct ExercisePickerSheet: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Add") {
-                    onAdd(exerciseName, selectedSetCount)
+                    onAdd(exerciseName, false, selectedSetCount)
                     dismiss()
                 }
                 .fontWeight(.semibold)

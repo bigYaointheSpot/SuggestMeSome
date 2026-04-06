@@ -34,6 +34,7 @@ struct SuggestMeSomeApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     seedDefaultDataIfNeeded(context: sharedModelContainer.mainContext)
+                    migrateExerciseTypesIfNeeded(context: sharedModelContainer.mainContext)
                 }
         }
         .modelContainer(sharedModelContainer)

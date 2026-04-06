@@ -34,21 +34,36 @@ struct WorkoutEditView: View {
         let drafts: [DraftExerciseEntry] = workout.exerciseEntries
             .sorted { $0.orderIndex < $1.orderIndex }
             .map { entry in
-                DraftExerciseEntry(
-                    exerciseName: entry.exerciseName,
-                    unit: entry.unit,
-                    orderIndex: entry.orderIndex,
-                    sets: entry.sets
-                        .sorted { $0.setNumber < $1.setNumber }
-                        .map { set in
-                            DraftSet(
-                                setNumber: set.setNumber,
-                                repsText: set.reps > 0 ? "\(set.reps)" : "",
-                                weightText: weightString(set.weight),
-                                isPR: set.isPR
-                            )
-                        }
-                )
+                if entry.isCardio {
+                    let totalSecs = entry.cardioDurationSeconds ?? 0
+                    let mins = totalSecs / 60
+                    let secs = totalSecs % 60
+                    return DraftExerciseEntry(
+                        exerciseName: entry.exerciseName,
+                        unit: entry.unit,
+                        orderIndex: entry.orderIndex,
+                        sets: [],
+                        isCardio: true,
+                        cardioMinutesText: mins > 0 ? "\(mins)" : "",
+                        cardioSecondsText: secs > 0 ? "\(secs)" : ""
+                    )
+                } else {
+                    return DraftExerciseEntry(
+                        exerciseName: entry.exerciseName,
+                        unit: entry.unit,
+                        orderIndex: entry.orderIndex,
+                        sets: entry.sets
+                            .sorted { $0.setNumber < $1.setNumber }
+                            .map { set in
+                                DraftSet(
+                                    setNumber: set.setNumber,
+                                    repsText: set.reps > 0 ? "\(set.reps)" : "",
+                                    weightText: weightString(set.weight),
+                                    isPR: set.isPR
+                                )
+                            }
+                    )
+                }
             }
         _exerciseEntries = State(initialValue: drafts)
     }
@@ -71,12 +86,14 @@ struct WorkoutEditView: View {
         .navigationTitle("Edit Workout")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingExercisePicker) {
-            ExercisePickerSheet(muscleGroups: muscleGroups) { name, setCount in
+            ExercisePickerSheet(muscleGroups: muscleGroups) { name, isCardio, setCount in
+                let sets: [DraftSet] = isCardio ? [] : (1...max(1, setCount)).map { DraftSet(setNumber: $0) }
                 exerciseEntries.append(DraftExerciseEntry(
                     exerciseName: name,
                     unit: .lbs,
                     orderIndex: exerciseEntries.count,
-                    sets: (1...setCount).map { DraftSet(setNumber: $0) }
+                    sets: sets,
+                    isCardio: isCardio
                 ))
             }
         }
@@ -194,10 +211,14 @@ struct WorkoutEditView: View {
             let entry = ExerciseEntry(
                 exerciseName: draft.exerciseName,
                 unit: draft.unit,
-                orderIndex: index
+                orderIndex: index,
+                isCardio: draft.isCardio,
+                cardioDurationSeconds: draft.isCardio ? draft.cardioDurationSeconds : nil
             )
             entry.workout = workout
             modelContext.insert(entry)
+
+            guard !draft.isCardio else { continue }
 
             for draftSet in draft.sets {
                 let reps   = Int(draftSet.repsText)    ?? 0

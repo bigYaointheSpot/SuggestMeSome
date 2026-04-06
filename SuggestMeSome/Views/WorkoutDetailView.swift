@@ -119,6 +119,42 @@ struct ExerciseDetailCard: View {
     }
 
     var body: some View {
+        if entry.isCardio {
+            cardioCard
+        } else {
+            strengthCard
+        }
+    }
+
+    // MARK: Cardio
+
+    private var cardioCard: some View {
+        HStack {
+            Label(entry.exerciseName, systemImage: "figure.run")
+                .font(.headline)
+            Spacer()
+            if let secs = entry.cardioDurationSeconds, secs > 0 {
+                Text(formattedDuration(secs))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(.separator), lineWidth: 0.5))
+    }
+
+    private func formattedDuration(_ seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%d:%02d", m, s)
+    }
+
+    // MARK: Strength
+
+    private var strengthCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
