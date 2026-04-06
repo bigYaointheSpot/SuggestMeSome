@@ -12,7 +12,12 @@ import SwiftData
 struct SuggestMeSomeApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            MuscleGroup.self,
+            Exercise.self,
+            Workout.self,
+            ExerciseEntry.self,
+            SetEntry.self,
+            PersonalRecord.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -26,6 +31,10 @@ struct SuggestMeSomeApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .preferredColorScheme(.dark)
+                .onAppear {
+                    seedDefaultDataIfNeeded(context: sharedModelContainer.mainContext)
+                }
         }
         .modelContainer(sharedModelContainer)
     }

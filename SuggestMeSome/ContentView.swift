@@ -8,54 +8,416 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - ContentView
+
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
+    @Query(sort: \MuscleGroup.name) private var muscleGroups: [MuscleGroup]
+
+    // MARK: Filter state
+    @State private var filterByDate = false
+    @State private var filterStartDate = Calendar.current.startOfDay(for: Date())
+    @State private var filterEndDate = Date()
+    @State private var selectedGroupNames: Set<String> = []
+    @State private var selectedExerciseNames: Set<String> = []
+    @State private var filterPROnly = false
+    @State private var showingExerciseFilter = false
+
+    // MARK: Delete confirmation
+    @State private var workoutToDelete: Workout?
+
+    // MARK: - Computed
+
+    var exerciseFilterActive: Bool {
+        !selectedGroupNames.isEmpty || !selectedExerciseNames.isEmpty
+    }
+
+    var exerciseFilterLabel: String {
+        let total = selectedGroupNames.count + selectedExerciseNames.count
+        switch total {
+        case 0:  return "Exercise"
+        case 1:  return selectedGroupNames.first ?? selectedExerciseNames.first ?? "Exercise"
+        default: return "\(total) selected"
+        }
+    }
+
+    var isFiltered: Bool {
+        filterByDate || exerciseFilterActive || filterPROnly
+    }
+
+    var filteredWorkouts: [Workout] {
+        workouts.filter { workout in
+            if filterByDate {
+                let dayStart = Calendar.current.startOfDay(for: filterStartDate)
+                let dayEnd   = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: filterEndDate)!
+                guard workout.date >= dayStart && workout.date <= dayEnd else { return false }
+            }
+
+            if exerciseFilterActive {
+                // Resolve all exercise names that belong to any selected group
+                let namesFromGroups: Set<String> = selectedGroupNames.reduce(into: []) { result, groupName in
+                    if let group = muscleGroups.first(where: { $0.name == groupName }) {
+                        result.formUnion(group.exercises.map(\.name))
+                    }
+                }
+                let allAllowedNames = namesFromGroups.union(selectedExerciseNames)
+                guard workout.exerciseEntries.contains(where: { allAllowedNames.contains($0.exerciseName) }) else { return false }
+            }
+
+            if filterPROnly {
+                guard workout.exerciseEntries.contains(where: { $0.sets.contains(where: \.isPR) }) else { return false }
+            }
+            return true
+        }
+    }
+
+    // MARK: - Body
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
+        NavigationStack {
+            VStack(spacing: 0) {
+                startButton
+                filterBar
+                Divider()
+                workoutList
             }
+            .navigationTitle("SuggestMeSome")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gear")
                     }
                 }
             }
-        } detail: {
-            Text("Select an item")
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+            .sheet(isPresented: $showingExerciseFilter) {
+                ExerciseFilterSheet(
+                    muscleGroups: muscleGroups,
+                    selectedGroupNames: $selectedGroupNames,
+                    selectedExerciseNames: $selectedExerciseNames
+                )
+            }
+            .alert("Delete Workout?", isPresented: .init(
+                get: { workoutToDelete != nil },
+                set: { if !$0 { workoutToDelete = nil } }
+            )) {
+                Button("Delete", role: .destructive) {
+                    if let w = workoutToDelete { modelContext.delete(w) }
+                    workoutToDelete = nil
+                }
+                Button("Cancel", role: .cancel) { workoutToDelete = nil }
+            } message: {
+                Text("This workout and all its data will be permanently deleted.")
             }
         }
+    }
+
+    // MARK: - Sub-views
+
+    private var startButton: some View {
+        NavigationLink {
+            WorkoutView()
+        } label: {
+            Label("Start New Workout", systemImage: "play.fill")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color.blue)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .padding(.horizontal)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                // Date range chip
+                filterChip(
+                    label: filterByDate ? "Date On" : "Date Range",
+                    systemImage: "calendar",
+                    isActive: filterByDate
+                ) { filterByDate.toggle() }
+
+                if filterByDate {
+                    DatePicker("", selection: $filterStartDate, displayedComponents: .date)
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                    Text("–").foregroundStyle(.secondary)
+                    DatePicker("", selection: $filterEndDate, displayedComponents: .date)
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                }
+
+                // Exercise filter chip
+                Button { showingExerciseFilter = true } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "figure.strengthtraining.traditional")
+                        Text(exerciseFilterLabel).lineLimit(1)
+                        Image(systemName: "chevron.down").font(.caption2)
+                    }
+                    .font(.subheadline)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(exerciseFilterActive ? Color.blue.opacity(0.25) : Color(.secondarySystemBackground))
+                    .foregroundStyle(exerciseFilterActive ? Color.blue : Color.primary)
+                    .clipShape(Capsule())
+                }
+
+                // PR toggle chip
+                filterChip(
+                    label: "PRs Only",
+                    systemImage: filterPROnly ? "star.fill" : "star",
+                    isActive: filterPROnly,
+                    tint: .yellow
+                ) { filterPROnly.toggle() }
+
+                // Clear all filters
+                if isFiltered {
+                    Button {
+                        filterByDate = false
+                        selectedGroupNames = []
+                        selectedExerciseNames = []
+                        filterPROnly = false
+                    } label: {
+                        Text("Clear")
+                            .font(.subheadline)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color(.secondarySystemBackground))
+                            .clipShape(Capsule())
+                    }
+                    .foregroundStyle(.primary)
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func filterChip(
+        label: String,
+        systemImage: String,
+        isActive: Bool,
+        tint: Color = .blue,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(isActive ? tint : .secondary)
+                Text(label)
+            }
+            .font(.subheadline)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(isActive ? tint.opacity(0.25) : Color(.secondarySystemBackground))
+            .foregroundStyle(isActive ? tint : .primary)
+            .clipShape(Capsule())
+        }
+    }
+
+    @ViewBuilder
+    private var workoutList: some View {
+        if filteredWorkouts.isEmpty {
+            ContentUnavailableView(
+                isFiltered ? "No Matching Workouts" : "No Workouts Yet",
+                systemImage: "dumbbell.fill",
+                description: Text(isFiltered
+                    ? "Try adjusting your filters."
+                    : "Tap Start New Workout above to begin.")
+            )
+            .frame(maxHeight: .infinity)
+        } else {
+            List {
+                ForEach(filteredWorkouts) { workout in
+                    NavigationLink {
+                        WorkoutDetailView(workout: workout)
+                    } label: {
+                        WorkoutRow(workout: workout)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            workoutToDelete = workout
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+        }
+    }
+}
+
+// MARK: - ExerciseFilterSheet
+
+struct ExerciseFilterSheet: View {
+    let muscleGroups: [MuscleGroup]
+    @Binding var selectedGroupNames: Set<String>
+    @Binding var selectedExerciseNames: Set<String>
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var expandedGroups: Set<String> = []
+
+    var totalSelected: Int { selectedGroupNames.count + selectedExerciseNames.count }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(muscleGroups) { group in
+                    Section {
+                        if expandedGroups.contains(group.name) {
+                            ForEach(group.exercises.sorted { $0.name < $1.name }) { exercise in
+                                exerciseRow(exercise)
+                            }
+                        }
+                    } header: {
+                        groupHeader(group)
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(totalSelected == 0 ? "Filter by Exercise" : "\(totalSelected) selected")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if totalSelected > 0 {
+                        Button("Clear All") {
+                            selectedGroupNames = []
+                            selectedExerciseNames = []
+                        }
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+
+    // MARK: Group header row
+    // Left side tap  → toggle the whole group as a selection
+    // Right chevron  → expand / collapse exercises
+
+    private func groupHeader(_ group: MuscleGroup) -> some View {
+        let groupSelected = selectedGroupNames.contains(group.name)
+        let isExpanded    = expandedGroups.contains(group.name)
+
+        return HStack(spacing: 0) {
+            Button {
+                if groupSelected {
+                    selectedGroupNames.remove(group.name)
+                } else {
+                    selectedGroupNames.insert(group.name)
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: groupSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(groupSelected ? .blue : Color(.systemGray3))
+                        .font(.title3)
+                    Text(group.name)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .textCase(nil)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isExpanded {
+                        expandedGroups.remove(group.name)
+                    } else {
+                        expandedGroups.insert(group.name)
+                    }
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .animation(.easeInOut(duration: 0.2), value: isExpanded)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    // MARK: Exercise row
+
+    private func exerciseRow(_ exercise: Exercise) -> some View {
+        let isSelected = selectedExerciseNames.contains(exercise.name)
+
+        return Button {
+            if isSelected {
+                selectedExerciseNames.remove(exercise.name)
+            } else {
+                selectedExerciseNames.insert(exercise.name)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? .blue : Color(.systemGray3))
+                    .font(.title3)
+                Text(exercise.name)
+                    .foregroundStyle(.primary)
+                Spacer()
+            }
+            .padding(.leading, 8)
+        }
+    }
+}
+
+// MARK: - WorkoutRow
+
+struct WorkoutRow: View {
+    let workout: Workout
+
+    var hasPR: Bool {
+        workout.exerciseEntries.contains { $0.sets.contains(where: \.isPR) }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(workout.date, format: .dateTime
+                        .weekday(.abbreviated)
+                        .month(.abbreviated)
+                        .day()
+                        .year())
+                        .font(.headline)
+                    if hasPR {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
+                            .font(.caption)
+                    }
+                }
+                HStack(spacing: 6) {
+                    Image(systemName: "clock").font(.caption)
+                    Text(workout.formattedDuration)
+                    Text("·")
+                    let count = workout.exerciseEntries.count
+                    Text("\(count) \(count == 1 ? "exercise" : "exercises")")
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 4)
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
