@@ -251,7 +251,7 @@ struct ProgramRunExpandableRow: View {
                             .fill(run.isCompleted ? Color.gray : Color.green)
                             .frame(width: 7, height: 7)
                         Text(run.isCompleted ? "Completed" : "Active")
-                            .foregroundStyle(run.isCompleted ? .secondary : .green)
+                            .foregroundStyle(run.isCompleted ? Color.secondary : Color.green)
                     }
                 }
                 infoRow(label: "Started") {
