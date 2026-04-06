@@ -121,7 +121,7 @@ struct ProgramRunRow: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(run.isCompleted ? Color.gray.opacity(0.25) : Color.green.opacity(0.25))
-                    .foregroundStyle(run.isCompleted ? .secondary : .green)
+                    .foregroundStyle(run.isCompleted ? Color.secondary : Color.green)
                     .clipShape(Capsule())
             }
             HStack(spacing: 6) {
