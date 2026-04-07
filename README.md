@@ -288,12 +288,12 @@ Replaced non-functional program run row taps with an inline expandable detail vi
 
 #### Prompt 2 — Focus Template Library — 2026-04-07
 
-Data-only file defining structured templates for all 10 program focuses.
+Data-only file defining structured templates for all 11 program focuses.
 
 **New file:** `SuggestMeSome/FocusTemplateLibrary.swift`
 
 **New types:**
-- `ProgramFocus` enum — 10 cases: `increaseMaxSquat`, `increaseMaxBench`, `increaseMaxDeadlift`, `generalFitness`, `fullBody`, `pushPull`, `fiveByFive`, `powerbuilding`, `bodybuilding`, `cardioEndurance`
+- `ProgramFocus` enum — 11 cases: `increaseMaxSquat`, `increaseMaxBench`, `increaseMaxDeadlift`, `powerlifting`, `generalFitness`, `fullBody`, `pushPull`, `fiveByFive`, `powerbuilding`, `bodybuilding`, `cardioEndurance`
 - `ExerciseRole` enum — `primary`, `variation`, `accessory`, `cardio`
 - `TemplateExercise` — exercise name, role, defaultSets/Reps, optional percentage1RM, optional targetRPE
 - `SessionDefinition` — sessionName, primaryExercises (always included), accessoryPool (rotated for variety), accessoryCount
@@ -306,8 +306,9 @@ Data-only file defining structured templates for all 10 program focuses.
 | Increase Max Squat | 3 | Squat, Deadlift | 3–4 | Candito/CWS peaking |
 | Increase Max Bench | 3 | Bench, OHP | 3–4 | Strengtheory frequency |
 | Increase Max Deadlift | 3 | Deadlift, Squat | 3–4 | Candito/Mash pulling |
+| Powerlifting | 3 | Squat, Bench, Deadlift | 4–5 | SBD specificity, higher bench frequency |
 | General Fitness | 2 | Squat, Bench, Deadlift | 5–6 | Upper/Lower → PPL × 2 |
-| Full Body | 2 | Squat, Bench, Deadlift | 5–6 | Squat+Push+Pull every session |
+| Full Body | 2 | Squat, Bench, Deadlift | 5 | Lower + push + pull every session |
 | Push / Pull | 3 | Squat, Bench, Deadlift, OHP | 5–6 | PPL → Upper/Lower → PPL A/B |
 | 5×5 Strength | 3 | Squat, Bench, DL, OHP, Row | 3 | StrongLifts/Madcow A/B/C |
 | Powerbuilding | 3 | Squat, Bench, Deadlift | 4–5 | Heavy compounds + hypertrophy |
@@ -375,7 +376,7 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 #### Prompt 4 [AI Program Generator Input UI] — 2026-04-07
 - Added "Generate AI Program" button (teal) to the Training Programs tab alongside the existing blue and purple buttons; all three equally sized in one row
 - Created `AIProgramGeneratorView.swift` — a full-screen sheet with a multi-step input flow:
-  - **Screen 1 — Configure Program**: focus picker (10-option grid), experience level segmented control with periodization descriptions, duration picker (6/8/10/12 weeks), sessions/week picker (2–6) with greyed-out options below the selected focus's minimum frequency
+  - **Screen 1 — Configure Program**: focus picker (11-option grid), experience level segmented control with periodization descriptions, duration picker (6/8/10/12 weeks), sessions/week picker (2–6) with greyed-out options below the selected focus's minimum frequency
   - **Screen 2 — Enter 1RMs**: pre-fills estimated 1RM from PR history using Epley formula (rounded to nearest 5 lbs / 2.5 kg), per-lift unit toggle, manual override text fields; skipped entirely for Cardio Endurance
   - **Success screen**: placeholder showing "Program Generated Successfully" and the program name
 - All inputs persist via `@AppStorage` (keys: `generator.ai.*`) and are pre-selected on next open
@@ -494,6 +495,22 @@ Every focus defines sessions for each valid frequency from its minimum through 6
   - Week-level fatigue chip in week headers
   - Weekly hard-set summary chips under expanded weeks
 - Existing phase/week/session expand-collapse behavior and edit/start flows remain unchanged
+
+---
+
+#### Prompt 12 [Powerlifting + Full Body Focus Expansion] — 2026-04-07
+- Added a new `powerlifting` focus to the AI program generator and increased the documented focus count from 10 to 11
+- Rebuilt the `fullBody` template so every session includes lower-body work, a push, and a pull, with accessories chosen to fill posterior chain, arm, calf, and core gaps while staying time-efficient
+- Added a new `powerlifting` template family centered on SBD specificity:
+  - competition squat and bench exposures appear multiple times per week
+  - deadlift frequency is kept lower and paired with lower-fatigue secondary work
+  - accessory pools bias upper back, triceps, hamstrings, and trunk support
+- Extended `ProgramExerciseMetadataService` with a dedicated `fullBody` archetype and explicit `powerlifting` routing so weekly hard-set targets, fatigue budgets, and level-scaling differ from generic fitness templates
+- Expanded Feature 4 validation coverage:
+  - powerlifting template tests now verify high squat/bench/deadlift exposure across supported frequencies
+  - generated full-body programs now verify each workout includes lower, push, and pull work
+
+**Commit:** `feat: add powerlifting focus and upgrade full body generation`
 
 ---
 

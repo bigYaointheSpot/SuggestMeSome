@@ -13,6 +13,7 @@ enum ProgramFocus: String, CaseIterable, Codable {
     case increaseMaxSquat
     case increaseMaxBench
     case increaseMaxDeadlift
+    case powerlifting
     case generalFitness
     case fullBody
     case pushPull
@@ -162,6 +163,7 @@ enum FocusTemplateLibrary {
         case .increaseMaxSquat:    return squatTemplate
         case .increaseMaxBench:    return benchTemplate
         case .increaseMaxDeadlift: return deadliftTemplate
+        case .powerlifting:        return powerliftingTemplate
         case .generalFitness:      return generalFitnessTemplate
         case .fullBody:            return fullBodyTemplate
         case .pushPull:            return pushPullTemplate
@@ -967,130 +969,114 @@ private extension FocusTemplateLibrary {
 }
 
 // MARK: - Full Body
-// Inspired by Strengtheory full body training research.
+// Inspired by full-body frequency research and Jeff Nippard-style efficient split design.
 
 private extension FocusTemplateLibrary {
     static var fullBodyTemplate: FocusTemplate {
-        // Every session: squat pattern + push + pull + accessories
-        // Exercises rotate so the same movement isn't back-to-back
-
         let fb_A = SessionDefinition(
-            sessionName: "Full Body A",
+            sessionName: "Full Body A (Squat + Bench)",
             primaryExercises: [
-                .init(exerciseName: "Back Squats", role: .primary,   defaultSets: 4, defaultReps: 5, percentage1RM: 0.78, targetRPE: nil),
-                .init(exerciseName: "Bench Press", role: .primary,   defaultSets: 3, defaultReps: 5, percentage1RM: 0.75, targetRPE: nil),
-                .init(exerciseName: "Barbell Row", role: .primary,   defaultSets: 3, defaultReps: 5, percentage1RM: 0.75, targetRPE: nil),
+                .init(exerciseName: "Back Squats", role: .primary, defaultSets: 4, defaultReps: 5, percentage1RM: 0.78, targetRPE: nil),
+                .init(exerciseName: "Bench Press", role: .primary, defaultSets: 4, defaultReps: 5, percentage1RM: 0.76, targetRPE: nil),
+                .init(exerciseName: "Seated Cable Row", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
             ],
             accessoryPool: [
-                .init(exerciseName: "Lateral Raises",  role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
-                .init(exerciseName: "Tricep Pushdown", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Leg Curl",        role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Barbell Curl",    role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Calf Raises",     role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Romanian Deadlift", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Pull-ups", role: .accessory, defaultSets: 3, defaultReps: 6, percentage1RM: nil, targetRPE: 8),
+                .init(exerciseName: "Leg Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Lateral Raises", role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Ab Rollout", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Calf Raises", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
             ],
             accessoryCount: 2
         )
 
         let fb_B = SessionDefinition(
-            sessionName: "Full Body B",
+            sessionName: "Full Body B (Hinge + Vertical Push)",
             primaryExercises: [
-                .init(exerciseName: "Deadlift",       role: .primary,   defaultSets: 3, defaultReps: 4, percentage1RM: 0.83, targetRPE: nil),
-                .init(exerciseName: "Overhead Press", role: .primary,   defaultSets: 3, defaultReps: 5, percentage1RM: 0.75, targetRPE: nil),
-                .init(exerciseName: "Chin-ups",       role: .accessory, defaultSets: 3, defaultReps: 5, percentage1RM: nil,  targetRPE: 8),
+                .init(exerciseName: "Deadlift", role: .primary, defaultSets: 3, defaultReps: 4, percentage1RM: 0.83, targetRPE: nil),
+                .init(exerciseName: "Overhead Press", role: .accessory, defaultSets: 3, defaultReps: 6, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Lat Pulldown", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
             ],
             accessoryPool: [
-                .init(exerciseName: "Leg Press",     role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Incline Bench", role: .accessory, defaultSets: 3, defaultReps: 8,  percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Goblet Squat", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Incline Dumbbell Press", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
                 .init(exerciseName: "Seated Cable Row", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Hammer Curl",   role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Skull Crushers",role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Calf Raises",   role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Hip Thrust", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Tricep Pushdown", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Dead Bug", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 6),
             ],
             accessoryCount: 2
         )
 
         let fb_C = SessionDefinition(
-            sessionName: "Full Body C",
+            sessionName: "Full Body C (Variation Strength)",
             primaryExercises: [
-                .init(exerciseName: "Front Squat",   role: .variation, defaultSets: 3, defaultReps: 5, percentage1RM: 0.70, targetRPE: nil),
-                .init(exerciseName: "Incline Bench", role: .variation, defaultSets: 3, defaultReps: 6, percentage1RM: 0.72, targetRPE: nil),
-                .init(exerciseName: "Pendlay Row",   role: .primary,   defaultSets: 3, defaultReps: 5, percentage1RM: 0.75, targetRPE: nil),
+                .init(exerciseName: "Front Squat", role: .variation, defaultSets: 3, defaultReps: 5, percentage1RM: 0.72, targetRPE: nil),
+                .init(exerciseName: "Incline Bench", role: .variation, defaultSets: 3, defaultReps: 6, percentage1RM: 0.74, targetRPE: nil),
+                .init(exerciseName: "Chin-ups", role: .accessory, defaultSets: 3, defaultReps: 6, percentage1RM: nil, targetRPE: 8),
             ],
             accessoryPool: [
-                .init(exerciseName: "Romanian Deadlift",     role: .accessory, defaultSets: 3, defaultReps: 8,  percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Arnold Press",          role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Lat Pulldown",          role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "EZ Bar Curl",           role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Overhead Tricep Extension", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Leg Extension",         role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Romanian Deadlift", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Leg Extension", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Cable Lateral Raise", role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Hammer Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Pallof Press", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Glute Bridge", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
             ],
             accessoryCount: 2
         )
 
         let fb_D = SessionDefinition(
-            sessionName: "Full Body D",
+            sessionName: "Full Body D (Bench + Posterior Chain)",
             primaryExercises: [
-                .init(exerciseName: "Deadlift",           role: .primary,   defaultSets: 3, defaultReps: 4, percentage1RM: 0.82, targetRPE: nil),
-                .init(exerciseName: "Dumbbell Bench Press",role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil,  targetRPE: 7),
-                .init(exerciseName: "Pull-ups",            role: .accessory, defaultSets: 3, defaultReps: 5, percentage1RM: nil,  targetRPE: 8),
+                .init(exerciseName: "Pause Bench Press", role: .variation, defaultSets: 4, defaultReps: 4, percentage1RM: 0.80, targetRPE: nil),
+                .init(exerciseName: "Romanian Deadlift", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Pull-ups", role: .accessory, defaultSets: 3, defaultReps: 6, percentage1RM: nil, targetRPE: 8),
             ],
             accessoryPool: [
-                .init(exerciseName: "Leg Press",          role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Cable Lateral Raise",role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
-                .init(exerciseName: "EZ Bar Curl",        role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Leg Press", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Dumbbell Bench Press", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Face Pulls", role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Leg Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
                 .init(exerciseName: "Cable Tricep Kickback", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Glute Bridge",       role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Calf Raises", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
             ],
             accessoryCount: 2
         )
 
-        // Light sessions for higher frequencies
-        let fb_CLight = SessionDefinition(
-            sessionName: "Full Body C (Light)",
+        let fb_E = SessionDefinition(
+            sessionName: "Full Body E (Recovery Bias)",
             primaryExercises: [
-                .init(exerciseName: "Goblet Squat",       role: .variation, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Dumbbell Bench Press",role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Seated Cable Row",   role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Goblet Squat", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Floor Press", role: .variation, defaultSets: 3, defaultReps: 8, percentage1RM: 0.72, targetRPE: nil),
+                .init(exerciseName: "Seated Cable Row", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
             ],
             accessoryPool: [
-                .init(exerciseName: "Leg Extension",         role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Cable Flyes",           role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Cable Lateral Raise",   role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
-                .init(exerciseName: "Hammer Curl",           role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Walking Lunges", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Lat Pulldown", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Arnold Press", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Glute Bridge", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
                 .init(exerciseName: "Overhead Tricep Extension", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
-            ],
-            accessoryCount: 3
-        )
-
-        let fb_ELight = SessionDefinition(
-            sessionName: "Full Body E (Light)",
-            primaryExercises: [
-                .init(exerciseName: "Romanian Deadlift", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil,  targetRPE: 7),
-                .init(exerciseName: "Floor Press",       role: .variation, defaultSets: 3, defaultReps: 8, percentage1RM: 0.72, targetRPE: nil),
-                .init(exerciseName: "Pendlay Row",       role: .primary,   defaultSets: 3, defaultReps: 6, percentage1RM: 0.72, targetRPE: nil),
-            ],
-            accessoryPool: [
-                .init(exerciseName: "Leg Press",       role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Calf Raises",     role: .accessory, defaultSets: 4, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
-                .init(exerciseName: "Cable Lateral Raise", role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
-                .init(exerciseName: "Skull Crushers",  role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Hammer Curl",     role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Cable Curl", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
             ],
             accessoryCount: 2
         )
 
-        let fb_FLight = SessionDefinition(
-            sessionName: "Full Body F (Light)",
+        let fb_F = SessionDefinition(
+            sessionName: "Full Body F (Frequency Support)",
             primaryExercises: [
-                .init(exerciseName: "Hack Squat",      role: .variation, defaultSets: 3, defaultReps: 8, percentage1RM: 0.72, targetRPE: nil),
-                .init(exerciseName: "Arnold Press",    role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Seated Cable Row",role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Pause Squat", role: .variation, defaultSets: 3, defaultReps: 4, percentage1RM: 0.78, targetRPE: nil),
+                .init(exerciseName: "Close Grip Bench Press", role: .variation, defaultSets: 3, defaultReps: 6, percentage1RM: 0.76, targetRPE: nil),
+                .init(exerciseName: "Lat Pulldown", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
             ],
             accessoryPool: [
-                .init(exerciseName: "Leg Curl",          role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Cable Tricep Kickback", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Concentration Curl",role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Glute Bridge",      role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Hip Thrust", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Dumbbell Row", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Lateral Raises", role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Leg Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Concentration Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Ab Rollout", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
             ],
             accessoryCount: 2
         )
@@ -1100,13 +1086,13 @@ private extension FocusTemplateLibrary {
             displayName: "Full Body",
             minimumFrequency: 2,
             requiredLifts: ["Back Squats", "Bench Press", "Deadlift"],
-            exercisesPerSession: 5...6,
+            exercisesPerSession: 5...5,
             sessionDefinitions: [
                 2: [fb_A, fb_B],
                 3: [fb_A, fb_B, fb_C],
                 4: [fb_A, fb_B, fb_C, fb_D],
-                5: [fb_A, fb_B, fb_CLight, fb_D, fb_ELight],
-                6: [fb_A, fb_B, fb_C, fb_D, fb_ELight, fb_FLight],
+                5: [fb_A, fb_B, fb_C, fb_D, fb_E],
+                6: [fb_A, fb_B, fb_C, fb_D, fb_E, fb_F],
             ]
         )
     }
@@ -1414,6 +1400,135 @@ private extension FocusTemplateLibrary {
                 4: [workoutA, workoutB, workoutC, workoutA],
                 5: [workoutA, workoutB, workoutC, workoutA, workoutB],
                 6: [workoutA, workoutB, workoutC, workoutA, workoutB, workoutC],
+            ]
+        )
+    }
+}
+
+// MARK: - Powerlifting
+// Inspired by SBD-specific strength principles, higher bench frequency, and fatigue-aware deadlift exposure.
+
+private extension FocusTemplateLibrary {
+    static var powerliftingTemplate: FocusTemplate {
+        let pl_squatBench = SessionDefinition(
+            sessionName: "Competition Squat + Bench",
+            primaryExercises: [
+                .init(exerciseName: "Back Squats", role: .primary, defaultSets: 4, defaultReps: 3, percentage1RM: 0.88, targetRPE: nil),
+                .init(exerciseName: "Bench Press", role: .primary, defaultSets: 4, defaultReps: 4, percentage1RM: 0.82, targetRPE: nil),
+                .init(exerciseName: "Barbell Row", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 7),
+            ],
+            accessoryPool: [
+                .init(exerciseName: "Pause Squat", role: .variation, defaultSets: 3, defaultReps: 4, percentage1RM: 0.80, targetRPE: nil),
+                .init(exerciseName: "Leg Press", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Lat Pulldown", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Tricep Pushdown", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Ab Rollout", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Face Pulls", role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
+            ],
+            accessoryCount: 2
+        )
+
+        let pl_benchDeadlift = SessionDefinition(
+            sessionName: "Competition Bench + Deadlift",
+            primaryExercises: [
+                .init(exerciseName: "Bench Press", role: .primary, defaultSets: 5, defaultReps: 3, percentage1RM: 0.88, targetRPE: nil),
+                .init(exerciseName: "Deadlift", role: .primary, defaultSets: 4, defaultReps: 3, percentage1RM: 0.88, targetRPE: nil),
+                .init(exerciseName: "Seated Cable Row", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+            ],
+            accessoryPool: [
+                .init(exerciseName: "Pause Bench Press", role: .variation, defaultSets: 3, defaultReps: 4, percentage1RM: 0.80, targetRPE: nil),
+                .init(exerciseName: "Leg Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Pull-ups", role: .accessory, defaultSets: 3, defaultReps: 6, percentage1RM: nil, targetRPE: 8),
+                .init(exerciseName: "Skull Crushers", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Pallof Press", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Hip Thrust", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 7),
+            ],
+            accessoryCount: 2
+        )
+
+        let pl_secondarySBD = SessionDefinition(
+            sessionName: "Secondary Squat + Bench Volume",
+            primaryExercises: [
+                .init(exerciseName: "Pause Squat", role: .variation, defaultSets: 3, defaultReps: 4, percentage1RM: 0.82, targetRPE: nil),
+                .init(exerciseName: "Close Grip Bench Press", role: .variation, defaultSets: 4, defaultReps: 6, percentage1RM: 0.78, targetRPE: nil),
+                .init(exerciseName: "Chin-ups", role: .accessory, defaultSets: 3, defaultReps: 6, percentage1RM: nil, targetRPE: 8),
+            ],
+            accessoryPool: [
+                .init(exerciseName: "Front Squat", role: .variation, defaultSets: 3, defaultReps: 5, percentage1RM: 0.75, targetRPE: nil),
+                .init(exerciseName: "Incline Bench", role: .variation, defaultSets: 3, defaultReps: 8, percentage1RM: 0.72, targetRPE: nil),
+                .init(exerciseName: "Leg Press", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Barbell Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Face Pulls", role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Dead Bug", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 6),
+            ],
+            accessoryCount: 2
+        )
+
+        let pl_benchIntensity = SessionDefinition(
+            sessionName: "Bench Intensity + Pull Support",
+            primaryExercises: [
+                .init(exerciseName: "Bench Press", role: .primary, defaultSets: 4, defaultReps: 4, percentage1RM: 0.84, targetRPE: nil),
+                .init(exerciseName: "Block Pull", role: .variation, defaultSets: 3, defaultReps: 4, percentage1RM: 0.86, targetRPE: nil),
+                .init(exerciseName: "Lat Pulldown", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+            ],
+            accessoryPool: [
+                .init(exerciseName: "Overhead Tricep Extension", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "T-Bar Row", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Leg Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Face Pulls", role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Ab Rollout", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Cable Lateral Raise", role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
+            ],
+            accessoryCount: 2
+        )
+
+        let pl_squatDeadliftSupport = SessionDefinition(
+            sessionName: "Squat Intensity + Deadlift Support",
+            primaryExercises: [
+                .init(exerciseName: "Back Squats", role: .primary, defaultSets: 3, defaultReps: 2, percentage1RM: 0.90, targetRPE: nil),
+                .init(exerciseName: "Deficit Deadlift", role: .variation, defaultSets: 3, defaultReps: 4, percentage1RM: 0.82, targetRPE: nil),
+                .init(exerciseName: "Pull-ups", role: .accessory, defaultSets: 3, defaultReps: 6, percentage1RM: nil, targetRPE: 8),
+            ],
+            accessoryPool: [
+                .init(exerciseName: "Romanian Deadlift", role: .accessory, defaultSets: 3, defaultReps: 6, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Good Mornings", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Tricep Pushdown", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Seated Cable Row", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Pallof Press", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Calf Raises", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
+            ],
+            accessoryCount: 2
+        )
+
+        let pl_techniqueGPP = SessionDefinition(
+            sessionName: "Technique + GPP",
+            primaryExercises: [
+                .init(exerciseName: "Front Squat", role: .variation, defaultSets: 3, defaultReps: 5, percentage1RM: 0.74, targetRPE: nil),
+                .init(exerciseName: "Pause Bench Press", role: .variation, defaultSets: 3, defaultReps: 5, percentage1RM: 0.80, targetRPE: nil),
+                .init(exerciseName: "Seated Cable Row", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+            ],
+            accessoryPool: [
+                .init(exerciseName: "Hip Thrust", role: .accessory, defaultSets: 3, defaultReps: 8, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Leg Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Face Pulls", role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "EZ Bar Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Overhead Tricep Extension", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Dead Bug", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 6),
+            ],
+            accessoryCount: 2
+        )
+
+        return FocusTemplate(
+            focus: .powerlifting,
+            displayName: "Powerlifting",
+            minimumFrequency: 3,
+            requiredLifts: ["Back Squats", "Bench Press", "Deadlift"],
+            exercisesPerSession: 4...5,
+            sessionDefinitions: [
+                3: [pl_squatBench, pl_benchDeadlift, pl_secondarySBD],
+                4: [pl_squatBench, pl_benchDeadlift, pl_secondarySBD, pl_benchIntensity],
+                5: [pl_squatBench, pl_benchDeadlift, pl_secondarySBD, pl_benchIntensity, pl_squatDeadliftSupport],
+                6: [pl_squatBench, pl_benchDeadlift, pl_secondarySBD, pl_benchIntensity, pl_squatDeadliftSupport, pl_techniqueGPP],
             ]
         )
     }

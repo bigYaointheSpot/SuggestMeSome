@@ -85,6 +85,7 @@ struct ProgramFatigueBudgets {
 enum ProgramExerciseMetadataService {
     private enum FocusArchetype {
         case powerlifting
+        case fullBody
         case powerbuilding
         case bodybuilding
         case general
@@ -149,6 +150,7 @@ enum ProgramExerciseMetadataService {
         let baseWeek: Double
         switch archetype {
         case .powerlifting: baseWeek = 72
+        case .fullBody: baseWeek = 76
         case .powerbuilding: baseWeek = 82
         case .bodybuilding: baseWeek = 88
         case .general: baseWeek = 78
@@ -174,8 +176,25 @@ enum ProgramExerciseMetadataService {
         let weeklyBudget = baseWeek * levelScale * frequencyScale
         let sessionBudget = (weeklyBudget / Double(max(1, sessionsPerWeek))) * 1.28
 
-        let deadliftScale: Double = archetype == .bodybuilding ? 0.90 : 0.84
-        let adjacentScale: Double = archetype == .bodybuilding ? 1.88 : 1.70
+        let deadliftScale: Double
+        switch archetype {
+        case .bodybuilding:
+            deadliftScale = 0.90
+        case .fullBody:
+            deadliftScale = 0.82
+        default:
+            deadliftScale = 0.84
+        }
+
+        let adjacentScale: Double
+        switch archetype {
+        case .bodybuilding:
+            adjacentScale = 1.88
+        case .fullBody:
+            adjacentScale = 1.58
+        default:
+            adjacentScale = 1.70
+        }
 
         return ProgramFatigueBudgets(
             weekBudget: weeklyBudget,
@@ -187,13 +206,15 @@ enum ProgramExerciseMetadataService {
 
     private static func focusArchetype(for focus: ProgramFocus) -> FocusArchetype {
         switch focus {
-        case .increaseMaxSquat, .increaseMaxBench, .increaseMaxDeadlift, .fiveByFive:
+        case .increaseMaxSquat, .increaseMaxBench, .increaseMaxDeadlift, .powerlifting, .fiveByFive:
             return .powerlifting
+        case .fullBody:
+            return .fullBody
         case .powerbuilding:
             return .powerbuilding
         case .bodybuilding:
             return .bodybuilding
-        case .generalFitness, .fullBody, .pushPull, .cardioEndurance:
+        case .generalFitness, .pushPull, .cardioEndurance:
             return .general
         }
     }
@@ -201,11 +222,19 @@ enum ProgramExerciseMetadataService {
     private static func volumeLevelScale(for level: ProgramLevel, archetype: FocusArchetype) -> Double {
         switch level {
         case .beginner:
-            return archetype == .bodybuilding ? 0.86 : 0.90
+            switch archetype {
+            case .bodybuilding: return 0.86
+            case .fullBody: return 0.88
+            default: return 0.90
+            }
         case .intermediate:
             return 1.00
         case .advanced:
-            return archetype == .powerlifting ? 1.06 : 1.10
+            switch archetype {
+            case .powerlifting: return 1.06
+            case .fullBody: return 1.05
+            default: return 1.10
+            }
         }
     }
 
@@ -222,6 +251,19 @@ enum ProgramExerciseMetadataService {
                 .biceps: .init(minHardSets: 2, maxHardSets: 8),
                 .triceps: .init(minHardSets: 4, maxHardSets: 10),
                 .calves: .init(minHardSets: 2, maxHardSets: 8),
+                .abs: .init(minHardSets: 4, maxHardSets: 10),
+            ]
+        case .fullBody:
+            return [
+                .chest: .init(minHardSets: 8, maxHardSets: 16),
+                .upperBackLats: .init(minHardSets: 10, maxHardSets: 18),
+                .quads: .init(minHardSets: 8, maxHardSets: 16),
+                .hamstrings: .init(minHardSets: 8, maxHardSets: 14),
+                .glutes: .init(minHardSets: 8, maxHardSets: 14),
+                .shoulders: .init(minHardSets: 6, maxHardSets: 12),
+                .biceps: .init(minHardSets: 4, maxHardSets: 10),
+                .triceps: .init(minHardSets: 4, maxHardSets: 10),
+                .calves: .init(minHardSets: 4, maxHardSets: 10),
                 .abs: .init(minHardSets: 4, maxHardSets: 10),
             ]
         case .powerbuilding:

@@ -142,7 +142,9 @@ struct Feature4GeneratorValidationTests {
         let context = container.mainContext
         let focuses: [ProgramFocus] = [
             .increaseMaxSquat,
+            .powerlifting,
             .powerbuilding,
+            .fullBody,
             .generalFitness,
             .bodybuilding,
             .cardioEndurance,
@@ -178,6 +180,60 @@ struct Feature4GeneratorValidationTests {
                 for sessionSummary in week.sessionSummaries {
                     #expect(sessionSummary.fatigueScore <= (budgets.sessionBudget * 1.10))
                 }
+            }
+        }
+    }
+
+    @Test func powerliftingTemplateMaintainsHighSBDExposure() {
+        let template = FocusTemplateLibrary.template(for: .powerlifting)
+
+        for frequency in template.sessionDefinitions.keys.sorted() {
+            guard let sessions = template.sessionDefinitions[frequency] else {
+                Issue.record("Missing powerlifting sessions for frequency \(frequency)")
+                continue
+            }
+
+            let squatExposure = sessions.filter { session in
+                session.primaryExercises.contains { baseLift(for: $0.exerciseName) == "Back Squats" }
+            }.count
+            let benchExposure = sessions.filter { session in
+                session.primaryExercises.contains { baseLift(for: $0.exerciseName) == "Bench Press" }
+            }.count
+            let deadliftExposure = sessions.filter { session in
+                session.primaryExercises.contains { baseLift(for: $0.exerciseName) == "Deadlift" }
+            }.count
+
+            #expect(squatExposure >= 2)
+            #expect(benchExposure >= min(3, frequency))
+            #expect(deadliftExposure >= 1)
+        }
+    }
+
+    @Test func fullBodyGeneratedSessionsAlwaysIncludeLowerPushAndPullWork() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let input = makeInput(
+            focus: .fullBody,
+            level: .intermediate,
+            durationWeeks: 8,
+            sessionsPerWeek: 5
+        )
+
+        let program = service.generateProgram(
+            input: input,
+            context: context,
+            shuffleSeed: deterministicSeed(for: .fullBody, offset: 5)
+        )
+
+        for week in program.weeks {
+            for session in week.sessions {
+                let workingNames = session.exercises
+                    .filter { !$0.isWarmup }
+                    .map(\.exerciseName)
+
+                #expect(workingNames.contains(where: isLowerBodyExercise))
+                #expect(workingNames.contains(where: isPushExercise))
+                #expect(workingNames.contains(where: isPullExercise))
             }
         }
     }
@@ -318,5 +374,32 @@ struct Feature4GeneratorValidationTests {
 
     private func deterministicSeed(for focus: ProgramFocus, offset: Int) -> Int {
         abs(focus.rawValue.hashValue) + (offset * 97) + 1
+    }
+
+    private func baseLift(for exerciseName: String) -> String? {
+        if ["Back Squats", "Bench Press", "Deadlift"].contains(exerciseName) {
+            return exerciseName
+        }
+        return FocusTemplateLibrary.loadMapping(for: exerciseName)?.sourceLift
+    }
+
+    private func isLowerBodyExercise(_ exerciseName: String) -> Bool {
+        let metadata = ProgramExerciseMetadataService.metadata(for: exerciseName)
+        return (metadata.muscleContributions[.quads] ?? 0) > 0 ||
+            (metadata.muscleContributions[.hamstrings] ?? 0) > 0 ||
+            (metadata.muscleContributions[.glutes] ?? 0) > 0
+    }
+
+    private func isPushExercise(_ exerciseName: String) -> Bool {
+        let metadata = ProgramExerciseMetadataService.metadata(for: exerciseName)
+        return (metadata.muscleContributions[.chest] ?? 0) > 0 ||
+            (metadata.muscleContributions[.shoulders] ?? 0) > 0 ||
+            (metadata.muscleContributions[.triceps] ?? 0) > 0
+    }
+
+    private func isPullExercise(_ exerciseName: String) -> Bool {
+        let metadata = ProgramExerciseMetadataService.metadata(for: exerciseName)
+        return (metadata.muscleContributions[.upperBackLats] ?? 0) > 0 ||
+            (metadata.muscleContributions[.biceps] ?? 0) > 0
     }
 }
