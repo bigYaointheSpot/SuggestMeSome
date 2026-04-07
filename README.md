@@ -266,6 +266,29 @@ Replaced non-functional program run row taps with an inline expandable detail vi
 
 ---
 
+### Feature 4 — AI Program Generator
+
+**Status:** In progress
+
+---
+
+#### Prompt 1 — Data Model Updates + New Seed Exercises — 2026-04-06
+
+- **ProgramSessionExercise** updated: added `targetPercentage1RM` (optional Double, e.g. 0.85 = 85% 1RM), `targetRPE` (optional Double, 1–10 scale), `isWarmup` (Bool, default false)
+- **ProgramSessionTemplate** updated: added `sessionName` (optional String, e.g. "Heavy Squat Day")
+- **40 new exercises** added across 6 muscle groups via `migrateExercisesV2IfNeeded`:
+  - Chest: Pause Bench Press, Close Grip Bench Press, Floor Press, Dumbbell Bench Press, Incline Dumbbell Press, Chest Dip, Pec Deck Machine Fly
+  - Back: Sumo Deadlift, Deficit Deadlift, Block Pull, Pendlay Row, Dumbbell Row, Chin-ups, Straight Arm Pulldown
+  - Shoulders: Barbell Strict Press, Cable Lateral Raise, Arnold Press, Machine Shoulder Press
+  - Arms: EZ Bar Curl, Concentration Curl, Incline Dumbbell Curl, Cable Curl, Overhead Tricep Extension, Close Grip Push-ups, Cable Tricep Kickback
+  - Legs: Pause Squat, Box Squat, Hack Squat, Hip Thrust, Good Mornings, Goblet Squat, Walking Lunges, Seated Calf Raise, Glute Bridge, Cable Pull Through, Sumo Squat
+  - Core: Cable Crunch, Pallof Press, Dead Bug, Bird Dog, Weighted Plank
+- Migration is idempotent: checks existing exercise names before inserting, guarded by `hasSeededExercisesV2` UserDefaults flag. New installs skip the migration entirely.
+
+**Commit:** `feat: update program models and add new exercises for AI program generator`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
