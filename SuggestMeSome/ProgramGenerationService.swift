@@ -99,6 +99,7 @@ struct ProgramGenerationService {
                         primary, isPrimary: true,
                         schedule: schedule, sessionIdx: sessionIdx,
                         sessionsPerWeek: input.sessionsPerWeek, level: input.level,
+                        oneRepMaxes: input.oneRepMaxes,
                         session: sessionTemplate, orderIdx: orderIdx, context: context
                     )
                 }
@@ -108,6 +109,7 @@ struct ProgramGenerationService {
                         accessory, isPrimary: false,
                         schedule: schedule, sessionIdx: sessionIdx,
                         sessionsPerWeek: input.sessionsPerWeek, level: input.level,
+                        oneRepMaxes: input.oneRepMaxes,
                         session: sessionTemplate, orderIdx: orderIdx, context: context
                     )
                 }
@@ -127,6 +129,7 @@ struct ProgramGenerationService {
         sessionIdx: Int,
         sessionsPerWeek: Int,
         level: ProgramLevel,
+        oneRepMaxes: [String: (weight: Double, unit: String)],
         session: ProgramSessionTemplate,
         orderIdx: Int,
         context: ModelContext
@@ -157,13 +160,21 @@ struct ProgramGenerationService {
         // Applied to primary/variation exercises with a %1RM target; skipped during deloads.
         if isPrimary, let workingPct = params.percentage1RM, !schedule.isDeload {
             for (i, multiplier) in [0.40, 0.55, 0.70].enumerated() {
+                let warmupPct = workingPct * multiplier
+                let wt = computePrescribedWeight(
+                    exerciseName: templateEx.exerciseName,
+                    percentage1RM: warmupPct,
+                    oneRepMaxes: oneRepMaxes
+                )
                 let warmup = ProgramSessionExercise(
                     exerciseName: templateEx.exerciseName,
                     orderIndex: idx + i,
                     targetSets: 1,
                     targetReps: params.reps,
-                    targetPercentage1RM: workingPct * multiplier,
-                    isWarmup: true
+                    targetPercentage1RM: warmupPct,
+                    isWarmup: true,
+                    prescribedWeight: wt?.weight,
+                    prescribedWeightUnit: wt?.unit
                 )
                 context.insert(warmup)
                 warmup.session = session
@@ -173,17 +184,40 @@ struct ProgramGenerationService {
 
         // Working set(s): halve set count on deload weeks.
         let workingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
+        let wt = computePrescribedWeight(
+            exerciseName: templateEx.exerciseName,
+            percentage1RM: params.percentage1RM,
+            oneRepMaxes: oneRepMaxes
+        )
         let working = ProgramSessionExercise(
             exerciseName: templateEx.exerciseName,
             orderIndex: idx,
             targetSets: workingSets,
             targetReps: params.reps,
             targetPercentage1RM: params.percentage1RM,
-            targetRPE: params.rpe
+            targetRPE: params.rpe,
+            prescribedWeight: wt?.weight,
+            prescribedWeightUnit: wt?.unit
         )
         context.insert(working)
         working.session = session
         return idx + 1
+    }
+
+    private func computePrescribedWeight(
+        exerciseName: String,
+        percentage1RM: Double?,
+        oneRepMaxes: [String: (weight: Double, unit: String)]
+    ) -> (weight: Double, unit: String)? {
+        guard let pct = percentage1RM, let orm = oneRepMaxes[exerciseName] else { return nil }
+        let raw = pct * orm.weight
+        let rounded: Double
+        if orm.unit == "lbs" {
+            rounded = max(5.0, (raw / 5.0).rounded() * 5.0)
+        } else {
+            rounded = max(2.5, (raw / 2.5).rounded() * 2.5)
+        }
+        return (weight: rounded, unit: orm.unit)
     }
 
     // MARK: - Periodization Parameter Computation

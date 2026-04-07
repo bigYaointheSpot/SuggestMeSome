@@ -24,6 +24,10 @@ final class ProgramSessionExercise {
     var targetRPE: Double?
     /// True for warmup sets; false for working sets.
     var isWarmup: Bool = false
+    /// Actual computed weight to lift, stored at generation time. Nil for RPE-only or cardio exercises.
+    var prescribedWeight: Double?
+    /// Unit for prescribedWeight: "lbs" or "kg". Nil when prescribedWeight is nil.
+    var prescribedWeightUnit: String?
 
     var session: ProgramSessionTemplate?
 
@@ -35,7 +39,9 @@ final class ProgramSessionExercise {
         targetReps: Int? = nil,
         targetPercentage1RM: Double? = nil,
         targetRPE: Double? = nil,
-        isWarmup: Bool = false
+        isWarmup: Bool = false,
+        prescribedWeight: Double? = nil,
+        prescribedWeightUnit: String? = nil
     ) {
         self.id = id
         self.exerciseName = exerciseName
@@ -45,5 +51,7 @@ final class ProgramSessionExercise {
         self.targetPercentage1RM = targetPercentage1RM
         self.targetRPE = targetRPE
         self.isWarmup = isWarmup
+        self.prescribedWeight = prescribedWeight
+        self.prescribedWeightUnit = prescribedWeightUnit
     }
 }

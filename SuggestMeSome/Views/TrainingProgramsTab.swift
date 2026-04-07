@@ -450,40 +450,75 @@ struct ProgramRunExpandableRow: View {
     private func sessionPlannedDetail(sessionNumber: Int) -> some View {
         let weekTemplate = run.program?.weeks.first { $0.weekNumber == selectedWeek }
         let sessionTemplate = weekTemplate?.sessions.first { $0.sessionNumber == sessionNumber }
-        let exercises = (sessionTemplate?.exercises ?? []).sorted { $0.orderIndex < $1.orderIndex }
+        let allExercises = (sessionTemplate?.exercises ?? []).sorted { $0.orderIndex < $1.orderIndex }
+        let workingSets = allExercises.filter { !$0.isWarmup }
+        let warmupsByName = Dictionary(grouping: allExercises.filter { $0.isWarmup }, by: \.exerciseName)
 
-        if exercises.isEmpty {
+        if workingSets.isEmpty {
             Text("No exercises planned for this session.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .padding(14)
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(exercises) { exercise in
-                    HStack {
-                        Text(exercise.exerciseName)
-                            .font(.subheadline)
-                        Spacer()
-                        Group {
-                            if let sets = exercise.targetSets, let reps = exercise.targetReps {
-                                Text("\(sets)×\(reps) planned")
-                            } else if let sets = exercise.targetSets {
-                                Text("\(sets) sets planned")
-                            } else {
-                                Text("Planned")
-                            }
+                ForEach(workingSets) { exercise in
+                    let warmupCount = warmupsByName[exercise.exerciseName]?.count ?? 0
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(exercise.exerciseName)
+                                .font(.subheadline)
+                            Text(plannedExerciseDetail(exercise))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        Spacer()
+                        if warmupCount > 0 {
+                            Text("\(warmupCount) warmup sets")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                                .padding(.top, 2)
+                        }
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
 
-                    if exercise.id != exercises.last?.id {
+                    if exercise.id != workingSets.last?.id {
                         Divider().padding(.leading, 14)
                     }
                 }
             }
         }
     }
+}
+
+// MARK: - Planned Exercise Detail Helper
+
+private func plannedExerciseDetail(_ exercise: ProgramSessionExercise) -> String {
+    // Cardio: targetSets is nil, targetReps holds duration in minutes
+    if exercise.targetSets == nil, let mins = exercise.targetReps {
+        return "\(mins) min"
+    }
+
+    let sStr = exercise.targetSets.map(String.init) ?? "—"
+    let rStr = exercise.targetReps.map(String.init) ?? "—"
+
+    if let pct = exercise.targetPercentage1RM {
+        let pctInt = Int((pct * 100).rounded())
+        if let w = exercise.prescribedWeight, let unit = exercise.prescribedWeightUnit {
+            let wStr = w == w.rounded(.towardZero)
+                ? "\(Int(w)) \(unit)"
+                : String(format: "%.1f \(unit)", w)
+            return "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
+        }
+        return "\(sStr)×\(rStr) @ \(pctInt)%"
+    }
+
+    if let rpe = exercise.targetRPE {
+        let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
+            ? String(Int(rpe))
+            : String(format: "%.1f", rpe)
+        return "\(sStr)×\(rStr) @ RPE \(rpeStr)"
+    }
+
+    return "\(sStr)×\(rStr)"
 }

@@ -143,24 +143,28 @@ private func exerciseDisplayText(
 
     if let pct = exercise.targetPercentage1RM {
         let pctInt = Int((pct * 100).rounded())
+
+        // Prefer weight stored at generation time
+        if let w = exercise.prescribedWeight, let unit = exercise.prescribedWeightUnit {
+            let wStr = w == w.rounded(.towardZero)
+                ? "\(Int(w)) \(unit)"
+                : String(format: "%.1f \(unit)", w)
+            return "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
+        }
+
+        // Fallback: compute from oneRepMaxes (programs generated before fix)
         if let orm = oneRepMaxes[exercise.exerciseName] {
             let raw = pct * orm.weight
-            let rounded: Double
-            if orm.unit == "lbs" {
-                rounded = (raw / 5.0).rounded() * 5.0
-            } else {
-                rounded = (raw / 2.5).rounded() * 2.5
-            }
-            let wStr: String
-            if rounded == rounded.rounded(.towardZero) {
-                wStr = "\(Int(rounded)) \(orm.unit)"
-            } else {
-                wStr = String(format: "%.1f \(orm.unit)", rounded)
-            }
+            let rounded = orm.unit == "lbs"
+                ? (raw / 5.0).rounded() * 5.0
+                : (raw / 2.5).rounded() * 2.5
+            let wStr = rounded == rounded.rounded(.towardZero)
+                ? "\(Int(rounded)) \(orm.unit)"
+                : String(format: "%.1f \(orm.unit)", rounded)
             return "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
-        } else {
-            return "\(sStr)×\(rStr) @ \(pctInt)%"
         }
+
+        return "\(sStr)×\(rStr) @ \(pctInt)%"
     }
 
     if let rpe = exercise.targetRPE {
@@ -171,6 +175,38 @@ private func exerciseDisplayText(
     }
 
     return "\(sStr)×\(rStr)"
+}
+
+// MARK: - Exercise Grouping
+
+private struct ExerciseGroup: Identifiable {
+    let id: UUID
+    let workingSet: ProgramSessionExercise
+    let warmupSets: [ProgramSessionExercise]
+}
+
+private func groupedExercises(from exercises: [ProgramSessionExercise]) -> [ExerciseGroup] {
+    var groups: [ExerciseGroup] = []
+    var pendingWarmups: [ProgramSessionExercise] = []
+
+    for ex in exercises {
+        if ex.isWarmup {
+            pendingWarmups.append(ex)
+        } else {
+            let matching  = pendingWarmups.filter { $0.exerciseName == ex.exerciseName }
+            let unmatched = pendingWarmups.filter { $0.exerciseName != ex.exerciseName }
+            for w in unmatched {
+                groups.append(ExerciseGroup(id: w.id, workingSet: w, warmupSets: []))
+            }
+            groups.append(ExerciseGroup(id: ex.id, workingSet: ex, warmupSets: matching))
+            pendingWarmups = []
+        }
+    }
+    // Trailing warmups without a working set (defensive)
+    for w in pendingWarmups {
+        groups.append(ExerciseGroup(id: w.id, workingSet: w, warmupSets: []))
+    }
+    return groups
 }
 
 // MARK: - ProgramReviewView
@@ -601,16 +637,17 @@ private struct SessionRowView: View {
         VStack(alignment: .leading, spacing: 0) {
             sessionHeader
             if isExpanded {
-                let sortedExercises = session.exercises.sorted { $0.orderIndex < $1.orderIndex }
+                let sorted = session.exercises.sorted { $0.orderIndex < $1.orderIndex }
+                let groups = groupedExercises(from: sorted)
                 VStack(spacing: 0) {
-                    ForEach(sortedExercises) { exercise in
-                        ExerciseRowView(
-                            exercise: exercise,
+                    ForEach(groups) { group in
+                        GroupedExerciseRowView(
+                            group: group,
                             input: input,
-                            onTap: { if !exercise.isWarmup { editingExercise = exercise } },
-                            onDelete: { onDeleteExercise(exercise) }
+                            onTapWorking: { editingExercise = group.workingSet },
+                            onDelete: { onDeleteExercise(group.workingSet) }
                         )
-                        if exercise.id != sortedExercises.last?.id {
+                        if group.id != groups.last?.id {
                             Divider().padding(.leading, 36)
                         }
                     }
@@ -655,44 +692,50 @@ private struct SessionRowView: View {
     }
 }
 
-// MARK: - ExerciseRowView
+// MARK: - GroupedExerciseRowView
 
-private struct ExerciseRowView: View {
-    let exercise: ProgramSessionExercise
+private struct GroupedExerciseRowView: View {
+    let group: ExerciseGroup
     let input: ProgramGenerationInput
-    let onTap: () -> Void
+    let onTapWorking: () -> Void
     let onDelete: () -> Void
 
+    @State private var warmupsExpanded = false
+
     var body: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(exercise.isWarmup ? Color.orange.opacity(0.4) : Color.teal.opacity(0.6))
-                .frame(width: 7, height: 7)
+        VStack(alignment: .leading, spacing: 0) {
+            // Working set row
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(Color.teal.opacity(0.6))
+                    .frame(width: 7, height: 7)
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(exercise.exerciseName)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.workingSet.exerciseName)
                         .font(.subheadline)
-                        .foregroundStyle(exercise.isWarmup ? .secondary : .primary)
-                    if exercise.isWarmup {
-                        Text("Warmup")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.12))
-                            .foregroundStyle(.orange)
-                            .clipShape(Capsule())
-                    }
+                    Text(exerciseDisplayText(exercise: group.workingSet, oneRepMaxes: input.oneRepMaxes))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                Text(exerciseDisplayText(exercise: exercise, oneRepMaxes: input.oneRepMaxes))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
 
-            Spacer()
+                Spacer()
 
-            if !exercise.isWarmup {
-                Button(action: onTap) {
+                if !group.warmupSets.isEmpty {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { warmupsExpanded.toggle() }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "flame.fill")
+                                .font(.caption2)
+                            Text(warmupsExpanded ? "Hide" : "\(group.warmupSets.count) warmups")
+                                .font(.caption2)
+                        }
+                        .foregroundStyle(.orange)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button(action: onTapWorking) {
                     Image(systemName: "pencil.circle")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -706,11 +749,39 @@ private struct ExerciseRowView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .onTapGesture { onTapWorking() }
+
+            // Warmup sub-rows (collapsible)
+            if warmupsExpanded {
+                ForEach(group.warmupSets.sorted { $0.orderIndex < $1.orderIndex }) { warmup in
+                    HStack(spacing: 8) {
+                        Rectangle()
+                            .fill(Color.orange.opacity(0.35))
+                            .frame(width: 2)
+                            .padding(.leading, 16)
+
+                        Circle()
+                            .fill(Color.orange.opacity(0.5))
+                            .frame(width: 5, height: 5)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Warmup")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.orange)
+                            Text(exerciseDisplayText(exercise: warmup, oneRepMaxes: input.oneRepMaxes))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 5)
+                    .padding(.leading, 4)
+                }
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .contentShape(Rectangle())
-        .onTapGesture { onTap() }
     }
 }
 
@@ -834,7 +905,18 @@ struct ExerciseEditSheet: View {
         if let sets = Int(setsText), sets > 0 { exercise.targetSets = sets }
         if let reps = Int(repsText), reps > 0 { exercise.targetReps = reps }
         if !pctText.isEmpty, let pct = Double(pctText), pct > 0 {
-            exercise.targetPercentage1RM = min(pct / 100.0, 1.0)
+            let normalizedPct = min(pct / 100.0, 1.0)
+            exercise.targetPercentage1RM = normalizedPct
+            // Recompute stored weight from the new percentage
+            let name = selectedName.isEmpty ? exercise.exerciseName : selectedName
+            if let orm = input.oneRepMaxes[name] {
+                let raw = normalizedPct * orm.weight
+                let rounded = orm.unit == "lbs"
+                    ? max(5.0, (raw / 5.0).rounded() * 5.0)
+                    : max(2.5, (raw / 2.5).rounded() * 2.5)
+                exercise.prescribedWeight = rounded
+                exercise.prescribedWeightUnit = orm.unit
+            }
         }
         if !rpeText.isEmpty, let rpe = Double(rpeText), rpe > 0 {
             exercise.targetRPE = min(rpe, 10.0)
