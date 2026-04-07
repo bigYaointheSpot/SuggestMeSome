@@ -13,6 +13,7 @@ import SwiftData
 struct TrainingProgramsTab: View {
     @Query private var programRuns: [ProgramRun]
     @Query(sort: \Workout.date, order: .reverse) private var allWorkouts: [Workout]
+    @State private var showingAIGenerator = false
 
     var sortedRuns: [ProgramRun] {
         let active = programRuns
@@ -33,6 +34,9 @@ struct TrainingProgramsTab: View {
             }
             .navigationTitle("Training Programs")
             .navigationBarTitleDisplayMode(.large)
+            .fullScreenCover(isPresented: $showingAIGenerator) {
+                AIProgramGeneratorView()
+            }
         }
     }
 
@@ -43,36 +47,35 @@ struct TrainingProgramsTab: View {
             NavigationLink {
                 CreateProgramView()
             } label: {
-                Text("Create Your Own Program")
-                    .font(.subheadline.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                programButtonLabel("Create Your Own Program", color: .blue)
             }
 
             NavigationLink {
                 SelectProgramView()
             } label: {
-                Text("Use Existing Program")
-                    .font(.subheadline.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.purple)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                programButtonLabel("Use Existing Program", color: .purple)
+            }
+
+            Button(action: { showingAIGenerator = true }) {
+                programButtonLabel("Generate AI Program", color: .teal)
             }
         }
         .padding(.horizontal)
         .padding(.top, 12)
         .padding(.bottom, 8)
+    }
+
+    private func programButtonLabel(_ title: String, color: Color) -> some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(color)
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder
