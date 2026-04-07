@@ -19,6 +19,15 @@ a tab-based navigation with a Workouts tab and a Training Programs tab.
 
 ## Changelog
 
+### [AI Program Generator Input UI] — 2026-04-07
+- Added "Generate AI Program" button (teal) to the Training Programs tab alongside the existing blue and purple buttons; all three equally sized in one row
+- Created `AIProgramGeneratorView.swift` — a full-screen sheet with a multi-step input flow:
+  - **Screen 1 — Configure Program**: focus picker (10-option grid), experience level segmented control with periodization descriptions, duration picker (6/8/10/12 weeks), sessions/week picker (2–6) with greyed-out options below the selected focus's minimum frequency
+  - **Screen 2 — Enter 1RMs**: pre-fills estimated 1RM from PR history using Epley formula (rounded to nearest 5 lbs / 2.5 kg), per-lift unit toggle, manual override text fields; skipped entirely for Cardio Endurance
+  - **Success screen**: placeholder showing "Program Generated Successfully" and the program name
+- All inputs persist via `@AppStorage` (keys: `generator.ai.*`) and are pre-selected on next open
+- Calls `ProgramGenerationService.generateProgram()` with assembled `ProgramGenerationInput`
+
 ### [Periodization Engine & Program Generation Service] — 2026-04-07
 - Built `ProgramGenerationService.swift` — the core engine that takes a `ProgramGenerationInput` + `FocusTemplate` and outputs a fully populated `TrainingProgram`
 - Added `ProgramGenerationInput` struct and `ProgramLevel` enum (`beginner`, `intermediate`, `advanced`)
