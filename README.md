@@ -19,6 +19,18 @@ a tab-based navigation with a Workouts tab and a Training Programs tab.
 
 ## Changelog
 
+### [Periodization Engine & Program Generation Service] — 2026-04-07
+- Built `ProgramGenerationService.swift` — the core engine that takes a `ProgramGenerationInput` + `FocusTemplate` and outputs a fully populated `TrainingProgram`
+- Added `ProgramGenerationInput` struct and `ProgramLevel` enum (`beginner`, `intermediate`, `advanced`)
+- Implemented three periodization models:
+  - **Beginner — Linear Progression**: 70%→90% 1RM at +2.5%/working week; deload every 4th week (same weight, ½ sets)
+  - **Intermediate — DUP**: sessions rotate heavy/moderate/light intensity tiers; +1.5%/week per tier; deload every 4th week at 60% 1RM
+  - **Advanced — Block Periodization**: hypertrophy (62–72%) → strength (75–85%) → peaking (88–95%) phases with deload weeks; phase layouts for 6/8/10/12-week durations
+- Warmup set generation: 3 sets at 40/55/70% of working weight for primary/variation exercises with a %1RM target (skipped on deloads)
+- Accessory rotation: seeded shuffle + cyclic week-to-week rotation; adjacent-week deduplication for `bodybuilding`/`generalFitness`; fixed accessories for `fiveByFive`
+- Cardio duration encoded as `targetReps` (minutes), progressive at +3 min/working week
+- Known limitation: `ProgramSessionExercise` has no weight field; actual weight rounding (nearest 5 lbs / 2.5 kg) is deferred to display/execution time
+
 ---
 
 ### Feature 1 — Manual Workout Logging
