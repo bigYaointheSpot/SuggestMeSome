@@ -289,6 +289,40 @@ Replaced non-functional program run row taps with an inline expandable detail vi
 
 ---
 
+#### Prompt 2 — Focus Template Library — 2026-04-07
+
+Data-only file defining structured templates for all 10 program focuses.
+
+**New file:** `SuggestMeSome/FocusTemplateLibrary.swift`
+
+**New types:**
+- `ProgramFocus` enum — 10 cases: `increaseMaxSquat`, `increaseMaxBench`, `increaseMaxDeadlift`, `generalFitness`, `fullBody`, `pushPull`, `fiveByFive`, `powerbuilding`, `bodybuilding`, `cardioEndurance`
+- `ExerciseRole` enum — `primary`, `variation`, `accessory`, `cardio`
+- `TemplateExercise` — exercise name, role, defaultSets/Reps, optional percentage1RM, optional targetRPE
+- `SessionDefinition` — sessionName, primaryExercises (always included), accessoryPool (rotated for variety), accessoryCount
+- `FocusTemplate` — focus, displayName, minimumFrequency, requiredLifts, exercisesPerSession range, sessionDefinitions keyed by frequency
+- `FocusTemplateLibrary` enum — static `template(for:)` function
+
+**Template highlights:**
+| Focus | Min Freq | Required Lifts | Exercises/Session | Notes |
+|---|---|---|---|---|
+| Increase Max Squat | 3 | Squat, Deadlift | 3–4 | Candito/CWS peaking |
+| Increase Max Bench | 3 | Bench, OHP | 3–4 | Strengtheory frequency |
+| Increase Max Deadlift | 3 | Deadlift, Squat | 3–4 | Candito/Mash pulling |
+| General Fitness | 2 | Squat, Bench, Deadlift | 5–6 | Upper/Lower → PPL × 2 |
+| Full Body | 2 | Squat, Bench, Deadlift | 5–6 | Squat+Push+Pull every session |
+| Push / Pull | 3 | Squat, Bench, Deadlift, OHP | 5–6 | PPL → Upper/Lower → PPL A/B |
+| 5×5 Strength | 3 | Squat, Bench, DL, OHP, Row | 3 | StrongLifts/Madcow A/B/C |
+| Powerbuilding | 3 | Squat, Bench, Deadlift | 4–5 | Heavy compounds + hypertrophy |
+| Bodybuilding | 4 | Squat, Bench, DL, OHP | 6–8 | Body-part splits, RPE accessories |
+| Cardio Endurance | 3 | None | 2–3 | Steady/Interval/HIIT/Recovery |
+
+Every focus defines sessions for each valid frequency from its minimum through 6. Cardio exercises use `defaultReps` as duration in minutes with `targetRPE` for intensity.
+
+**Commit:** `feat: add focus template library for AI program generator`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
