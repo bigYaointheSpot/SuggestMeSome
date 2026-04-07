@@ -13,6 +13,8 @@ final class ProgramSessionTemplate {
     var id: UUID
     /// 1-based session number within the week (range 1–6).
     var sessionNumber: Int
+    /// Optional descriptive name shown after the session number, e.g. "Heavy Squat Day".
+    var sessionName: String?
 
     var week: ProgramWeekTemplate?
 
@@ -21,9 +23,11 @@ final class ProgramSessionTemplate {
 
     init(
         id: UUID = UUID(),
-        sessionNumber: Int
+        sessionNumber: Int,
+        sessionName: String? = nil
     ) {
         self.id = id
         self.sessionNumber = sessionNumber
+        self.sessionName = sessionName
     }
 }

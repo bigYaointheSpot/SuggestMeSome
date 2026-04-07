@@ -40,6 +40,7 @@ struct SuggestMeSomeApp: App {
                 .onAppear {
                     seedDefaultDataIfNeeded(context: sharedModelContainer.mainContext)
                     migrateExerciseTypesIfNeeded(context: sharedModelContainer.mainContext)
+                    migrateExercisesV2IfNeeded(context: sharedModelContainer.mainContext)
                 }
         }
         .modelContainer(sharedModelContainer)
