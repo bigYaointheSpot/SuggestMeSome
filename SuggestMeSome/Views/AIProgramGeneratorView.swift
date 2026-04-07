@@ -42,6 +42,7 @@ struct AIProgramGeneratorView: View {
 
     @State private var isGenerating = false
     @State private var generatedProgram: TrainingProgram?
+    @State private var lastInput: ProgramGenerationInput?
 
     private let service = ProgramGenerationService()
 
@@ -78,8 +79,23 @@ struct AIProgramGeneratorView: View {
             Group {
                 if isGenerating {
                     loadingView
-                } else if let program = generatedProgram {
-                    successView(program: program)
+                } else if let program = generatedProgram, let input = lastInput {
+                    ProgramReviewView(
+                        program: program,
+                        input: input,
+                        onStartProgram: { dismiss() },
+                        onRegenerate: {
+                            modelContext.delete(program)
+                            generatedProgram = nil
+                            isGenerating = true
+                            Task { @MainActor in
+                                await Task.yield()
+                                generatedProgram = service.regenerateProgram(input: input, context: modelContext)
+                                lastInput = input
+                                isGenerating = false
+                            }
+                        }
+                    )
                 } else if step == 2 {
                     oneRMView
                 } else {
@@ -120,8 +136,8 @@ struct AIProgramGeneratorView: View {
     }
 
     private var navigationTitle: String {
-        if isGenerating        { return "Generating..." }
-        if generatedProgram != nil { return "Program Ready" }
+        if isGenerating            { return "Generating..." }
+        if generatedProgram != nil { return "Review Program" }
         return step == 1 ? "Configure Program" : "Enter 1RMs"
     }
 
@@ -373,42 +389,6 @@ struct AIProgramGeneratorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: Success View
-
-    @ViewBuilder
-    private func successView(program: TrainingProgram) -> some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 72))
-                .foregroundStyle(.teal)
-
-            VStack(spacing: 8) {
-                Text("Program Generated Successfully")
-                    .font(.title2.weight(.semibold))
-                    .multilineTextAlignment(.center)
-
-                Text(program.name)
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            Spacer()
-
-            Button("Done") { dismiss() }
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Color.teal)
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal)
-        }
-        .padding()
-    }
-
     // MARK: Helpers
 
     private func handleNextTapped() {
@@ -498,6 +478,7 @@ struct AIProgramGeneratorView: View {
             oneRepMaxes: oneRMs
         )
 
+        lastInput = input
         isGenerating = true
 
         Task { @MainActor in

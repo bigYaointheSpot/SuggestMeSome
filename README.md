@@ -17,30 +17,6 @@ a tab-based navigation with a Workouts tab and a Training Programs tab.
 
 ---
 
-## Changelog
-
-### [AI Program Generator Input UI] — 2026-04-07
-- Added "Generate AI Program" button (teal) to the Training Programs tab alongside the existing blue and purple buttons; all three equally sized in one row
-- Created `AIProgramGeneratorView.swift` — a full-screen sheet with a multi-step input flow:
-  - **Screen 1 — Configure Program**: focus picker (10-option grid), experience level segmented control with periodization descriptions, duration picker (6/8/10/12 weeks), sessions/week picker (2–6) with greyed-out options below the selected focus's minimum frequency
-  - **Screen 2 — Enter 1RMs**: pre-fills estimated 1RM from PR history using Epley formula (rounded to nearest 5 lbs / 2.5 kg), per-lift unit toggle, manual override text fields; skipped entirely for Cardio Endurance
-  - **Success screen**: placeholder showing "Program Generated Successfully" and the program name
-- All inputs persist via `@AppStorage` (keys: `generator.ai.*`) and are pre-selected on next open
-- Calls `ProgramGenerationService.generateProgram()` with assembled `ProgramGenerationInput`
-
-### [Periodization Engine & Program Generation Service] — 2026-04-07
-- Built `ProgramGenerationService.swift` — the core engine that takes a `ProgramGenerationInput` + `FocusTemplate` and outputs a fully populated `TrainingProgram`
-- Added `ProgramGenerationInput` struct and `ProgramLevel` enum (`beginner`, `intermediate`, `advanced`)
-- Implemented three periodization models:
-  - **Beginner — Linear Progression**: 70%→90% 1RM at +2.5%/working week; deload every 4th week (same weight, ½ sets)
-  - **Intermediate — DUP**: sessions rotate heavy/moderate/light intensity tiers; +1.5%/week per tier; deload every 4th week at 60% 1RM
-  - **Advanced — Block Periodization**: hypertrophy (62–72%) → strength (75–85%) → peaking (88–95%) phases with deload weeks; phase layouts for 6/8/10/12-week durations
-- Warmup set generation: 3 sets at 40/55/70% of working weight for primary/variation exercises with a %1RM target (skipped on deloads)
-- Accessory rotation: seeded shuffle + cyclic week-to-week rotation; adjacent-week deduplication for `bodybuilding`/`generalFitness`; fixed accessories for `fiveByFive`
-- Cardio duration encoded as `targetReps` (minutes), progressive at +3 min/working week
-- Known limitation: `ProgramSessionExercise` has no weight field; actual weight rounding (nearest 5 lbs / 2.5 kg) is deferred to display/execution time
-
----
 
 ### Feature 1 — Manual Workout Logging
 
@@ -341,6 +317,44 @@ Data-only file defining structured templates for all 10 program focuses.
 Every focus defines sessions for each valid frequency from its minimum through 6. Cardio exercises use `defaultReps` as duration in minutes with `targetRPE` for intensity.
 
 **Commit:** `feat: add focus template library for AI program generator`
+
+---
+
+#### Prompt 3 [Periodization Engine & Program Generation Service] — 2026-04-07
+- Built `ProgramGenerationService.swift` — the core engine that takes a `ProgramGenerationInput` + `FocusTemplate` and outputs a fully populated `TrainingProgram`
+- Added `ProgramGenerationInput` struct and `ProgramLevel` enum (`beginner`, `intermediate`, `advanced`)
+- Implemented three periodization models:
+  - **Beginner — Linear Progression**: 70%→90% 1RM at +2.5%/working week; deload every 4th week (same weight, ½ sets)
+  - **Intermediate — DUP**: sessions rotate heavy/moderate/light intensity tiers; +1.5%/week per tier; deload every 4th week at 60% 1RM
+  - **Advanced — Block Periodization**: hypertrophy (62–72%) → strength (75–85%) → peaking (88–95%) phases with deload weeks; phase layouts for 6/8/10/12-week durations
+- Warmup set generation: 3 sets at 40/55/70% of working weight for primary/variation exercises with a %1RM target (skipped on deloads)
+- Accessory rotation: seeded shuffle + cyclic week-to-week rotation; adjacent-week deduplication for `bodybuilding`/`generalFitness`; fixed accessories for `fiveByFive`
+- Cardio duration encoded as `targetReps` (minutes), progressive at +3 min/working week
+- Known limitation: `ProgramSessionExercise` has no weight field; actual weight rounding (nearest 5 lbs / 2.5 kg) is deferred to display/execution time
+
+---
+
+#### Prompt 5 [Program Review Screen] — 2026-04-07
+- Replaced the placeholder "success" screen with a full `ProgramReviewView` embedded inside the existing `AIProgramGeneratorView` full-screen cover
+- **Summary header**: editable program name (inline text field on pencil tap), level badge (color-coded), duration + frequency badges, periodization description, block phase breakdown string for advanced programs
+- **Phase/week drill-down**: collapsible phase cards grouped by phase (Hypertrophy/Strength/Peaking/Deload for Block; Working Weeks/Deload Weeks for Linear and DUP), each expanding to show week rows, which expand to show session rows, which expand to show exercise rows
+- **Exercise display**: warmup sets shown with orange dot + "Warmup" pill and lighter styling; working sets show `sets×reps @ weight unit (pct%)` for %1RM exercises, `sets×reps @ RPE X` for RPE exercises, `X min` for cardio
+- **Editing**: tap any non-warmup exercise row to open `ExerciseEditSheet` — swap exercise name (opens `ReviewExercisePickerSheet` with search), edit sets/reps, edit % 1RM or RPE; trash button on each row for delete; "Add Exercise" button per session opens picker and creates a default 3×8 @ RPE 7 entry
+- **Regenerate**: confirmation alert → deletes current program from context, re-generates with same inputs, replaces preview
+- **Start Program**: saves `TrainingProgram` to SwiftData, inserts a new `ProgramRun` with `startDate = now`, dismisses sheet → run appears in Training Programs list
+- AI-generated programs saved via "Start Program" appear in "Use Existing Program" with "AI Generated" label (already supported by existing `ProgramSource.aiGenerated` + `ProgramListRow`)
+- New file: `SuggestMeSome/Views/ProgramReviewView.swift` — contains `ReviewPhaseGroup`, `ProgramReviewView`, `PhaseCardView`, `WeekRowView`, `SessionRowView`, `ExerciseRowView`, `ExerciseEditSheet`, `ReviewExercisePickerSheet`
+
+---
+
+#### Prompt 4 [AI Program Generator Input UI] — 2026-04-07
+- Added "Generate AI Program" button (teal) to the Training Programs tab alongside the existing blue and purple buttons; all three equally sized in one row
+- Created `AIProgramGeneratorView.swift` — a full-screen sheet with a multi-step input flow:
+  - **Screen 1 — Configure Program**: focus picker (10-option grid), experience level segmented control with periodization descriptions, duration picker (6/8/10/12 weeks), sessions/week picker (2–6) with greyed-out options below the selected focus's minimum frequency
+  - **Screen 2 — Enter 1RMs**: pre-fills estimated 1RM from PR history using Epley formula (rounded to nearest 5 lbs / 2.5 kg), per-lift unit toggle, manual override text fields; skipped entirely for Cardio Endurance
+  - **Success screen**: placeholder showing "Program Generated Successfully" and the program name
+- All inputs persist via `@AppStorage` (keys: `generator.ai.*`) and are pre-selected on next open
+- Calls `ProgramGenerationService.generateProgram()` with assembled `ProgramGenerationInput`
 
 ---
 
