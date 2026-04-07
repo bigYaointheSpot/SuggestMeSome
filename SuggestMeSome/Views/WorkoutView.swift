@@ -198,29 +198,7 @@ struct WorkoutView: View {
                 startTime = Date.now
                 isActive = true
             } else if let pw = programWorkout {
-                exerciseEntries = pw.exercises.enumerated().map { index, sessionExercise in
-                    let unit = allPersonalRecords
-                        .first(where: { $0.exerciseName == sessionExercise.exerciseName })?.unit ?? .lbs
-                    let setCount = max(1, sessionExercise.targetSets ?? 3)
-                    let repsText = sessionExercise.targetReps.map { "\($0)" } ?? ""
-                    let sets = (1...setCount).map { DraftSet(setNumber: $0, repsText: repsText) }
-                    return DraftExerciseEntry(
-                        exerciseName: sessionExercise.exerciseName,
-                        unit: unit,
-                        orderIndex: index,
-                        sets: sets,
-                        sourceProgramSessionExerciseID: sessionExercise.id,
-                        prescribedTargetSets: sessionExercise.targetSets,
-                        prescribedTargetReps: sessionExercise.targetReps,
-                        prescribedTargetPercentage1RM: sessionExercise.targetPercentage1RM,
-                        prescribedTargetRPE: sessionExercise.targetRPE,
-                        prescribedTargetRIR: sessionExercise.targetRIR,
-                        prescribedWeight: sessionExercise.prescribedWeight,
-                        prescribedWeightUnit: sessionExercise.prescribedWeightUnit,
-                        prescribedWorkingSetStyle: sessionExercise.workingSetStyle,
-                        prescribedTargetEffortType: sessionExercise.targetEffortType
-                    )
-                }
+                exerciseEntries = buildDraftEntries(from: pw.exercises)
                 startTime = Date.now
                 isActive = true
             }
@@ -356,6 +334,107 @@ struct WorkoutView: View {
     private func formatGeneratedWeight(_ w: Double?) -> String {
         guard let w = w else { return "" }
         return w.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(w)) : String(format: "%.1f", w)
+    }
+
+    private func buildDraftEntries(from sessionExercises: [ProgramSessionExercise]) -> [DraftExerciseEntry] {
+        let ordered = sessionExercises.sorted { $0.orderIndex < $1.orderIndex }
+        let grouped = groupProgramExercises(ordered)
+
+        return grouped.enumerated().map { index, rows in
+            let anchor = rows.first(where: { !$0.isWarmup }) ?? rows[0]
+            let unit = allPersonalRecords
+                .first(where: { $0.exerciseName == anchor.exerciseName })?.unit ?? .lbs
+
+            // Cardio rows carry duration in targetReps (minutes) and no set structure.
+            if anchor.targetSets == nil && anchor.targetPercentage1RM == nil && anchor.targetRPE != nil {
+                let totalSeconds = (anchor.targetReps ?? 0) * 60
+                let mins = totalSeconds / 60
+                let secs = totalSeconds % 60
+                return DraftExerciseEntry(
+                    exerciseName: anchor.exerciseName,
+                    unit: unit,
+                    orderIndex: index,
+                    sets: [],
+                    isCardio: true,
+                    cardioMinutesText: mins > 0 ? "\(mins)" : "",
+                    cardioSecondsText: secs > 0 ? "\(secs)" : "",
+                    sourceProgramSessionExerciseID: anchor.id,
+                    prescribedTargetSets: anchor.targetSets,
+                    prescribedTargetReps: anchor.targetReps,
+                    prescribedTargetPercentage1RM: anchor.targetPercentage1RM,
+                    prescribedTargetRPE: anchor.targetRPE,
+                    prescribedTargetRIR: anchor.targetRIR,
+                    prescribedWeight: anchor.prescribedWeight,
+                    prescribedWeightUnit: anchor.prescribedWeightUnit,
+                    prescribedWorkingSetStyle: anchor.workingSetStyle,
+                    prescribedTargetEffortType: anchor.targetEffortType
+                )
+            }
+
+            var setNumber = 1
+            var mergedSets: [DraftSet] = []
+            for row in rows {
+                let rowSetCount = max(1, row.targetSets ?? (row.isWarmup ? 1 : 3))
+                let repsText = row.targetReps.map { "\($0)" } ?? ""
+                let weightText = formatGeneratedWeight(row.prescribedWeight)
+                for _ in 0..<rowSetCount {
+                    mergedSets.append(
+                        DraftSet(
+                            setNumber: setNumber,
+                            repsText: repsText,
+                            weightText: weightText,
+                            isWarmup: row.isWarmup
+                        )
+                    )
+                    setNumber += 1
+                }
+            }
+
+            return DraftExerciseEntry(
+                exerciseName: anchor.exerciseName,
+                unit: unit,
+                orderIndex: index,
+                sets: mergedSets,
+                sourceProgramSessionExerciseID: anchor.id,
+                prescribedTargetSets: anchor.targetSets,
+                prescribedTargetReps: anchor.targetReps,
+                prescribedTargetPercentage1RM: anchor.targetPercentage1RM,
+                prescribedTargetRPE: anchor.targetRPE,
+                prescribedTargetRIR: anchor.targetRIR,
+                prescribedWeight: anchor.prescribedWeight,
+                prescribedWeightUnit: anchor.prescribedWeightUnit,
+                prescribedWorkingSetStyle: anchor.workingSetStyle,
+                prescribedTargetEffortType: anchor.targetEffortType
+            )
+        }
+    }
+
+    private func groupProgramExercises(_ ordered: [ProgramSessionExercise]) -> [[ProgramSessionExercise]] {
+        var groups: [[ProgramSessionExercise]] = []
+
+        for exercise in ordered {
+            guard let lastGroup = groups.last, let last = lastGroup.last else {
+                groups.append([exercise])
+                continue
+            }
+
+            let shareTopBackoffGroup = {
+                guard let a = last.topBackoffGroupID, let b = exercise.topBackoffGroupID else { return false }
+                return a == b
+            }()
+            let contiguousSameExercise =
+                last.topBackoffGroupID == nil &&
+                exercise.topBackoffGroupID == nil &&
+                last.exerciseName == exercise.exerciseName
+
+            if shareTopBackoffGroup || contiguousSameExercise {
+                groups[groups.count - 1].append(exercise)
+            } else {
+                groups.append([exercise])
+            }
+        }
+
+        return groups
     }
 
     private var formattedElapsed: String {

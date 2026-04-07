@@ -514,6 +514,22 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 13 [Program Workout Entry Grouping Fix] — 2026-04-07
+- Fixed program-driven workout prefill in `WorkoutView` so generated session rows no longer create duplicate `ExerciseEntry` cards for the same lift
+- Root cause: the prefill path mapped each `ProgramSessionExercise` row 1:1 into a `DraftExerciseEntry`, so warmup/top/backoff rows became separate cards (e.g., `Back Squat 1x10`, `Back Squat 1x10`, `Back Squat 4x10`)
+- Added grouping logic in `WorkoutView`:
+  - groups by shared `topBackoffGroupID` when present
+  - otherwise groups contiguous rows with the same `exerciseName`
+- Each grouped exercise now creates one `DraftExerciseEntry` with consolidated `DraftSet` rows beneath it, preserving:
+  - warmup flags
+  - prescribed reps/weights
+  - set ordering
+- Cardio handling remains supported in the same flow and continues to build a single cardio entry with duration fields
+
+**Commit:** `fix: group generated program rows into single workout exercise entries`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
