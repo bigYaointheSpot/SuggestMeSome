@@ -31,8 +31,8 @@ private func buildPhaseGroups(
         let workingWeeks = sorted.filter { $0.weekNumber % 4 != 0 }
         let deloadWeeks  = sorted.filter { $0.weekNumber % 4 == 0 }
         let scheme = input.level == .beginner
-            ? "5 reps @ 70–90% 1RM (progressive)"
-            : "DUP: Heavy 4×82–93%, Moderate 7×75–90%, Light 10×65–85%"
+            ? "Linear: template-anchor %1RM with small weekly increases"
+            : "DUP: heavy/moderate/light anchor-relative intensity shifts"
         var groups = [
             ReviewPhaseGroup(
                 id: "working",
@@ -48,7 +48,7 @@ private func buildPhaseGroups(
                 id: "deload",
                 title: "Deload Weeks",
                 weekRange: weekRangeText(deloadWeeks),
-                schemeDescription: "Reduced volume (~50%), 65% 1RM",
+                schemeDescription: "Reduced volume (~50%) with explicit intensity drop",
                 weeks: deloadWeeks,
                 isDeload: true
             ))
@@ -84,9 +84,9 @@ private func buildBlockPhaseGroups(
         if let phaseName = name {
             let scheme: String
             switch phaseName {
-            case "Hypertrophy": scheme = "8–12 reps @ 62–72% 1RM"
-            case "Strength":    scheme = "4–6 reps @ 75–85% 1RM"
-            case "Peaking":     scheme = "1–3 reps @ 88–95% 1RM"
+            case "Hypertrophy": scheme = "Anchor-relative lower intensity accumulation"
+            case "Strength":    scheme = "Anchor-relative strength intensification"
+            case "Peaking":     scheme = "Anchor-relative high-intensity peaking"
             default:            scheme = ""
             }
             groups.append(ReviewPhaseGroup(
@@ -103,7 +103,7 @@ private func buildBlockPhaseGroups(
                 id: "deload-\(weekIdx)",
                 title: "Deload",
                 weekRange: range,
-                schemeDescription: "Reduced volume (~50%), 65% 1RM",
+                schemeDescription: "Reduced volume (~50%) with explicit intensity drop",
                 weeks: phaseWeeks,
                 isDeload: true
             ))

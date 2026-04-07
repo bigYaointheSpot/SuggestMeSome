@@ -151,7 +151,7 @@ struct ProgramGenerationService {
         }
 
         let params = computeParams(
-            exercise: templateEx, isPrimary: isPrimary,
+            exercise: templateEx,
             level: level, schedule: schedule,
             sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek
         )
@@ -243,7 +243,6 @@ struct ProgramGenerationService {
 
     private func computeParams(
         exercise: TemplateExercise,
-        isPrimary: Bool,
         level: ProgramLevel,
         schedule: WeekSchedule,
         sessionIdx: Int,
@@ -251,30 +250,66 @@ struct ProgramGenerationService {
     ) -> ExerciseParams {
         switch level {
         case .beginner:
-            return beginnerParams(exercise: exercise, isPrimary: isPrimary, schedule: schedule)
+            return beginnerParams(exercise: exercise, schedule: schedule)
         case .intermediate:
             return intermediateParams(
-                exercise: exercise, isPrimary: isPrimary,
+                exercise: exercise,
                 schedule: schedule, sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek
             )
         case .advanced:
-            return advancedParams(exercise: exercise, isPrimary: isPrimary, schedule: schedule)
+            return advancedParams(exercise: exercise, schedule: schedule)
         }
     }
 
     // MARK: Beginner — Linear Progression
 
+    private enum BeginnerTuning {
+        static let startingOffset = -0.02
+        static let weeklyOffsetStep = 0.01
+        static let maxPositiveOffset = 0.08
+        static let maxNegativeOffset = -0.08
+        static let deloadPercentageDrop = 0.08
+        static let deloadRPE = 6.0
+    }
+
     private func beginnerParams(
         exercise: TemplateExercise,
-        isPrimary: Bool,
         schedule: WeekSchedule
     ) -> ExerciseParams {
-        let isCompound = isPrimary && (exercise.role == .primary || exercise.role == .variation)
+        // Deload: explicit volume reduction (applied by caller) + lower intensity.
+        if schedule.isDeload {
+            if let anchor = exercise.percentage1RM {
+                let pct = clampedPercentage(
+                    anchor: anchor,
+                    candidate: anchor - BeginnerTuning.deloadPercentageDrop,
+                    minOffset: BeginnerTuning.maxNegativeOffset,
+                    maxOffset: BeginnerTuning.maxPositiveOffset
+                )
+                return ExerciseParams(
+                    sets: exercise.defaultSets,
+                    reps: exercise.defaultReps,
+                    percentage1RM: pct,
+                    rpe: nil
+                )
+            }
+            return ExerciseParams(
+                sets: exercise.defaultSets,
+                reps: exercise.defaultReps,
+                percentage1RM: nil,
+                rpe: BeginnerTuning.deloadRPE
+            )
+        }
 
-        if isCompound && exercise.percentage1RM != nil {
-            // Start at 70% 1RM, increase 2.5% per working week, cap at 90%.
-            // Deload weeks use same progressionIndex as the preceding working week → same weight.
-            let pct = min(0.90, 0.70 + Double(schedule.progressionIndex) * 0.025)
+        // Working weeks: move around the template's anchor intensity.
+        if let anchor = exercise.percentage1RM {
+            let pct = clampedPercentage(
+                anchor: anchor,
+                candidate: anchor
+                    + BeginnerTuning.startingOffset
+                    + Double(schedule.progressionIndex) * BeginnerTuning.weeklyOffsetStep,
+                minOffset: BeginnerTuning.maxNegativeOffset,
+                maxOffset: BeginnerTuning.maxPositiveOffset
+            )
             return ExerciseParams(
                 sets: exercise.defaultSets,
                 reps: exercise.defaultReps,
@@ -283,7 +318,7 @@ struct ProgramGenerationService {
             )
         }
 
-        // Accessories and RPE-based primaries: hold RPE steady, no weekly change.
+        // RPE-based work keeps template intent during working weeks.
         return ExerciseParams(
             sets: exercise.defaultSets,
             reps: exercise.defaultReps,
@@ -297,11 +332,12 @@ struct ProgramGenerationService {
     private enum DUPTier {
         case heavy, moderate, light
 
-        var basePercentage: Double {
-            switch self { case .heavy: return 0.82; case .moderate: return 0.75; case .light: return 0.65 }
-        }
-        var capPercentage: Double {
-            switch self { case .heavy: return 0.93; case .moderate: return 0.90; case .light: return 0.85 }
+        var percentageAnchorOffset: Double {
+            switch self {
+            case .heavy: return 0.03
+            case .moderate: return 0.00
+            case .light: return -0.06
+            }
         }
         var defaultSets: Int {
             switch self { case .heavy, .moderate: return 4; case .light: return 3 }
@@ -310,9 +346,21 @@ struct ProgramGenerationService {
             // Middle of each rep range (3–5, 6–8, 8–12)
             switch self { case .heavy: return 4; case .moderate: return 7; case .light: return 10 }
         }
-        var rpe: Double {
-            switch self { case .heavy: return 8.5; case .moderate: return 7.5; case .light: return 6.5 }
+        var rpeAnchorOffset: Double {
+            switch self {
+            case .heavy: return 0.5
+            case .moderate: return 0.0
+            case .light: return -0.5
+            }
         }
+    }
+
+    private enum IntermediateTuning {
+        static let weeklyPercentageOffsetStep = 0.005
+        static let maxPositiveOffset = 0.10
+        static let maxNegativeOffset = -0.10
+        static let deloadPercentageDrop = 0.10
+        static let deloadRPE = 6.0
     }
 
     private func dupTier(sessionIdx: Int, sessionsPerWeek: Int) -> DUPTier {
@@ -329,29 +377,62 @@ struct ProgramGenerationService {
 
     private func intermediateParams(
         exercise: TemplateExercise,
-        isPrimary: Bool,
         schedule: WeekSchedule,
         sessionIdx: Int,
         sessionsPerWeek: Int
     ) -> ExerciseParams {
-        // Deload: all sessions at light-tier rep count, 60% 1RM (or RPE 6).
+        let tier = dupTier(sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek)
+
+        // Deload: explicit, readable reductions from each exercise anchor.
         if schedule.isDeload {
             let baseSets = DUPTier.light.defaultSets  // populateExercise will halve to 2
-            if isPrimary && exercise.percentage1RM != nil {
-                return ExerciseParams(sets: baseSets, reps: DUPTier.light.repCount, percentage1RM: 0.60, rpe: nil)
+            if let anchor = exercise.percentage1RM {
+                let pct = clampedPercentage(
+                    anchor: anchor,
+                    candidate: anchor - IntermediateTuning.deloadPercentageDrop,
+                    minOffset: IntermediateTuning.maxNegativeOffset,
+                    maxOffset: IntermediateTuning.maxPositiveOffset
+                )
+                return ExerciseParams(
+                    sets: baseSets,
+                    reps: DUPTier.light.repCount,
+                    percentage1RM: pct,
+                    rpe: nil
+                )
             }
-            return ExerciseParams(sets: baseSets, reps: DUPTier.light.repCount, percentage1RM: nil, rpe: 6.0)
+            return ExerciseParams(
+                sets: baseSets,
+                reps: DUPTier.light.repCount,
+                percentage1RM: nil,
+                rpe: IntermediateTuning.deloadRPE
+            )
         }
 
-        let tier = dupTier(sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek)
-        // Weekly progression: +1.5% per working week, capped per tier.
-        let progressedPct = min(tier.capPercentage, tier.basePercentage + Double(schedule.progressionIndex) * 0.015)
-
-        // Primary compounds follow tier %1RM; accessories follow tier RPE.
-        if isPrimary && exercise.percentage1RM != nil {
-            return ExerciseParams(sets: tier.defaultSets, reps: tier.repCount, percentage1RM: progressedPct, rpe: nil)
+        // Working weeks: tier shift + small weekly progression, both relative to template anchor.
+        if let anchor = exercise.percentage1RM {
+            let pct = clampedPercentage(
+                anchor: anchor,
+                candidate: anchor
+                    + tier.percentageAnchorOffset
+                    + Double(schedule.progressionIndex) * IntermediateTuning.weeklyPercentageOffsetStep,
+                minOffset: IntermediateTuning.maxNegativeOffset,
+                maxOffset: IntermediateTuning.maxPositiveOffset
+            )
+            return ExerciseParams(
+                sets: tier.defaultSets,
+                reps: tier.repCount,
+                percentage1RM: pct,
+                rpe: nil
+            )
         }
-        return ExerciseParams(sets: tier.defaultSets, reps: tier.repCount, percentage1RM: nil, rpe: tier.rpe)
+
+        let rpeAnchor = exercise.targetRPE ?? 7.0
+        return ExerciseParams(
+            sets: tier.defaultSets,
+            reps: tier.repCount,
+            percentage1RM: nil,
+            rpe: clampedRPE(rpeAnchor + tier.rpeAnchorOffset)
+        )
     }
 
     // MARK: Advanced — Block Periodization
@@ -359,11 +440,11 @@ struct ProgramGenerationService {
     private enum AdvancedPhaseType {
         case hypertrophy, strength, peaking
 
-        var percentageRange: (base: Double, top: Double) {
+        var percentageAnchorAdjustmentRange: (start: Double, end: Double) {
             switch self {
-            case .hypertrophy: return (0.62, 0.72)
-            case .strength:    return (0.75, 0.85)
-            case .peaking:     return (0.88, 0.95)
+            case .hypertrophy: return (-0.08, -0.03)
+            case .strength:    return (-0.02, 0.03)
+            case .peaking:     return (0.04, 0.08)
             }
         }
         var repRange: (min: Int, max: Int) {
@@ -376,41 +457,84 @@ struct ProgramGenerationService {
         var defaultSets: Int {
             switch self { case .hypertrophy: return 4; case .strength, .peaking: return 5 }
         }
-        var rpe: Double {
-            switch self { case .hypertrophy: return 7.0; case .strength: return 8.0; case .peaking: return 9.0 }
+        var rpeAnchorOffset: Double {
+            switch self {
+            case .hypertrophy: return 0.0
+            case .strength: return 0.5
+            case .peaking: return 1.0
+            }
         }
         var midReps: Int {
             let r = repRange; return (r.min + r.max + 1) / 2
         }
     }
 
+    private enum AdvancedTuning {
+        static let maxPositiveOffset = 0.12
+        static let maxNegativeOffset = -0.12
+        static let deloadPercentageDrop = 0.10
+        static let deloadRPE = 6.0
+    }
+
     private func advancedParams(
         exercise: TemplateExercise,
-        isPrimary: Bool,
         schedule: WeekSchedule
     ) -> ExerciseParams {
         let phase = schedule.advancedPhase ?? .hypertrophy
 
-        // Deload: 50% volume (populateExercise halves sets), fixed 65% 1RM for effective recovery.
+        // Deload: explicit intensity reductions while caller handles volume reduction.
         if schedule.isDeload {
-            if isPrimary && exercise.percentage1RM != nil {
-                return ExerciseParams(sets: phase.defaultSets, reps: phase.midReps, percentage1RM: 0.65, rpe: nil)
+            if let anchor = exercise.percentage1RM {
+                let pct = clampedPercentage(
+                    anchor: anchor,
+                    candidate: anchor - AdvancedTuning.deloadPercentageDrop,
+                    minOffset: AdvancedTuning.maxNegativeOffset,
+                    maxOffset: AdvancedTuning.maxPositiveOffset
+                )
+                return ExerciseParams(
+                    sets: phase.defaultSets,
+                    reps: phase.midReps,
+                    percentage1RM: pct,
+                    rpe: nil
+                )
             }
-            return ExerciseParams(sets: phase.defaultSets, reps: phase.midReps, percentage1RM: nil, rpe: 6.0)
+            return ExerciseParams(
+                sets: phase.defaultSets,
+                reps: phase.midReps,
+                percentage1RM: nil,
+                rpe: AdvancedTuning.deloadRPE
+            )
         }
 
-        // Linearly interpolate %1RM through the phase's percentage range.
-        let (basePct, topPct) = phase.percentageRange
+        // Working phases: interpolate phase adjustments relative to template anchor.
+        let (startAdjustment, endAdjustment) = phase.percentageAnchorAdjustmentRange
         let t = schedule.phaseLength > 1
             ? Double(schedule.phaseWeekIndex) / Double(schedule.phaseLength - 1)
             : 0.0
-        let pct = basePct + (topPct - basePct) * t
+        let phaseAdjustment = startAdjustment + (endAdjustment - startAdjustment) * t
 
-        // Primary exercises: %1RM. Accessories: RPE using current phase's rep scheme (per spec).
-        if isPrimary && exercise.percentage1RM != nil {
-            return ExerciseParams(sets: phase.defaultSets, reps: phase.midReps, percentage1RM: pct, rpe: nil)
+        if let anchor = exercise.percentage1RM {
+            let pct = clampedPercentage(
+                anchor: anchor,
+                candidate: anchor + phaseAdjustment,
+                minOffset: AdvancedTuning.maxNegativeOffset,
+                maxOffset: AdvancedTuning.maxPositiveOffset
+            )
+            return ExerciseParams(
+                sets: phase.defaultSets,
+                reps: phase.midReps,
+                percentage1RM: pct,
+                rpe: nil
+            )
         }
-        return ExerciseParams(sets: phase.defaultSets, reps: phase.midReps, percentage1RM: nil, rpe: phase.rpe)
+
+        let rpeAnchor = exercise.targetRPE ?? 7.0
+        return ExerciseParams(
+            sets: phase.defaultSets,
+            reps: phase.midReps,
+            percentage1RM: nil,
+            rpe: clampedRPE(rpeAnchor + phase.rpeAnchorOffset)
+        )
     }
 
     // MARK: - Week Schedule Builder
@@ -584,12 +708,27 @@ struct ProgramGenerationService {
     private func periodizationDescription(for level: ProgramLevel) -> String {
         switch level {
         case .beginner:
-            return "Linear progression: weight starts at 70% 1RM, increases 2.5% per week (capped at 90%), with a deload every 4th week."
+            return "Linear progression around each exercise's template anchor %1RM, with small weekly increases and a deload every 4th week."
         case .intermediate:
-            return "Daily undulating periodization (DUP): sessions rotate through heavy (82–93%), moderate (75–90%), and light (65–85%) tiers, progressing ~1.5% per week with deloads every 4th week."
+            return "Daily undulating periodization (DUP): heavy/moderate/light sessions adjust each exercise relative to its template anchor, with weekly progression and deloads every 4th week."
         case .advanced:
-            return "Block periodization: hypertrophy (62–72%), strength (75–85%), and peaking (88–95%) phases separated by deload weeks."
+            return "Block periodization: hypertrophy, strength, and peaking phases apply anchor-relative intensity shifts, with explicit deload weeks between blocks."
         }
+    }
+
+    private func clampedPercentage(
+        anchor: Double,
+        candidate: Double,
+        minOffset: Double,
+        maxOffset: Double
+    ) -> Double {
+        let lower = max(0.50, anchor + minOffset)
+        let upper = min(0.97, anchor + maxOffset)
+        return min(upper, max(lower, candidate))
+    }
+
+    private func clampedRPE(_ value: Double) -> Double {
+        min(10.0, max(5.5, value))
     }
 }
 

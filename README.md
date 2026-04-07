@@ -398,6 +398,19 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 7 [Anchor-Relative Periodization in ProgramGenerationService] — 2026-04-07
+- Refactored `ProgramGenerationService` so `TemplateExercise.percentage1RM` is treated as each exercise's anchor intensity instead of a generic gate
+- Updated level logic to keep periodization while preserving template intent:
+  - **Beginner**: small weekly offsets around anchor %1RM on working weeks
+  - **Intermediate (DUP)**: heavy/moderate/light adjustments are now relative to each exercise anchor
+  - **Advanced (Block)**: hypertrophy/strength/peaking apply phase-specific adjustments relative to each exercise anchor
+- Deload logic is now explicit in each level branch and easier to tune (`BeginnerTuning`, `IntermediateTuning`, `AdvancedTuning`)
+- `%1RM` prescriptions still flow into stored `prescribedWeight`/`prescribedWeightUnit`, so Program Review and Training Programs displays remain intact
+- RPE-based accessories keep their template-driven RPE intent (with level-specific adjustments where applicable), preserving bodybuilding/powerbuilding behavior
+- Updated Program Review phase descriptors to describe anchor-relative intensity progression instead of fixed absolute percentage bands
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
