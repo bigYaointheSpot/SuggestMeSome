@@ -14,7 +14,7 @@ final class ProgramWeekTemplate {
     /// 1-based week number within the program.
     var weekNumber: Int
     /// Generation metadata for future adaptive progression.
-    var isDeloadWeek: Bool
+    var isDeloadWeek: Bool = false
     var progressionPhase: ProgramProgressionPhase?
     /// Planned weekly fatigue score computed from generated prescription.
     var plannedFatigueScore: Double?

@@ -487,6 +487,16 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 11 [Program Preview Info Toggle + Default-Clean View] — 2026-04-07
+- Reduced Program Review UI clutter by adding a compact `Show Additional Info` toggle in the summary header (default: off)
+- Additional info is now hidden by default and only appears when toggled on:
+  - Program Logic card (progression model + generation logic flags)
+  - Week-level fatigue chip in week headers
+  - Weekly hard-set summary chips under expanded weeks
+- Existing phase/week/session expand-collapse behavior and edit/start flows remain unchanged
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

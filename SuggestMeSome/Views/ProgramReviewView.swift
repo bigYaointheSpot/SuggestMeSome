@@ -304,6 +304,7 @@ struct ProgramReviewView: View {
     @State private var editingExercise: ProgramSessionExercise?
     @State private var addingToSession: ProgramSessionTemplate?
     @State private var showRegenerateAlert = false
+    @State private var showAdditionalInfo = false
 
     private var groups: [ReviewPhaseGroup] {
         buildPhaseGroups(input: input, weeks: program.weeks)
@@ -405,7 +406,20 @@ struct ProgramReviewView: View {
                     .badgeStyle()
             }
 
-            programLogicSection
+            HStack(spacing: 8) {
+                Text("Show Additional Info")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Toggle("", isOn: $showAdditionalInfo)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .scaleEffect(0.85)
+            }
+
+            if showAdditionalInfo {
+                programLogicSection
+            }
 
             // Periodization description
             if let desc = program.descriptionText {
@@ -508,6 +522,7 @@ struct ProgramReviewView: View {
                 PhaseCardView(
                     group: group,
                     isExpanded: expandedPhaseIDs.contains(group.id),
+                    showAdditionalInfo: showAdditionalInfo,
                     expandedWeeks: $expandedWeeks,
                     expandedSessions: $expandedSessions,
                     editingExercise: $editingExercise,
@@ -614,6 +629,7 @@ private extension Text {
 private struct PhaseCardView: View {
     let group: ReviewPhaseGroup
     let isExpanded: Bool
+    let showAdditionalInfo: Bool
     @Binding var expandedWeeks: Set<Int>
     @Binding var expandedSessions: Set<String>
     @Binding var editingExercise: ProgramSessionExercise?
@@ -634,6 +650,7 @@ private struct PhaseCardView: View {
                         week: week,
                         isDeload: group.isDeload,
                         isExpanded: expandedWeeks.contains(week.weekNumber),
+                        showAdditionalInfo: showAdditionalInfo,
                         weekSummary: weeklySummariesByWeek[week.weekNumber],
                         expandedSessions: $expandedSessions,
                         editingExercise: $editingExercise,
@@ -698,6 +715,7 @@ private struct WeekRowView: View {
     let week: ProgramWeekTemplate
     let isDeload: Bool
     let isExpanded: Bool
+    let showAdditionalInfo: Bool
     let weekSummary: ProgramGeneratedWeekSummary?
     @Binding var expandedSessions: Set<String>
     @Binding var editingExercise: ProgramSessionExercise?
@@ -712,7 +730,7 @@ private struct WeekRowView: View {
             if isExpanded {
                 let sortedSessions = week.sessions.sorted { $0.sessionNumber < $1.sessionNumber }
                 VStack(spacing: 0) {
-                    if let summary = weekSummary {
+                    if showAdditionalInfo, let summary = weekSummary {
                         weekSummaryRow(summary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
@@ -757,7 +775,7 @@ private struct WeekRowView: View {
                         .foregroundStyle(.orange)
                         .clipShape(Capsule())
                 }
-                if let fatigue = weekSummary?.totalFatigueScore {
+                if showAdditionalInfo, let fatigue = weekSummary?.totalFatigueScore {
                     Text("Fatigue \(formatOneDecimal(fatigue))")
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 6)

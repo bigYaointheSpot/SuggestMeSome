@@ -281,7 +281,7 @@ struct ProgramGenerationService {
                 orderIndex: idx,
                 targetSets: nil,
                 targetReps: mins,
-                targetEffortType: .none,
+                targetEffortType: ProgramTargetEffortType.none,
                 progressionPhase: phase,
                 estimatedFatigueScore: Double(mins) * 0.08
             )

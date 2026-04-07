@@ -10,8 +10,7 @@ import SwiftData
 
 @main
 struct SuggestMeSomeApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
+    private static let sharedSchema = Schema([
             MuscleGroup.self,
             Exercise.self,
             Workout.self,
@@ -24,14 +23,49 @@ struct SuggestMeSomeApp: App {
             ProgramSessionExercise.self,
             ProgramRun.self,
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
+    var sharedModelContainer: ModelContainer = {
+        let persistentConfiguration = ModelConfiguration(
+            schema: sharedSchema,
+            isStoredInMemoryOnly: false
+        )
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return try ModelContainer(for: sharedSchema, configurations: [persistentConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // Recovery path for incompatible/corrupted stores after schema updates.
+            clearApplicationSupportDirectory()
+            do {
+                return try ModelContainer(for: sharedSchema, configurations: [persistentConfiguration])
+            } catch {
+                // Last-resort fallback to keep the app launchable instead of crashing.
+                let inMemoryConfiguration = ModelConfiguration(
+                    schema: sharedSchema,
+                    isStoredInMemoryOnly: true
+                )
+                do {
+                    return try ModelContainer(for: sharedSchema, configurations: [inMemoryConfiguration])
+                } catch {
+                    fatalError("Could not create ModelContainer: \(error)")
+                }
+            }
         }
     }()
+
+    private static func clearApplicationSupportDirectory() {
+        let fileManager = FileManager.default
+        guard let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return
+        }
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: appSupportURL,
+            includingPropertiesForKeys: nil
+        ) else {
+            return
+        }
+        for url in contents {
+            try? fileManager.removeItem(at: url)
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
