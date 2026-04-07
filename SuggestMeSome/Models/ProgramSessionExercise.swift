@@ -8,6 +8,12 @@
 import Foundation
 import SwiftData
 
+enum ProgramWorkingSetStyle: String, Codable {
+    case straight
+    case topSet
+    case backoff
+}
+
 @Model
 final class ProgramSessionExercise {
     var id: UUID
@@ -28,6 +34,10 @@ final class ProgramSessionExercise {
     var prescribedWeight: Double?
     /// Unit for prescribedWeight: "lbs" or "kg". Nil when prescribedWeight is nil.
     var prescribedWeightUnit: String?
+    /// Optional working-set classification for generated strength prescriptions.
+    var workingSetStyle: ProgramWorkingSetStyle?
+    /// Fractional backoff drop from top set load (e.g. 0.06 = 6%); only for backoff rows.
+    var backoffPercentageDrop: Double?
 
     var session: ProgramSessionTemplate?
 
@@ -41,7 +51,9 @@ final class ProgramSessionExercise {
         targetRPE: Double? = nil,
         isWarmup: Bool = false,
         prescribedWeight: Double? = nil,
-        prescribedWeightUnit: String? = nil
+        prescribedWeightUnit: String? = nil,
+        workingSetStyle: ProgramWorkingSetStyle? = nil,
+        backoffPercentageDrop: Double? = nil
     ) {
         self.id = id
         self.exerciseName = exerciseName
@@ -53,5 +65,7 @@ final class ProgramSessionExercise {
         self.isWarmup = isWarmup
         self.prescribedWeight = prescribedWeight
         self.prescribedWeightUnit = prescribedWeightUnit
+        self.workingSetStyle = workingSetStyle
+        self.backoffPercentageDrop = backoffPercentageDrop
     }
 }

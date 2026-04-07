@@ -411,6 +411,25 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 8 [Top Set + Backoff Programming Support] — 2026-04-07
+- Added lightweight top-set/backoff programming metadata to `TemplateExercise`:
+  - `topSetPrescription` (optional)
+  - `backoffPrescription` (optional)
+- Added default top/backoff profiles in `FocusTemplateLibrary` for main lifts and key variations (squat/bench/deadlift and major competition-style variants)
+- Updated `ProgramGenerationService` to emit working-set blocks instead of a single working row when applicable:
+  - top set row (optional)
+  - backoff row(s) with load drop from top set
+  - straight sets fallback when top/backoff is not appropriate
+- Implemented behavior targets:
+  - top set + load-dropped backoffs for strength-focused work
+  - heavy top single/double handling with higher-rep backoff volume when base reps are very low
+  - straight sets retained for beginner programs, bodybuilding focus, deload weeks, and high-rep work
+- Warmup generation remains intact and now references the heaviest working percentage when top/backoff rows are present
+- Extended `ProgramSessionExercise` with additive metadata (`workingSetStyle`, `backoffPercentageDrop`) to classify rows without breaking existing data
+- Program Review UI now clearly distinguishes warmups vs. top set vs. backoff vs. straight sets, while preserving existing edit/start program flows
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

@@ -37,6 +37,22 @@ enum TemplateIntensityStyle: String, Codable {
     case cardioDuration
 }
 
+// MARK: - Top/Backoff Prescriptions
+
+struct TopSetPrescription {
+    let setCount: Int
+    /// Optional fixed RPE target for the top set.
+    let targetRPE: Double?
+}
+
+struct BackoffPrescription {
+    let setCount: Int
+    /// Fractional load drop from top set (e.g. 0.05...0.08 = 5–8%).
+    let loadDropRange: ClosedRange<Double>
+    /// Additional reps to apply to backoff work (keeps low-rep tops from becoming all heavy singles).
+    let repDelta: Int
+}
+
 // MARK: - TemplateExercise
 
 struct TemplateExercise {
@@ -54,6 +70,10 @@ struct TemplateExercise {
     let loadMultiplier: Double?
     /// Optional programming style metadata for future periodization rules.
     let intensityStyle: TemplateIntensityStyle?
+    /// Optional top set prescription (typically used for main lifts / key variations).
+    let topSetPrescription: TopSetPrescription?
+    /// Optional backoff prescription paired with top sets.
+    let backoffPrescription: BackoffPrescription?
 
     init(
         exerciseName: String,
@@ -64,7 +84,9 @@ struct TemplateExercise {
         targetRPE: Double?,
         loadSourceLift: String? = nil,
         loadMultiplier: Double? = nil,
-        intensityStyle: TemplateIntensityStyle? = nil
+        intensityStyle: TemplateIntensityStyle? = nil,
+        topSetPrescription: TopSetPrescription? = nil,
+        backoffPrescription: BackoffPrescription? = nil
     ) {
         self.exerciseName = exerciseName
         self.role = role
@@ -76,6 +98,10 @@ struct TemplateExercise {
         let mapped = FocusTemplateLibrary.loadMapping(for: exerciseName)
         self.loadSourceLift = loadSourceLift ?? mapped?.sourceLift
         self.loadMultiplier = loadMultiplier ?? mapped?.multiplier
+
+        let topBackoff = FocusTemplateLibrary.topBackoffProfile(for: exerciseName)
+        self.topSetPrescription = topSetPrescription ?? topBackoff?.topSet
+        self.backoffPrescription = backoffPrescription ?? topBackoff?.backoff
 
         if let intensityStyle {
             self.intensityStyle = intensityStyle
@@ -126,6 +152,11 @@ enum FocusTemplateLibrary {
         let multiplier: Double
     }
 
+    struct TopBackoffProfile {
+        let topSet: TopSetPrescription
+        let backoff: BackoffPrescription
+    }
+
     static func template(for focus: ProgramFocus) -> FocusTemplate {
         switch focus {
         case .increaseMaxSquat:    return squatTemplate
@@ -145,6 +176,10 @@ enum FocusTemplateLibrary {
         variationLoadMappings[exerciseName]
     }
 
+    static func topBackoffProfile(for exerciseName: String) -> TopBackoffProfile? {
+        topBackoffProfiles[exerciseName]
+    }
+
     private static let variationLoadMappings: [String: LoadMapping] = [
         // Squat variations
         "Pause Squat": .init(sourceLift: "Back Squats", multiplier: 0.92),
@@ -162,6 +197,43 @@ enum FocusTemplateLibrary {
         "Romanian Deadlift": .init(sourceLift: "Deadlift", multiplier: 0.78),
         "Deficit Deadlift": .init(sourceLift: "Deadlift", multiplier: 0.90),
         "Block Pull": .init(sourceLift: "Deadlift", multiplier: 1.05),
+    ]
+
+    private static let squatTopBackoff = TopBackoffProfile(
+        topSet: .init(setCount: 1, targetRPE: 8.0),
+        backoff: .init(setCount: 3, loadDropRange: 0.05...0.08, repDelta: 1)
+    )
+
+    private static let benchTopBackoff = TopBackoffProfile(
+        topSet: .init(setCount: 1, targetRPE: 8.0),
+        backoff: .init(setCount: 3, loadDropRange: 0.05...0.08, repDelta: 1)
+    )
+
+    private static let deadliftTopBackoff = TopBackoffProfile(
+        topSet: .init(setCount: 1, targetRPE: 8.0),
+        backoff: .init(setCount: 2, loadDropRange: 0.06...0.10, repDelta: 1)
+    )
+
+    private static let topBackoffProfiles: [String: TopBackoffProfile] = [
+        // Main lifts
+        "Back Squats": squatTopBackoff,
+        "Bench Press": benchTopBackoff,
+        "Deadlift": deadliftTopBackoff,
+
+        // Key squat variations
+        "Pause Squat": squatTopBackoff,
+        "Front Squat": squatTopBackoff,
+        "Box Squat": squatTopBackoff,
+
+        // Key bench variations
+        "Pause Bench Press": benchTopBackoff,
+        "Close Grip Bench Press": benchTopBackoff,
+        "Floor Press": benchTopBackoff,
+        "Incline Bench": benchTopBackoff,
+
+        // Key deadlift variations
+        "Deficit Deadlift": deadliftTopBackoff,
+        "Block Pull": deadliftTopBackoff,
     ]
 }
 

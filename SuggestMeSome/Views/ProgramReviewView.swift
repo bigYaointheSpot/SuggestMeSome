@@ -175,7 +175,17 @@ private func exerciseDisplayText(
             let wStr = w == w.rounded(.towardZero)
                 ? "\(Int(w)) \(unit)"
                 : String(format: "%.1f \(unit)", w)
-            return "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
+            var detail = "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
+            if let rpe = exercise.targetRPE {
+                let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
+                    ? String(Int(rpe))
+                    : String(format: "%.1f", rpe)
+                detail += " · RPE \(rpeStr)"
+            }
+            if exercise.workingSetStyle == .backoff, let drop = exercise.backoffPercentageDrop {
+                detail += String(format: " · -%.0f%%", drop * 100.0)
+            }
+            return detail
         }
 
         // Fallback: compute from oneRepMaxes (programs generated before fix)
@@ -188,10 +198,29 @@ private func exerciseDisplayText(
             let wStr = rounded == rounded.rounded(.towardZero)
                 ? "\(Int(rounded)) \(orm.unit)"
                 : String(format: "%.1f \(orm.unit)", rounded)
-            return "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
+            var detail = "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
+            if let rpe = exercise.targetRPE {
+                let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
+                    ? String(Int(rpe))
+                    : String(format: "%.1f", rpe)
+                detail += " · RPE \(rpeStr)"
+            }
+            if exercise.workingSetStyle == .backoff, let drop = exercise.backoffPercentageDrop {
+                detail += String(format: " · -%.0f%%", drop * 100.0)
+            }
+            return detail
         }
-
-        return "\(sStr)×\(rStr) @ \(pctInt)%"
+        var detail = "\(sStr)×\(rStr) @ \(pctInt)%"
+        if let rpe = exercise.targetRPE {
+            let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
+                ? String(Int(rpe))
+                : String(format: "%.1f", rpe)
+            detail += " · RPE \(rpeStr)"
+        }
+        if exercise.workingSetStyle == .backoff, let drop = exercise.backoffPercentageDrop {
+            detail += String(format: " · -%.0f%%", drop * 100.0)
+        }
+        return detail
     }
 
     if let rpe = exercise.targetRPE {
@@ -202,6 +231,24 @@ private func exerciseDisplayText(
     }
 
     return "\(sStr)×\(rStr)"
+}
+
+private func workingSetStyleLabel(for exercise: ProgramSessionExercise) -> String {
+    if exercise.targetSets == nil { return "Cardio" }
+    switch exercise.workingSetStyle {
+    case .topSet: return "Top Set"
+    case .backoff: return "Backoff"
+    case .straight, .none: return "Straight Sets"
+    }
+}
+
+private func workingSetStyleColor(for exercise: ProgramSessionExercise) -> Color {
+    if exercise.targetSets == nil { return .green }
+    switch exercise.workingSetStyle {
+    case .topSet: return .indigo
+    case .backoff: return .blue
+    case .straight, .none: return .secondary
+    }
 }
 
 // MARK: - Exercise Grouping
@@ -738,8 +785,17 @@ private struct GroupedExerciseRowView: View {
                     .frame(width: 7, height: 7)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(group.workingSet.exerciseName)
-                        .font(.subheadline)
+                    HStack(spacing: 6) {
+                        Text(group.workingSet.exerciseName)
+                            .font(.subheadline)
+                        Text(workingSetStyleLabel(for: group.workingSet))
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(workingSetStyleColor(for: group.workingSet).opacity(0.15))
+                            .foregroundStyle(workingSetStyleColor(for: group.workingSet))
+                            .clipShape(Capsule())
+                    }
                     Text(exerciseDisplayText(exercise: group.workingSet, oneRepMaxes: input.oneRepMaxes))
                         .font(.caption)
                         .foregroundStyle(.secondary)

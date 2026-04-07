@@ -97,6 +97,7 @@ struct ProgramGenerationService {
                 for primary in sessionDef.primaryExercises {
                     orderIdx = populateExercise(
                         primary, isPrimary: true,
+                        focus: input.focus,
                         schedule: schedule, sessionIdx: sessionIdx,
                         sessionsPerWeek: input.sessionsPerWeek, level: input.level,
                         oneRepMaxes: input.oneRepMaxes,
@@ -107,6 +108,7 @@ struct ProgramGenerationService {
                 for accessory in accessories {
                     orderIdx = populateExercise(
                         accessory, isPrimary: false,
+                        focus: input.focus,
                         schedule: schedule, sessionIdx: sessionIdx,
                         sessionsPerWeek: input.sessionsPerWeek, level: input.level,
                         oneRepMaxes: input.oneRepMaxes,
@@ -125,6 +127,7 @@ struct ProgramGenerationService {
     private func populateExercise(
         _ templateEx: TemplateExercise,
         isPrimary: Bool,
+        focus: ProgramFocus,
         schedule: WeekSchedule,
         sessionIdx: Int,
         sessionsPerWeek: Int,
@@ -155,10 +158,23 @@ struct ProgramGenerationService {
             level: level, schedule: schedule,
             sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek
         )
+        let effectiveWorkingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
+        let workingBlocks = buildWorkingSetBlocks(
+            exercise: templateEx,
+            focus: focus,
+            level: level,
+            schedule: schedule,
+            params: params,
+            totalWorkingSets: effectiveWorkingSets
+        )
 
         // Warmup sets: 3 sets at 40 / 55 / 70% of the working weight.
         // Applied to primary/variation exercises with a %1RM target; skipped during deloads.
-        if isPrimary, let workingPct = params.percentage1RM, !schedule.isDeload {
+        // For top/backoff prescriptions, warmups key off the heaviest working %.
+        let warmupReferencePct = workingBlocks
+            .compactMap(\.percentage1RM)
+            .max()
+        if isPrimary, let workingPct = warmupReferencePct, !schedule.isDeload {
             for (i, multiplier) in [0.40, 0.55, 0.70].enumerated() {
                 let warmupPct = workingPct * multiplier
                 let wt = computePrescribedWeight(
@@ -182,26 +198,29 @@ struct ProgramGenerationService {
             idx += 3
         }
 
-        // Working set(s): halve set count on deload weeks.
-        let workingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
-        let wt = computePrescribedWeight(
-            exercise: templateEx,
-            percentage1RM: params.percentage1RM,
-            oneRepMaxes: oneRepMaxes
-        )
-        let working = ProgramSessionExercise(
-            exerciseName: templateEx.exerciseName,
-            orderIndex: idx,
-            targetSets: workingSets,
-            targetReps: params.reps,
-            targetPercentage1RM: params.percentage1RM,
-            targetRPE: params.rpe,
-            prescribedWeight: wt?.weight,
-            prescribedWeightUnit: wt?.unit
-        )
-        context.insert(working)
-        working.session = session
-        return idx + 1
+        for block in workingBlocks {
+            let wt = computePrescribedWeight(
+                exercise: templateEx,
+                percentage1RM: block.percentage1RM,
+                oneRepMaxes: oneRepMaxes
+            )
+            let working = ProgramSessionExercise(
+                exerciseName: templateEx.exerciseName,
+                orderIndex: idx,
+                targetSets: block.sets,
+                targetReps: block.reps,
+                targetPercentage1RM: block.percentage1RM,
+                targetRPE: block.rpe,
+                prescribedWeight: wt?.weight,
+                prescribedWeightUnit: wt?.unit,
+                workingSetStyle: block.style,
+                backoffPercentageDrop: block.backoffDrop
+            )
+            context.insert(working)
+            working.session = session
+            idx += 1
+        }
+        return idx
     }
 
     private func computePrescribedWeight(
@@ -230,6 +249,105 @@ struct ProgramGenerationService {
             rounded = max(2.5, (raw / 2.5).rounded() * 2.5)
         }
         return (weight: rounded, unit: orm.unit)
+    }
+
+    private struct WorkingSetBlock {
+        let style: ProgramWorkingSetStyle
+        let sets: Int
+        let reps: Int
+        let percentage1RM: Double?
+        let rpe: Double?
+        let backoffDrop: Double?
+    }
+
+    private func buildWorkingSetBlocks(
+        exercise: TemplateExercise,
+        focus: ProgramFocus,
+        level: ProgramLevel,
+        schedule: WeekSchedule,
+        params: ExerciseParams,
+        totalWorkingSets: Int
+    ) -> [WorkingSetBlock] {
+        // Straight sets remain the default and all deload weeks use straight work.
+        guard !schedule.isDeload else {
+            return [straightSetBlock(from: params, sets: totalWorkingSets)]
+        }
+
+        guard shouldUseTopBackoff(for: exercise, focus: focus, level: level, params: params),
+              let top = exercise.topSetPrescription,
+              let backoff = exercise.backoffPrescription,
+              let topPct = params.percentage1RM else {
+            return [straightSetBlock(from: params, sets: totalWorkingSets)]
+        }
+
+        let topSets = max(1, top.setCount)
+        let topReps = resolvedTopSetReps(baseReps: params.reps)
+        let topRPE = top.targetRPE
+
+        let drop = (backoff.loadDropRange.lowerBound + backoff.loadDropRange.upperBound) / 2.0
+        let backoffPct = max(0.50, topPct * (1.0 - drop))
+        let backoffSets = max(1, backoff.setCount)
+        let backoffReps = resolvedBackoffReps(baseReps: params.reps, repDelta: backoff.repDelta)
+
+        return [
+            WorkingSetBlock(
+                style: .topSet,
+                sets: topSets,
+                reps: topReps,
+                percentage1RM: topPct,
+                rpe: topRPE,
+                backoffDrop: nil
+            ),
+            WorkingSetBlock(
+                style: .backoff,
+                sets: backoffSets,
+                reps: backoffReps,
+                percentage1RM: backoffPct,
+                rpe: params.rpe,
+                backoffDrop: drop
+            )
+        ]
+    }
+
+    private func shouldUseTopBackoff(
+        for exercise: TemplateExercise,
+        focus: ProgramFocus,
+        level: ProgramLevel,
+        params: ExerciseParams
+    ) -> Bool {
+        // Beginner and bodybuilding templates stay predominantly straight-set.
+        if level == .beginner || focus == .bodybuilding { return false }
+        // High-rep hypertrophy work should stay straight-set.
+        if params.reps >= 8 { return false }
+        // Only %1RM-based work can support load-dropped backoffs.
+        if exercise.percentage1RM == nil { return false }
+        return exercise.topSetPrescription != nil && exercise.backoffPrescription != nil
+    }
+
+    private func straightSetBlock(from params: ExerciseParams, sets: Int) -> WorkingSetBlock {
+        WorkingSetBlock(
+            style: .straight,
+            sets: sets,
+            reps: params.reps,
+            percentage1RM: params.percentage1RM,
+            rpe: params.rpe,
+            backoffDrop: nil
+        )
+    }
+
+    private func resolvedTopSetReps(baseReps: Int) -> Int {
+        // For heavy exposures, allow top single/double feel.
+        if baseReps <= 2 { return baseReps }
+        if baseReps == 3 { return 2 }
+        return baseReps
+    }
+
+    private func resolvedBackoffReps(baseReps: Int, repDelta: Int) -> Int {
+        // Low-rep tops become more volumized on backoff work.
+        if baseReps <= 3 {
+            return min(8, max(4, baseReps + max(2, repDelta + 1)))
+        }
+        return min(15, max(1, baseReps + repDelta))
     }
 
     // MARK: - Periodization Parameter Computation

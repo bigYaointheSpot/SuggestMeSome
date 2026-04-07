@@ -494,6 +494,14 @@ struct ProgramRunExpandableRow: View {
 // MARK: - Planned Exercise Detail Helper
 
 private func plannedExerciseDetail(_ exercise: ProgramSessionExercise) -> String {
+    let stylePrefix: String = {
+        switch exercise.workingSetStyle {
+        case .topSet: return "Top Set · "
+        case .backoff: return "Backoff · "
+        case .straight, .none: return "Straight Sets · "
+        }
+    }()
+
     // Cardio: targetSets is nil, targetReps holds duration in minutes
     if exercise.targetSets == nil, let mins = exercise.targetReps {
         return "\(mins) min"
@@ -508,17 +516,25 @@ private func plannedExerciseDetail(_ exercise: ProgramSessionExercise) -> String
             let wStr = w == w.rounded(.towardZero)
                 ? "\(Int(w)) \(unit)"
                 : String(format: "%.1f \(unit)", w)
-            return "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
+            var detail = "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
+            if let drop = exercise.backoffPercentageDrop {
+                detail += String(format: " · -%.0f%%", drop * 100.0)
+            }
+            return stylePrefix + detail
         }
-        return "\(sStr)×\(rStr) @ \(pctInt)%"
+        var detail = "\(sStr)×\(rStr) @ \(pctInt)%"
+        if let drop = exercise.backoffPercentageDrop {
+            detail += String(format: " · -%.0f%%", drop * 100.0)
+        }
+        return stylePrefix + detail
     }
 
     if let rpe = exercise.targetRPE {
         let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
             ? String(Int(rpe))
             : String(format: "%.1f", rpe)
-        return "\(sStr)×\(rStr) @ RPE \(rpeStr)"
+        return stylePrefix + "\(sStr)×\(rStr) @ RPE \(rpeStr)"
     }
 
-    return "\(sStr)×\(rStr)"
+    return stylePrefix + "\(sStr)×\(rStr)"
 }
