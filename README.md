@@ -430,6 +430,29 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 9 [Weekly Volume Accounting + Fatigue-Aware Accessory Selection] — 2026-04-07
+- Added `ProgramExerciseMetadataService.swift` with programming-specific metadata:
+  - new weekly hard-set muscle buckets: `chest`, `upperBackLats`, `quads`, `hamstrings`, `glutes`, `shoulders`, `biceps`, `triceps`, `calves`, `abs`
+  - per-exercise muscle contribution mapping (plus heuristic fallback for unknown exercises)
+  - fatigue tiers (`high` / `medium` / `low`) with helper logic that elevates heavy `%1RM` / top-set / low-rep compounds
+  - focus + level weekly target ranges and focus + level + frequency fatigue budgets
+- Refactored `ProgramGenerationService` accessory logic:
+  - replaced blind seeded rotation with deterministic, week-aware accessory selection
+  - weekly baseline is computed from primary/variation work first
+  - accessory picks now prioritize under-target muscle groups and penalize over-target volume
+  - fatigue constraints now influence selection (session cap, weekly cap, adjacent-session cap)
+  - deadlift-heavy sessions get tighter fatigue handling and stronger penalties on high-fatigue add-ons
+  - variability is retained via recency/novelty weighting + seeded jitter, but volume balancing has priority
+- Added debug-focused weekly reporting on `ProgramGenerationService`:
+  - `weeklySummary(for:)` returns structured week/session hard-set + fatigue totals
+  - `debugWeeklySummary(for:)` returns a readable text summary for diagnostics without changing visible UI
+- Behavior impact by focus:
+  - **Powerlifting focuses**: keeps accessory work support-oriented with lower weekly hypertrophy targets and tighter fatigue control
+  - **Bodybuilding**: drives higher weekly set targets while preferring more recoverable accessory combinations
+  - **Powerbuilding**: balances main-lift support and hypertrophy volume with moderate-to-high targets and capped systemic fatigue
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

@@ -27,6 +27,20 @@ enum ProgramLevel: String, CaseIterable, Codable {
     case beginner, intermediate, advanced
 }
 
+struct ProgramGeneratedSessionSummary {
+    let sessionNumber: Int
+    let sessionName: String?
+    let hardSetsByMuscle: [ProgramVolumeMuscle: Double]
+    let fatigueScore: Double
+}
+
+struct ProgramGeneratedWeekSummary {
+    let weekNumber: Int
+    let sessionSummaries: [ProgramGeneratedSessionSummary]
+    let totalHardSetsByMuscle: [ProgramVolumeMuscle: Double]
+    let totalFatigueScore: Double
+}
+
 // MARK: - Service
 
 struct ProgramGenerationService {
@@ -41,6 +55,72 @@ struct ProgramGenerationService {
     /// Generates a program using different random accessory selections than a previous call.
     func regenerateProgram(input: ProgramGenerationInput, context: ModelContext) -> TrainingProgram {
         buildProgram(input: input, context: context, shuffleSeed: Int.random(in: 1..<Int.max))
+    }
+
+    /// Debug helper for validating weekly volume and fatigue accounting from a generated program.
+    func debugWeeklySummary(for program: TrainingProgram) -> String {
+        let weeks = weeklySummary(for: program)
+        guard !weeks.isEmpty else { return "No weeks found." }
+
+        return weeks.map { week in
+            var lines: [String] = []
+            lines.append("Week \(week.weekNumber) — total fatigue \(formatOneDecimal(week.totalFatigueScore))")
+            for session in week.sessionSummaries {
+                let nameSuffix = session.sessionName.map { " (\($0))" } ?? ""
+                lines.append("  Session \(session.sessionNumber)\(nameSuffix): fatigue \(formatOneDecimal(session.fatigueScore))")
+                for muscle in ProgramVolumeMuscle.allCases {
+                    let sets = session.hardSetsByMuscle[muscle] ?? 0
+                    guard sets > 0 else { continue }
+                    lines.append("    \(muscle.displayName): \(formatOneDecimal(sets)) hard sets")
+                }
+            }
+            lines.append("  Weekly totals:")
+            for muscle in ProgramVolumeMuscle.allCases {
+                let total = week.totalHardSetsByMuscle[muscle] ?? 0
+                guard total > 0 else { continue }
+                lines.append("    \(muscle.displayName): \(formatOneDecimal(total))")
+            }
+            return lines.joined(separator: "\n")
+        }.joined(separator: "\n\n")
+    }
+
+    func weeklySummary(for program: TrainingProgram) -> [ProgramGeneratedWeekSummary] {
+        program.weeks
+            .sorted(by: { $0.weekNumber < $1.weekNumber })
+            .map { week in
+                var totalMuscleSets = emptyMuscleTotals()
+                var totalFatigue = 0.0
+
+                let sessionSummaries = week.sessions
+                    .sorted(by: { $0.sessionNumber < $1.sessionNumber })
+                    .map { session -> ProgramGeneratedSessionSummary in
+                        var sessionMuscleSets = emptyMuscleTotals()
+                        var sessionFatigue = 0.0
+
+                        for exercise in session.exercises.sorted(by: { $0.orderIndex < $1.orderIndex }) where !exercise.isWarmup {
+                            let estimate = estimateLoad(for: exercise)
+                            addMuscleSets(estimate.hardSetsByMuscle, into: &sessionMuscleSets)
+                            sessionFatigue += estimate.fatigueScore
+                        }
+
+                        addMuscleSets(sessionMuscleSets, into: &totalMuscleSets)
+                        totalFatigue += sessionFatigue
+
+                        return ProgramGeneratedSessionSummary(
+                            sessionNumber: session.sessionNumber,
+                            sessionName: session.sessionName,
+                            hardSetsByMuscle: sessionMuscleSets,
+                            fatigueScore: sessionFatigue
+                        )
+                    }
+
+                return ProgramGeneratedWeekSummary(
+                    weekNumber: week.weekNumber,
+                    sessionSummaries: sessionSummaries,
+                    totalHardSetsByMuscle: totalMuscleSets,
+                    totalFatigueScore: totalFatigue
+                )
+            }
     }
 
     // MARK: - Core Builder
@@ -69,11 +149,13 @@ struct ProgramGenerationService {
         // Steps 3–4: Build periodized week schedules
         let schedules = buildWeekSchedules(level: input.level, durationWeeks: input.durationWeeks)
 
-        // Step 6: Build accessory rotation pools (per session definition)
-        let accessoryRotations = buildAccessoryRotations(
+        // Step 6: Build weekly accessory selections using volume and fatigue accounting.
+        let weeklyAccessoryPlan = buildAdaptiveAccessoryPlan(
             sessionDefs: sessionDefs,
-            totalWeeks: input.durationWeeks,
+            schedules: schedules,
             focus: input.focus,
+            level: input.level,
+            sessionsPerWeek: input.sessionsPerWeek,
             seed: shuffleSeed
         )
 
@@ -91,7 +173,8 @@ struct ProgramGenerationService {
                 context.insert(sessionTemplate)
                 sessionTemplate.week = weekTemplate
 
-                let accessories = accessoryRotations[sessionIdx][schedule.weekNumber - 1]
+                let weekAccessories = weeklyAccessoryPlan[schedule.weekNumber] ?? Array(repeating: [], count: sessionDefs.count)
+                let accessories = sessionIdx < weekAccessories.count ? weekAccessories[sessionIdx] : []
                 var orderIdx = 0
 
                 for primary in sessionDef.primaryExercises {
@@ -745,66 +828,380 @@ struct ProgramGenerationService {
         }
     }
 
-    // MARK: - Accessory Rotation (Step 6)
+    // MARK: - Accessory Planning (Volume + Fatigue Aware)
 
-    /// Returns a [sessionIdx][weekIdx] → [TemplateExercise] rotation table.
-    private func buildAccessoryRotations(
+    private struct ExerciseLoadEstimate {
+        let hardSetsByMuscle: [ProgramVolumeMuscle: Double]
+        let fatigueScore: Double
+        let highFatigueScore: Double
+    }
+
+    private struct AccessoryCandidate {
+        let exercise: TemplateExercise
+        let estimate: ExerciseLoadEstimate
+        let score: Double
+    }
+
+    private func buildAdaptiveAccessoryPlan(
         sessionDefs: [SessionDefinition],
-        totalWeeks: Int,
+        schedules: [WeekSchedule],
         focus: ProgramFocus,
+        level: ProgramLevel,
+        sessionsPerWeek: Int,
         seed: Int
-    ) -> [[[TemplateExercise]]] {
-        // 5×5 uses fixed accessory selections across all weeks.
-        let isFixed = focus == .fiveByFive
+    ) -> [Int: [[TemplateExercise]]] {
+        let volumeTargets = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: focus, level: level)
+        let fatigueBudgets = ProgramExerciseMetadataService.fatigueBudgets(
+            focus: focus,
+            level: level,
+            sessionsPerWeek: sessionsPerWeek
+        )
 
-        return sessionDefs.map { sessionDef in
-            let pool = sessionDef.accessoryPool
-            let count = min(sessionDef.accessoryCount, pool.count)
+        var planByWeek: [Int: [[TemplateExercise]]] = [:]
+        var lastUsedWeekBySession: [Int: [String: Int]] = [:]
+        var previousWeekLastSessionFatigue = 0.0
+        var previousWeekLastSessionHighFatigue = 0.0
+        var rng = SeededRNG(seed: seed)
 
-            guard !pool.isEmpty, count > 0 else {
-                return Array(repeating: [], count: totalWeeks)
+        for schedule in schedules {
+            var weeklyMuscleSets = emptyMuscleTotals()
+            var weeklyFatigue = 0.0
+            var sessionFatigue = Array(repeating: 0.0, count: sessionDefs.count)
+            var sessionHighFatigue = Array(repeating: 0.0, count: sessionDefs.count)
+            var weekAccessories = Array(repeating: [TemplateExercise](), count: sessionDefs.count)
+
+            // Baseline from primaries/variations establishes the week's starting deficits and fatigue.
+            for (sessionIdx, sessionDef) in sessionDefs.enumerated() {
+                for primary in sessionDef.primaryExercises {
+                    let estimate = estimateLoad(
+                        for: primary,
+                        focus: focus,
+                        level: level,
+                        schedule: schedule,
+                        sessionIdx: sessionIdx,
+                        sessionsPerWeek: sessionsPerWeek
+                    )
+                    addMuscleSets(estimate.hardSetsByMuscle, into: &weeklyMuscleSets)
+                    sessionFatigue[sessionIdx] += estimate.fatigueScore
+                    sessionHighFatigue[sessionIdx] += estimate.highFatigueScore
+                    weeklyFatigue += estimate.fatigueScore
+                }
             }
 
-            if isFixed {
-                let fixed = Array(pool.prefix(count))
-                return Array(repeating: fixed, count: totalWeeks)
+            // Accessory picks are selected to fill under-target muscles first, then maintain variability.
+            for (sessionIdx, sessionDef) in sessionDefs.enumerated() {
+                let selectionCount = min(sessionDef.accessoryCount, sessionDef.accessoryPool.count)
+                guard selectionCount > 0 else { continue }
+
+                let isDeadliftHeavy = isDeadliftHeavySession(sessionDef)
+                var chosen: [TemplateExercise] = []
+                var chosenNames: Set<String> = []
+
+                while chosen.count < selectionCount {
+                    let remaining = sessionDef.accessoryPool
+                        .filter { !chosenNames.contains($0.exerciseName) }
+                        .sorted { $0.exerciseName < $1.exerciseName }
+                    guard !remaining.isEmpty else { break }
+
+                    let previousSessionFatigue = sessionIdx > 0
+                        ? sessionFatigue[sessionIdx - 1]
+                        : previousWeekLastSessionFatigue
+                    let previousSessionHighFatigue = sessionIdx > 0
+                        ? sessionHighFatigue[sessionIdx - 1]
+                        : previousWeekLastSessionHighFatigue
+
+                    var best: AccessoryCandidate?
+
+                    for candidate in remaining {
+                        let estimate = estimateLoad(
+                            for: candidate,
+                            focus: focus,
+                            level: level,
+                            schedule: schedule,
+                            sessionIdx: sessionIdx,
+                            sessionsPerWeek: sessionsPerWeek
+                        )
+
+                        let lastUsed = lastUsedWeekBySession[sessionIdx]?[candidate.exerciseName]
+                        let score = scoreAccessoryCandidate(
+                            estimate: estimate,
+                            currentWeeklyMuscleSets: weeklyMuscleSets,
+                            volumeTargets: volumeTargets,
+                            currentWeekFatigue: weeklyFatigue,
+                            currentSessionFatigue: sessionFatigue[sessionIdx],
+                            previousSessionFatigue: previousSessionFatigue,
+                            previousSessionHighFatigue: previousSessionHighFatigue,
+                            fatigueBudgets: fatigueBudgets,
+                            isDeadliftHeavySession: isDeadliftHeavy,
+                            currentWeekNumber: schedule.weekNumber,
+                            lastUsedWeek: lastUsed,
+                            rng: &rng
+                        )
+
+                        let scored = AccessoryCandidate(exercise: candidate, estimate: estimate, score: score)
+                        if let best, scored.score <= best.score { continue }
+                        best = scored
+                    }
+
+                    guard let best else { break }
+
+                    chosen.append(best.exercise)
+                    chosenNames.insert(best.exercise.exerciseName)
+                    weekAccessories[sessionIdx].append(best.exercise)
+
+                    addMuscleSets(best.estimate.hardSetsByMuscle, into: &weeklyMuscleSets)
+                    weeklyFatigue += best.estimate.fatigueScore
+                    sessionFatigue[sessionIdx] += best.estimate.fatigueScore
+                    sessionHighFatigue[sessionIdx] += best.estimate.highFatigueScore
+
+                    var history = lastUsedWeekBySession[sessionIdx] ?? [:]
+                    history[best.exercise.exerciseName] = schedule.weekNumber
+                    lastUsedWeekBySession[sessionIdx] = history
+                }
             }
 
-            // Shuffle the pool deterministically for this generation call.
-            var rng = SeededRNG(seed: seed)
-            var shuffled = pool
-            shuffled.shuffle(using: &rng)
+            previousWeekLastSessionFatigue = sessionFatigue.last ?? 0
+            previousWeekLastSessionHighFatigue = sessionHighFatigue.last ?? 0
+            planByWeek[schedule.weekNumber] = weekAccessories
+        }
 
-            // Cyclic rotation: each week advances the start index by `count`.
-            var weeks = (0..<totalWeeks).map { weekIdx -> [TemplateExercise] in
-                let start = (weekIdx * count) % shuffled.count
-                return (0..<count).map { shuffled[(start + $0) % shuffled.count] }
+        return planByWeek
+    }
+
+    private func scoreAccessoryCandidate(
+        estimate: ExerciseLoadEstimate,
+        currentWeeklyMuscleSets: [ProgramVolumeMuscle: Double],
+        volumeTargets: ProgramWeeklyVolumeTargets,
+        currentWeekFatigue: Double,
+        currentSessionFatigue: Double,
+        previousSessionFatigue: Double,
+        previousSessionHighFatigue: Double,
+        fatigueBudgets: ProgramFatigueBudgets,
+        isDeadliftHeavySession: Bool,
+        currentWeekNumber: Int,
+        lastUsedWeek: Int?,
+        rng: inout SeededRNG
+    ) -> Double {
+        var score = 0.0
+
+        for muscle in ProgramVolumeMuscle.allCases {
+            let current = currentWeeklyMuscleSets[muscle] ?? 0
+            let added = estimate.hardSetsByMuscle[muscle] ?? 0
+            guard added > 0 else { continue }
+
+            let target = volumeTargets.range(for: muscle)
+            let deficit = max(0, target.minHardSets - current)
+            let usefulTowardDeficit = min(deficit, added)
+            score += usefulTowardDeficit * 2.6
+
+            let roomToMax = max(0, target.maxHardSets - current)
+            score += min(roomToMax, added) * 0.40
+
+            let overshoot = max(0, current + added - target.maxHardSets)
+            score -= overshoot * 1.9
+        }
+
+        let sessionBudget = isDeadliftHeavySession ? fatigueBudgets.deadliftSessionBudget : fatigueBudgets.sessionBudget
+        let projectedSessionFatigue = currentSessionFatigue + estimate.fatigueScore
+        let projectedWeekFatigue = currentWeekFatigue + estimate.fatigueScore
+        let projectedAdjacentFatigue = previousSessionFatigue + projectedSessionFatigue
+
+        if projectedSessionFatigue > sessionBudget {
+            score -= (projectedSessionFatigue - sessionBudget) * 3.3
+        }
+        if projectedWeekFatigue > fatigueBudgets.weekBudget {
+            score -= (projectedWeekFatigue - fatigueBudgets.weekBudget) * 2.6
+        }
+        if projectedAdjacentFatigue > fatigueBudgets.adjacentSessionPairBudget {
+            score -= (projectedAdjacentFatigue - fatigueBudgets.adjacentSessionPairBudget) * 2.8
+        }
+
+        if previousSessionHighFatigue > (fatigueBudgets.sessionBudget * 0.35) {
+            score -= estimate.highFatigueScore * 2.3
+        }
+        if isDeadliftHeavySession {
+            score -= estimate.highFatigueScore * 3.4
+        }
+        if projectedSessionFatigue > (sessionBudget * 0.90) {
+            score -= estimate.highFatigueScore * 1.8
+        }
+
+        if let lastUsedWeek {
+            let weeksSince = max(0, currentWeekNumber - lastUsedWeek)
+            score += min(1.2, Double(weeksSince) * 0.20)
+            if weeksSince == 0 { score -= 1.5 }
+        } else {
+            score += 1.0
+        }
+
+        score += randomJitter(using: &rng, magnitude: 0.16)
+        return score
+    }
+
+    private func estimateLoad(
+        for exercise: TemplateExercise,
+        focus: ProgramFocus,
+        level: ProgramLevel,
+        schedule: WeekSchedule,
+        sessionIdx: Int,
+        sessionsPerWeek: Int
+    ) -> ExerciseLoadEstimate {
+        if exercise.role == .cardio {
+            let mins = cardioDurationMinutes(progressionIndex: schedule.progressionIndex, isDeload: schedule.isDeload)
+            return ExerciseLoadEstimate(
+                hardSetsByMuscle: emptyMuscleTotals(),
+                fatigueScore: Double(mins) * 0.08,
+                highFatigueScore: 0
+            )
+        }
+
+        let params = computeParams(
+            exercise: exercise,
+            level: level,
+            schedule: schedule,
+            sessionIdx: sessionIdx,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let effectiveWorkingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
+        let blocks = buildWorkingSetBlocks(
+            exercise: exercise,
+            focus: focus,
+            level: level,
+            schedule: schedule,
+            params: params,
+            totalWorkingSets: effectiveWorkingSets
+        )
+        let totalWorkingSets = blocks.reduce(0) { $0 + $1.sets }
+        guard totalWorkingSets > 0 else {
+            return ExerciseLoadEstimate(
+                hardSetsByMuscle: emptyMuscleTotals(),
+                fatigueScore: 0,
+                highFatigueScore: 0
+            )
+        }
+
+        let metadata = ProgramExerciseMetadataService.metadata(for: exercise.exerciseName)
+        var hardSetsByMuscle = emptyMuscleTotals()
+        for (muscle, weight) in metadata.muscleContributions {
+            hardSetsByMuscle[muscle, default: 0] += Double(totalWorkingSets) * weight
+        }
+
+        let maxPct = blocks.compactMap(\.percentage1RM).max()
+        let minReps = blocks.map(\.reps).min() ?? params.reps
+        let hasTopSet = blocks.contains { $0.style == .topSet }
+        let fatigueTier = ProgramExerciseMetadataService.fatigueTier(
+            for: exercise.exerciseName,
+            role: exercise.role,
+            maxPercentage1RM: maxPct,
+            minReps: minReps,
+            hasTopSet: hasTopSet
+        )
+
+        var intensityMultiplier = 1.0
+        if let maxPct {
+            switch maxPct {
+            case let p where p >= 0.90: intensityMultiplier += 0.25
+            case let p where p >= 0.82: intensityMultiplier += 0.15
+            case let p where p <= 0.65: intensityMultiplier -= 0.05
+            default: break
             }
+        } else if let rpe = params.rpe {
+            if rpe >= 8.5 { intensityMultiplier += 0.15 }
+            if rpe <= 6.5 { intensityMultiplier -= 0.05 }
+        }
+        if schedule.isDeload {
+            intensityMultiplier *= 0.78
+        }
 
-            // Bodybuilding and general fitness: guarantee no two adjacent weeks are identical.
-            if (focus == .bodybuilding || focus == .generalFitness) && shuffled.count > count {
-                weeks = ensureNonAdjacentIdentical(weeks: weeks, pool: shuffled, count: count)
-            }
+        let setCount = Double(totalWorkingSets)
+        let fatigueScore = setCount * fatigueTier.baseScorePerSet * intensityMultiplier
+        let highFatigueScore = setCount * fatigueTier.highFatigueWeight * intensityMultiplier
 
-            return weeks
+        return ExerciseLoadEstimate(
+            hardSetsByMuscle: hardSetsByMuscle,
+            fatigueScore: fatigueScore,
+            highFatigueScore: highFatigueScore
+        )
+    }
+
+    private func estimateLoad(for exercise: ProgramSessionExercise) -> ExerciseLoadEstimate {
+        if exercise.targetSets == nil {
+            let mins = Double(exercise.targetReps ?? 0)
+            return ExerciseLoadEstimate(
+                hardSetsByMuscle: emptyMuscleTotals(),
+                fatigueScore: mins * 0.08,
+                highFatigueScore: 0
+            )
+        }
+
+        let setCount = max(0, exercise.targetSets ?? 0)
+        guard setCount > 0 else {
+            return ExerciseLoadEstimate(
+                hardSetsByMuscle: emptyMuscleTotals(),
+                fatigueScore: 0,
+                highFatigueScore: 0
+            )
+        }
+
+        let metadata = ProgramExerciseMetadataService.metadata(for: exercise.exerciseName)
+        var hardSetsByMuscle = emptyMuscleTotals()
+        for (muscle, weight) in metadata.muscleContributions {
+            hardSetsByMuscle[muscle, default: 0] += Double(setCount) * weight
+        }
+
+        let fatigueTier = ProgramExerciseMetadataService.fatigueTier(
+            for: exercise.exerciseName,
+            role: .accessory,
+            maxPercentage1RM: exercise.targetPercentage1RM,
+            minReps: exercise.targetReps ?? 8,
+            hasTopSet: exercise.workingSetStyle == .topSet
+        )
+
+        var intensityMultiplier = 1.0
+        if let pct = exercise.targetPercentage1RM {
+            if pct >= 0.90 { intensityMultiplier += 0.25 }
+            else if pct >= 0.82 { intensityMultiplier += 0.15 }
+            else if pct <= 0.65 { intensityMultiplier -= 0.05 }
+        } else if let rpe = exercise.targetRPE {
+            if rpe >= 8.5 { intensityMultiplier += 0.15 }
+            else if rpe <= 6.5 { intensityMultiplier -= 0.05 }
+        }
+
+        let sets = Double(setCount)
+        return ExerciseLoadEstimate(
+            hardSetsByMuscle: hardSetsByMuscle,
+            fatigueScore: sets * fatigueTier.baseScorePerSet * intensityMultiplier,
+            highFatigueScore: sets * fatigueTier.highFatigueWeight * intensityMultiplier
+        )
+    }
+
+    private func emptyMuscleTotals() -> [ProgramVolumeMuscle: Double] {
+        Dictionary(uniqueKeysWithValues: ProgramVolumeMuscle.allCases.map { ($0, 0.0) })
+    }
+
+    private func addMuscleSets(
+        _ source: [ProgramVolumeMuscle: Double],
+        into target: inout [ProgramVolumeMuscle: Double]
+    ) {
+        for muscle in ProgramVolumeMuscle.allCases {
+            target[muscle, default: 0] += source[muscle] ?? 0
         }
     }
 
-    private func ensureNonAdjacentIdentical(
-        weeks: [[TemplateExercise]],
-        pool: [TemplateExercise],
-        count: Int
-    ) -> [[TemplateExercise]] {
-        var result = weeks
-        for i in 1..<result.count {
-            let prev = Set(result[i - 1].map { $0.exerciseName })
-            let curr = Set(result[i].map { $0.exerciseName })
-            guard prev == curr else { continue }
-            // Shift start index by 1 to break the tie.
-            let shiftedStart = (i * count + 1) % pool.count
-            result[i] = (0..<count).map { pool[(shiftedStart + $0) % pool.count] }
+    private func isDeadliftHeavySession(_ sessionDef: SessionDefinition) -> Bool {
+        sessionDef.primaryExercises.contains { exercise in
+            let lower = exercise.exerciseName.lowercased()
+            return lower.contains("deadlift") || lower.contains("block pull")
         }
-        return result
+    }
+
+    private func randomJitter(using rng: inout SeededRNG, magnitude: Double) -> Double {
+        let unit = Double(rng.next() % 10_000) / 10_000.0
+        return (unit - 0.5) * magnitude
+    }
+
+    private func formatOneDecimal(_ value: Double) -> String {
+        String(format: "%.1f", value)
     }
 
     // MARK: - Helpers
@@ -852,7 +1249,7 @@ struct ProgramGenerationService {
 
 // MARK: - Seeded Random Number Generator
 
-/// Deterministic RNG used to make accessory shuffles reproducible within a single generation call.
+/// Deterministic RNG used to keep accessory selection reproducible within a generation call.
 private struct SeededRNG: RandomNumberGenerator {
     private var state: UInt64
 
