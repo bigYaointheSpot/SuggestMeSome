@@ -162,7 +162,7 @@ struct ProgramGenerationService {
             for (i, multiplier) in [0.40, 0.55, 0.70].enumerated() {
                 let warmupPct = workingPct * multiplier
                 let wt = computePrescribedWeight(
-                    exerciseName: templateEx.exerciseName,
+                    exercise: templateEx,
                     percentage1RM: warmupPct,
                     oneRepMaxes: oneRepMaxes
                 )
@@ -185,7 +185,7 @@ struct ProgramGenerationService {
         // Working set(s): halve set count on deload weeks.
         let workingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
         let wt = computePrescribedWeight(
-            exerciseName: templateEx.exerciseName,
+            exercise: templateEx,
             percentage1RM: params.percentage1RM,
             oneRepMaxes: oneRepMaxes
         )
@@ -205,11 +205,23 @@ struct ProgramGenerationService {
     }
 
     private func computePrescribedWeight(
-        exerciseName: String,
+        exercise: TemplateExercise,
         percentage1RM: Double?,
         oneRepMaxes: [String: (weight: Double, unit: String)]
     ) -> (weight: Double, unit: String)? {
-        guard let pct = percentage1RM, let orm = oneRepMaxes[exerciseName] else { return nil }
+        guard let pct = percentage1RM else { return nil }
+
+        let orm: (weight: Double, unit: String)?
+        if let direct = oneRepMaxes[exercise.exerciseName] {
+            orm = direct
+        } else if let sourceLift = exercise.loadSourceLift, let sourceORM = oneRepMaxes[sourceLift] {
+            let multiplier = exercise.loadMultiplier ?? 1.0
+            orm = (weight: sourceORM.weight * multiplier, unit: sourceORM.unit)
+        } else {
+            orm = nil
+        }
+
+        guard let orm else { return nil }
         let raw = pct * orm.weight
         let rounded: Double
         if orm.unit == "lbs" {

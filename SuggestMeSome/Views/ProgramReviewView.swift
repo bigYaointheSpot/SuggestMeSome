@@ -132,6 +132,27 @@ private func weekRangeText(_ weeks: [ProgramWeekTemplate]) -> String {
     }.joined(separator: ", ")
 }
 
+private func resolvedOneRepMax(
+    for exerciseName: String,
+    oneRepMaxes: [String: (weight: Double, unit: String)]
+) -> (weight: Double, unit: String)? {
+    if let direct = oneRepMaxes[exerciseName] {
+        return direct
+    }
+
+    guard
+        let mapping = FocusTemplateLibrary.loadMapping(for: exerciseName),
+        let sourceORM = oneRepMaxes[mapping.sourceLift]
+    else {
+        return nil
+    }
+
+    return (
+        weight: sourceORM.weight * mapping.multiplier,
+        unit: sourceORM.unit
+    )
+}
+
 // MARK: - Exercise Display Helper
 
 private func exerciseDisplayText(
@@ -158,7 +179,8 @@ private func exerciseDisplayText(
         }
 
         // Fallback: compute from oneRepMaxes (programs generated before fix)
-        if let orm = oneRepMaxes[exercise.exerciseName] {
+        // Supports mapped variation lifts when direct 1RM is unavailable.
+        if let orm = resolvedOneRepMax(for: exercise.exerciseName, oneRepMaxes: oneRepMaxes) {
             let raw = pct * orm.weight
             let rounded = orm.unit == "lbs"
                 ? (raw / 5.0).rounded() * 5.0
@@ -909,20 +931,25 @@ struct ExerciseEditSheet: View {
         if !selectedName.isEmpty { exercise.exerciseName = selectedName }
         if let sets = Int(setsText), sets > 0 { exercise.targetSets = sets }
         if let reps = Int(repsText), reps > 0 { exercise.targetReps = reps }
+
         if !pctText.isEmpty, let pct = Double(pctText), pct > 0 {
             let normalizedPct = min(pct / 100.0, 1.0)
             exercise.targetPercentage1RM = normalizedPct
-            // Recompute stored weight from the new percentage
+
             let name = selectedName.isEmpty ? exercise.exerciseName : selectedName
-            if let orm = input.oneRepMaxes[name] {
+            if let orm = resolvedOneRepMax(for: name, oneRepMaxes: input.oneRepMaxes) {
                 let raw = normalizedPct * orm.weight
                 let rounded = orm.unit == "lbs"
                     ? max(5.0, (raw / 5.0).rounded() * 5.0)
                     : max(2.5, (raw / 2.5).rounded() * 2.5)
                 exercise.prescribedWeight = rounded
                 exercise.prescribedWeightUnit = orm.unit
+            } else {
+                exercise.prescribedWeight = nil
+                exercise.prescribedWeightUnit = nil
             }
         }
+
         if !rpeText.isEmpty, let rpe = Double(rpeText), rpe > 0 {
             exercise.targetRPE = min(rpe, 10.0)
         }

@@ -28,6 +28,15 @@ enum ExerciseRole: String, Codable {
     case primary, variation, accessory, cardio
 }
 
+// MARK: - TemplateIntensityStyle
+
+enum TemplateIntensityStyle: String, Codable {
+    case percentage
+    case rpe
+    case mixed
+    case cardioDuration
+}
+
 // MARK: - TemplateExercise
 
 struct TemplateExercise {
@@ -39,6 +48,49 @@ struct TemplateExercise {
     let percentage1RM: Double?
     /// Rate of perceived exertion, 1–10. Nil for %1RM-based exercises.
     let targetRPE: Double?
+    /// Hidden metadata used for load derivation in variation lifts.
+    let loadSourceLift: String?
+    /// Multiplier applied to the source lift 1RM when deriving an effective 1RM.
+    let loadMultiplier: Double?
+    /// Optional programming style metadata for future periodization rules.
+    let intensityStyle: TemplateIntensityStyle?
+
+    init(
+        exerciseName: String,
+        role: ExerciseRole,
+        defaultSets: Int,
+        defaultReps: Int,
+        percentage1RM: Double?,
+        targetRPE: Double?,
+        loadSourceLift: String? = nil,
+        loadMultiplier: Double? = nil,
+        intensityStyle: TemplateIntensityStyle? = nil
+    ) {
+        self.exerciseName = exerciseName
+        self.role = role
+        self.defaultSets = defaultSets
+        self.defaultReps = defaultReps
+        self.percentage1RM = percentage1RM
+        self.targetRPE = targetRPE
+
+        let mapped = FocusTemplateLibrary.loadMapping(for: exerciseName)
+        self.loadSourceLift = loadSourceLift ?? mapped?.sourceLift
+        self.loadMultiplier = loadMultiplier ?? mapped?.multiplier
+
+        if let intensityStyle {
+            self.intensityStyle = intensityStyle
+        } else if role == .cardio {
+            self.intensityStyle = .cardioDuration
+        } else if percentage1RM != nil && targetRPE != nil {
+            self.intensityStyle = .mixed
+        } else if percentage1RM != nil {
+            self.intensityStyle = .percentage
+        } else if targetRPE != nil {
+            self.intensityStyle = .rpe
+        } else {
+            self.intensityStyle = nil
+        }
+    }
 }
 
 // MARK: - SessionDefinition
@@ -69,6 +121,11 @@ struct FocusTemplate {
 // MARK: - Library
 
 enum FocusTemplateLibrary {
+    struct LoadMapping {
+        let sourceLift: String
+        let multiplier: Double
+    }
+
     static func template(for focus: ProgramFocus) -> FocusTemplate {
         switch focus {
         case .increaseMaxSquat:    return squatTemplate
@@ -83,6 +140,29 @@ enum FocusTemplateLibrary {
         case .cardioEndurance:     return cardioEnduranceTemplate
         }
     }
+
+    static func loadMapping(for exerciseName: String) -> LoadMapping? {
+        variationLoadMappings[exerciseName]
+    }
+
+    private static let variationLoadMappings: [String: LoadMapping] = [
+        // Squat variations
+        "Pause Squat": .init(sourceLift: "Back Squats", multiplier: 0.92),
+        "Front Squat": .init(sourceLift: "Back Squats", multiplier: 0.85),
+        "Box Squat": .init(sourceLift: "Back Squats", multiplier: 0.90),
+
+        // Bench variations
+        "Pause Bench Press": .init(sourceLift: "Bench Press", multiplier: 0.93),
+        "Close Grip Bench Press": .init(sourceLift: "Bench Press", multiplier: 0.90),
+        "Incline Bench": .init(sourceLift: "Bench Press", multiplier: 0.87),
+        "Incline Dumbbell Press": .init(sourceLift: "Bench Press", multiplier: 0.75),
+        "Floor Press": .init(sourceLift: "Bench Press", multiplier: 0.92),
+
+        // Deadlift variations
+        "Romanian Deadlift": .init(sourceLift: "Deadlift", multiplier: 0.78),
+        "Deficit Deadlift": .init(sourceLift: "Deadlift", multiplier: 0.90),
+        "Block Pull": .init(sourceLift: "Deadlift", multiplier: 1.05),
+    ]
 }
 
 // MARK: - Increase Max Squat

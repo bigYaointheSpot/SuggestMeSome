@@ -383,6 +383,21 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 6 [Variation Load Mapping for Prescribed Weights] — 2026-04-07
+- Extended `TemplateExercise` with additive hidden programming metadata for load derivation: `loadSourceLift`, `loadMultiplier`, and optional `intensityStyle`
+- Added a centralized variation load mapping table in `FocusTemplateLibrary` with source-lift + multiplier pairs; includes:
+  - Pause Squat / Front Squat / Box Squat → Back Squats
+  - Pause Bench Press / Close Grip Bench Press / Incline Bench / Incline Dumbbell Press / Floor Press → Bench Press
+  - Romanian Deadlift / Deficit Deadlift / Block Pull → Deadlift
+- Refactored `ProgramGenerationService.computePrescribedWeight`:
+  - Uses direct 1RM when `exerciseName` exists in `input.oneRepMaxes`
+  - Falls back to mapped source lift 1RM × `loadMultiplier` when direct 1RM is missing
+  - Leaves `prescribedWeight` nil when neither direct nor mapped source 1RM is available
+- Updated `ProgramReviewView` fallback display and `ExerciseEditSheet.save()` weight recomputation to use the same mapped source-lift resolution when exercise names are swapped
+- Migration impact is lightweight and additive: no SwiftData schema change required for this phase
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
