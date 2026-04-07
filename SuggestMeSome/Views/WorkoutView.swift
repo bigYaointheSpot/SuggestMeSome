@@ -39,6 +39,18 @@ struct DraftExerciseEntry: Identifiable {
     var cardioMinutesText: String
     var cardioSecondsText: String
 
+    // Optional prescription snapshot for program-driven workouts.
+    var sourceProgramSessionExerciseID: UUID?
+    var prescribedTargetSets: Int?
+    var prescribedTargetReps: Int?
+    var prescribedTargetPercentage1RM: Double?
+    var prescribedTargetRPE: Double?
+    var prescribedTargetRIR: Double?
+    var prescribedWeight: Double?
+    var prescribedWeightUnit: String?
+    var prescribedWorkingSetStyle: ProgramWorkingSetStyle?
+    var prescribedTargetEffortType: ProgramTargetEffortType?
+
     var cardioDurationSeconds: Int {
         (Int(cardioMinutesText) ?? 0) * 60 + (Int(cardioSecondsText) ?? 0)
     }
@@ -50,7 +62,17 @@ struct DraftExerciseEntry: Identifiable {
         sets: [DraftSet],
         isCardio: Bool = false,
         cardioMinutesText: String = "",
-        cardioSecondsText: String = ""
+        cardioSecondsText: String = "",
+        sourceProgramSessionExerciseID: UUID? = nil,
+        prescribedTargetSets: Int? = nil,
+        prescribedTargetReps: Int? = nil,
+        prescribedTargetPercentage1RM: Double? = nil,
+        prescribedTargetRPE: Double? = nil,
+        prescribedTargetRIR: Double? = nil,
+        prescribedWeight: Double? = nil,
+        prescribedWeightUnit: String? = nil,
+        prescribedWorkingSetStyle: ProgramWorkingSetStyle? = nil,
+        prescribedTargetEffortType: ProgramTargetEffortType? = nil
     ) {
         self.id = UUID()
         self.exerciseName = exerciseName
@@ -60,6 +82,16 @@ struct DraftExerciseEntry: Identifiable {
         self.isCardio = isCardio
         self.cardioMinutesText = cardioMinutesText
         self.cardioSecondsText = cardioSecondsText
+        self.sourceProgramSessionExerciseID = sourceProgramSessionExerciseID
+        self.prescribedTargetSets = prescribedTargetSets
+        self.prescribedTargetReps = prescribedTargetReps
+        self.prescribedTargetPercentage1RM = prescribedTargetPercentage1RM
+        self.prescribedTargetRPE = prescribedTargetRPE
+        self.prescribedTargetRIR = prescribedTargetRIR
+        self.prescribedWeight = prescribedWeight
+        self.prescribedWeightUnit = prescribedWeightUnit
+        self.prescribedWorkingSetStyle = prescribedWorkingSetStyle
+        self.prescribedTargetEffortType = prescribedTargetEffortType
     }
 }
 
@@ -176,7 +208,17 @@ struct WorkoutView: View {
                         exerciseName: sessionExercise.exerciseName,
                         unit: unit,
                         orderIndex: index,
-                        sets: sets
+                        sets: sets,
+                        sourceProgramSessionExerciseID: sessionExercise.id,
+                        prescribedTargetSets: sessionExercise.targetSets,
+                        prescribedTargetReps: sessionExercise.targetReps,
+                        prescribedTargetPercentage1RM: sessionExercise.targetPercentage1RM,
+                        prescribedTargetRPE: sessionExercise.targetRPE,
+                        prescribedTargetRIR: sessionExercise.targetRIR,
+                        prescribedWeight: sessionExercise.prescribedWeight,
+                        prescribedWeightUnit: sessionExercise.prescribedWeightUnit,
+                        prescribedWorkingSetStyle: sessionExercise.workingSetStyle,
+                        prescribedTargetEffortType: sessionExercise.targetEffortType
                     )
                 }
                 startTime = Date.now
@@ -347,7 +389,17 @@ struct WorkoutView: View {
                 unit: draftEntry.unit,
                 orderIndex: draftEntry.orderIndex,
                 isCardio: draftEntry.isCardio,
-                cardioDurationSeconds: draftEntry.isCardio ? draftEntry.cardioDurationSeconds : nil
+                cardioDurationSeconds: draftEntry.isCardio ? draftEntry.cardioDurationSeconds : nil,
+                sourceProgramSessionExerciseID: draftEntry.sourceProgramSessionExerciseID,
+                prescribedTargetSets: draftEntry.prescribedTargetSets,
+                prescribedTargetReps: draftEntry.prescribedTargetReps,
+                prescribedTargetPercentage1RM: draftEntry.prescribedTargetPercentage1RM,
+                prescribedTargetRPE: draftEntry.prescribedTargetRPE,
+                prescribedTargetRIR: draftEntry.prescribedTargetRIR,
+                prescribedWeight: draftEntry.prescribedWeight,
+                prescribedWeightUnit: draftEntry.prescribedWeightUnit,
+                prescribedWorkingSetStyle: draftEntry.prescribedWorkingSetStyle,
+                prescribedTargetEffortType: draftEntry.prescribedTargetEffortType
             )
             entry.workout = workout
             modelContext.insert(entry)

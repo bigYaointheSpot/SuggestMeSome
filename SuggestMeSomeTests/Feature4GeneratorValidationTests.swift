@@ -1,0 +1,322 @@
+//
+//  Feature4GeneratorValidationTests.swift
+//  SuggestMeSomeTests
+//
+//  Created by Codex on 4/7/26.
+//
+
+import Foundation
+import SwiftData
+import Testing
+@testable import SuggestMeSome
+
+@Suite(.serialized)
+@MainActor
+struct Feature4GeneratorValidationTests {
+    private let service = ProgramGenerationService()
+
+    @Test func eachFocusBuildsExpectedWeeksAndResolvedSessions() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        for focus in ProgramFocus.allCases {
+            let template = FocusTemplateLibrary.template(for: focus)
+            let requestedFrequency = max(2, template.minimumFrequency - 1)
+            let expectedFrequency = resolvedFrequency(for: template, requested: requestedFrequency)
+            let input = makeInput(
+                focus: focus,
+                level: .intermediate,
+                durationWeeks: 8,
+                sessionsPerWeek: requestedFrequency
+            )
+
+            let program = service.generateProgram(
+                input: input,
+                context: context,
+                shuffleSeed: deterministicSeed(for: focus, offset: 1)
+            )
+
+            #expect(program.weeks.count == 8)
+            #expect(program.sessionsPerWeek == expectedFrequency)
+            for week in program.weeks {
+                #expect(week.sessions.count == expectedFrequency)
+            }
+        }
+    }
+
+    @Test func mappedVariationsProducePrescribedWeightsWhenSourceOneRMsExist() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let input = ProgramGenerationInput(
+            focus: .increaseMaxSquat,
+            level: .intermediate,
+            durationWeeks: 8,
+            sessionsPerWeek: 4,
+            oneRepMaxes: [
+                "Back Squats": (weight: 405, unit: "lbs"),
+                "Deadlift": (weight: 495, unit: "lbs"),
+            ]
+        )
+
+        let program = service.generateProgram(input: input, context: context, shuffleSeed: 207)
+        let allExercises = flattenedExercises(from: program)
+        let mappedRows = allExercises.filter {
+            guard !$0.isWarmup, $0.targetPercentage1RM != nil else { return false }
+            return $0.usedMappedSourceLift == true
+        }
+
+        #expect(!mappedRows.isEmpty)
+        for row in mappedRows {
+            guard
+                let mapping = FocusTemplateLibrary.loadMapping(for: row.exerciseName),
+                let sourceORM = input.oneRepMaxes[mapping.sourceLift],
+                let pct = row.targetPercentage1RM
+            else {
+                Issue.record("Mapped row missing source mapping context for \(row.exerciseName)")
+                continue
+            }
+
+            let effectiveORM = sourceORM.weight * mapping.multiplier
+            let expectedWeight = roundToProgramIncrement(pct * effectiveORM, unit: sourceORM.unit)
+
+            #expect(row.baseLiftUsed == mapping.sourceLift)
+            #expect(row.effectiveOneRepMax != nil)
+            #expect(row.prescribedWeightUnit == sourceORM.unit)
+            #expect(row.prescribedWeight != nil)
+            #expect(abs((row.prescribedWeight ?? 0) - expectedWeight) < 0.0001)
+        }
+    }
+
+    @Test func topSetBackoffOrderingIsValid() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let input = ProgramGenerationInput(
+            focus: .increaseMaxBench,
+            level: .advanced,
+            durationWeeks: 8,
+            sessionsPerWeek: 4,
+            oneRepMaxes: [
+                "Bench Press": (weight: 285, unit: "lbs"),
+                "Overhead Press": (weight: 175, unit: "lbs"),
+            ]
+        )
+
+        let program = service.generateProgram(input: input, context: context, shuffleSeed: 409)
+
+        var sawTopBackoff = false
+        for week in program.weeks {
+            for session in week.sessions {
+                let ordered = session.exercises.sorted { $0.orderIndex < $1.orderIndex }
+                let grouped = Dictionary(grouping: ordered) { $0.topBackoffGroupID ?? UUID() }
+
+                for (_, rows) in grouped {
+                    let topRows = rows.filter { $0.workingSetStyle == .topSet }
+                    let backoffRows = rows.filter { $0.workingSetStyle == .backoff }
+                    guard !topRows.isEmpty || !backoffRows.isEmpty else { continue }
+
+                    sawTopBackoff = true
+                    #expect(!topRows.isEmpty)
+                    #expect(!backoffRows.isEmpty)
+
+                    let topIndex = topRows.map(\.orderIndex).min() ?? Int.max
+                    let backoffIndex = backoffRows.map(\.orderIndex).min() ?? Int.max
+                    #expect(topIndex < backoffIndex)
+
+                    let warmupRows = rows.filter(\.isWarmup)
+                    if let firstWorking = rows.filter({ !$0.isWarmup }).map(\.orderIndex).min() {
+                        for warmup in warmupRows {
+                            #expect(warmup.orderIndex < firstWorking)
+                        }
+                    }
+                }
+            }
+        }
+
+        #expect(sawTopBackoff)
+    }
+
+    @Test func volumeAndFatigueAccountingStayWithinSafeBounds() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let focuses: [ProgramFocus] = [
+            .increaseMaxSquat,
+            .powerbuilding,
+            .generalFitness,
+            .bodybuilding,
+            .cardioEndurance,
+        ]
+
+        for focus in focuses {
+            let input = makeInput(
+                focus: focus,
+                level: .intermediate,
+                durationWeeks: 8,
+                sessionsPerWeek: max(3, FocusTemplateLibrary.template(for: focus).minimumFrequency)
+            )
+            let program = service.generateProgram(
+                input: input,
+                context: context,
+                shuffleSeed: deterministicSeed(for: focus, offset: 3)
+            )
+            let summaries = service.weeklySummary(for: program)
+            let budgets = ProgramExerciseMetadataService.fatigueBudgets(
+                focus: focus,
+                level: .intermediate,
+                sessionsPerWeek: program.sessionsPerWeek
+            )
+
+            for week in summaries {
+                #expect(week.totalFatigueScore >= 0)
+                #expect(week.totalFatigueScore <= (budgets.weekBudget * 1.10))
+
+                for muscle in ProgramVolumeMuscle.allCases {
+                    #expect((week.totalHardSetsByMuscle[muscle] ?? 0) >= 0)
+                }
+
+                for sessionSummary in week.sessionSummaries {
+                    #expect(sessionSummary.fatigueScore <= (budgets.sessionBudget * 1.10))
+                }
+            }
+        }
+    }
+
+    @Test func deloadWeeksAppearAtExpectedPositions() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let beginner = service.generateProgram(
+            input: makeInput(focus: .increaseMaxSquat, level: .beginner, durationWeeks: 12, sessionsPerWeek: 4),
+            context: context,
+            shuffleSeed: 601
+        )
+        let intermediate = service.generateProgram(
+            input: makeInput(focus: .increaseMaxBench, level: .intermediate, durationWeeks: 12, sessionsPerWeek: 4),
+            context: context,
+            shuffleSeed: 701
+        )
+
+        #expect(deloadWeeks(in: beginner) == [4, 8, 12])
+        #expect(deloadWeeks(in: intermediate) == [4, 8, 12])
+
+        let advancedExpectations: [Int: [Int]] = [
+            6: [3],
+            8: [4, 8],
+            10: [4, 8],
+            12: [5, 9, 12],
+        ]
+        for (duration, expectedDeloadWeeks) in advancedExpectations {
+            let advanced = service.generateProgram(
+                input: makeInput(
+                    focus: .increaseMaxDeadlift,
+                    level: .advanced,
+                    durationWeeks: duration,
+                    sessionsPerWeek: 4
+                ),
+                context: context,
+                shuffleSeed: 801 + duration
+            )
+            #expect(deloadWeeks(in: advanced) == expectedDeloadWeeks)
+        }
+    }
+
+    @Test func reviewGroupingKeepsWarmupsAndGroupedLiftsStable() {
+        let rows: [ProgramSessionExercise] = [
+            ProgramSessionExercise(exerciseName: "Back Squats", orderIndex: 0, targetSets: 1, targetReps: 3, isWarmup: true),
+            ProgramSessionExercise(exerciseName: "Back Squats", orderIndex: 1, targetSets: 1, targetReps: 3, isWarmup: true),
+            ProgramSessionExercise(exerciseName: "Back Squats", orderIndex: 2, targetSets: 1, targetReps: 3, isWarmup: true),
+            ProgramSessionExercise(exerciseName: "Back Squats", orderIndex: 3, targetSets: 1, targetReps: 2, workingSetStyle: .topSet),
+            ProgramSessionExercise(exerciseName: "Back Squats", orderIndex: 4, targetSets: 3, targetReps: 4, workingSetStyle: .backoff),
+            ProgramSessionExercise(exerciseName: "Bench Press", orderIndex: 5, targetSets: 1, targetReps: 5, isWarmup: true),
+            ProgramSessionExercise(exerciseName: "Bench Press", orderIndex: 6, targetSets: 1, targetReps: 5, isWarmup: true),
+            ProgramSessionExercise(exerciseName: "Bench Press", orderIndex: 7, targetSets: 4, targetReps: 5, workingSetStyle: .straight),
+            ProgramSessionExercise(exerciseName: "Deadlift", orderIndex: 8, targetSets: 1, targetReps: 3, isWarmup: true),
+        ]
+
+        let groups = ProgramReviewGrouping.groupedExercises(from: rows)
+
+        #expect(groups.count == 4)
+        #expect(groups[0].workingSet.exerciseName == "Back Squats")
+        #expect(groups[0].warmupSets.count == 3)
+        #expect(groups[1].workingSet.exerciseName == "Back Squats")
+        #expect(groups[1].warmupSets.isEmpty)
+        #expect(groups[2].workingSet.exerciseName == "Bench Press")
+        #expect(groups[2].warmupSets.count == 2)
+        #expect(groups[3].workingSet.exerciseName == "Deadlift")
+        #expect(groups[3].warmupSets.isEmpty)
+    }
+
+    // MARK: Helpers
+
+    private func makeInput(
+        focus: ProgramFocus,
+        level: ProgramLevel,
+        durationWeeks: Int,
+        sessionsPerWeek: Int
+    ) -> ProgramGenerationInput {
+        let template = FocusTemplateLibrary.template(for: focus)
+        var oneRepMaxes: [String: (weight: Double, unit: String)] = [:]
+        for (idx, lift) in template.requiredLifts.enumerated() {
+            oneRepMaxes[lift] = (weight: 185 + Double(idx * 25), unit: "lbs")
+        }
+        return ProgramGenerationInput(
+            focus: focus,
+            level: level,
+            durationWeeks: durationWeeks,
+            sessionsPerWeek: sessionsPerWeek,
+            oneRepMaxes: oneRepMaxes
+        )
+    }
+
+    private func makeInMemoryContainer() throws -> ModelContainer {
+        let schema = Schema([
+            MuscleGroup.self,
+            Exercise.self,
+            Workout.self,
+            ExerciseEntry.self,
+            SetEntry.self,
+            PersonalRecord.self,
+            TrainingProgram.self,
+            ProgramWeekTemplate.self,
+            ProgramSessionTemplate.self,
+            ProgramSessionExercise.self,
+            ProgramRun.self,
+        ])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        return try ModelContainer(for: schema, configurations: [config])
+    }
+
+    private func resolvedFrequency(for template: FocusTemplate, requested: Int) -> Int {
+        let supported = template.sessionDefinitions.keys.sorted()
+        guard let closest = supported.min(by: { abs($0 - requested) < abs($1 - requested) }) else {
+            return requested
+        }
+        return template.sessionDefinitions[closest]?.count ?? closest
+    }
+
+    private func flattenedExercises(from program: TrainingProgram) -> [ProgramSessionExercise] {
+        program.weeks
+            .flatMap(\.sessions)
+            .flatMap(\.exercises)
+            .sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    private func roundToProgramIncrement(_ value: Double, unit: String) -> Double {
+        if unit == "lbs" {
+            return max(5.0, (value / 5.0).rounded() * 5.0)
+        }
+        return max(2.5, (value / 2.5).rounded() * 2.5)
+    }
+
+    private func deloadWeeks(in program: TrainingProgram) -> [Int] {
+        program.weeks
+            .filter(\.isDeloadWeek)
+            .map(\.weekNumber)
+            .sorted()
+    }
+
+    private func deterministicSeed(for focus: ProgramFocus, offset: Int) -> Int {
+        abs(focus.rawValue.hashValue) + (offset * 97) + 1
+    }
+}

@@ -15,6 +15,8 @@ final class ProgramSessionTemplate {
     var sessionNumber: Int
     /// Optional descriptive name shown after the session number, e.g. "Heavy Squat Day".
     var sessionName: String?
+    /// Planned fatigue score computed from generated prescription.
+    var plannedFatigueScore: Double?
 
     var week: ProgramWeekTemplate?
 
@@ -24,10 +26,12 @@ final class ProgramSessionTemplate {
     init(
         id: UUID = UUID(),
         sessionNumber: Int,
-        sessionName: String? = nil
+        sessionName: String? = nil,
+        plannedFatigueScore: Double? = nil
     ) {
         self.id = id
         self.sessionNumber = sessionNumber
         self.sessionName = sessionName
+        self.plannedFatigueScore = plannedFatigueScore
     }
 }

@@ -25,6 +25,16 @@ final class TrainingProgram {
     var createdDate: Date
     var source: ProgramSource
     var descriptionText: String?
+    /// Generation model metadata for explainability and future adaptive progression.
+    var progressionModel: ProgramProgressionModel?
+    /// True when mapped variation loads (source lift × multiplier) were used.
+    var usedLiftMapping: Bool?
+    /// True when accessory selection used weekly volume balancing.
+    var usedVolumeBalancing: Bool?
+    /// True when accessory selection used fatigue-aware budgets.
+    var usedFatigueBalancing: Bool?
+    /// True when top set + backoff generation logic was applied to at least one lift.
+    var usedTopSetBackoff: Bool?
 
     @Relationship(deleteRule: .cascade, inverse: \ProgramWeekTemplate.program)
     var weeks: [ProgramWeekTemplate] = []
@@ -36,7 +46,12 @@ final class TrainingProgram {
         sessionsPerWeek: Int,
         createdDate: Date = Date(),
         source: ProgramSource = .userCreated,
-        descriptionText: String? = nil
+        descriptionText: String? = nil,
+        progressionModel: ProgramProgressionModel? = nil,
+        usedLiftMapping: Bool? = nil,
+        usedVolumeBalancing: Bool? = nil,
+        usedFatigueBalancing: Bool? = nil,
+        usedTopSetBackoff: Bool? = nil
     ) {
         self.id = id
         self.name = name
@@ -45,5 +60,10 @@ final class TrainingProgram {
         self.createdDate = createdDate
         self.source = source
         self.descriptionText = descriptionText
+        self.progressionModel = progressionModel
+        self.usedLiftMapping = usedLiftMapping
+        self.usedVolumeBalancing = usedVolumeBalancing
+        self.usedFatigueBalancing = usedFatigueBalancing
+        self.usedTopSetBackoff = usedTopSetBackoff
     }
 }

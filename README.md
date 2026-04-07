@@ -453,6 +453,40 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 10 [Adaptive Foundation + Program Logic Review + Feature 4 Validation] — 2026-04-07
+- Added additive generation-assumption scaffolding (no full autoregulation loop yet):
+  - new metadata enums in `ProgramGenerationMetadata.swift` (`ProgramProgressionModel`, `ProgramProgressionPhase`, `ProgramTargetEffortType`)
+  - `TrainingProgram` now stores generation logic flags: progression model, lift mapping usage, volume balancing usage, fatigue balancing usage, and top-set/backoff usage
+  - `ProgramWeekTemplate` now stores `isDeloadWeek`, `progressionPhase`, and planned weekly fatigue
+  - `ProgramSessionTemplate` now stores planned session fatigue
+  - `ProgramSessionExercise` now stores assumption fields: base lift used, effective 1RM used, mapped-lift flag, progression phase, estimated fatigue score, target effort type, optional target RIR, and top/backoff grouping id
+- Added explicit future comparison anchors for completed workouts:
+  - `ExerciseEntry` now snapshots source prescription metadata (`sourceProgramSessionExerciseID`, prescribed sets/reps/%/RPE/RIR/weight/style/effort type)
+  - new `ProgramOutcomeComparisonService.swift` with `buildComparison(for:)` and TODO markers for:
+    - reactive deloads
+    - performance-based progression
+    - adherence scoring
+    - next-week adjustments
+- Generator behavior hardening:
+  - generation now records the resolved session frequency on `TrainingProgram` (instead of trusting raw requested frequency when snapping to template-supported frequencies)
+  - deterministic generation helper added for validation (`generateProgram(..., shuffleSeed:)`)
+- `ProgramReviewView` upgraded for explainability while preserving existing phase/week/session expand-collapse behavior:
+  - compact `Program Logic` section added near the summary header (progression model, lift mapping, volume balancing, fatigue balancing, top set + backoff)
+  - optional compact week-level summary rows added under expanded weeks (weekly fatigue + hard-set chips by muscle group)
+  - warmup/grouped lift logic extracted to `ProgramReviewGrouping.swift` for shared usage and regression validation
+- Added Feature 4 validation coverage in `Feature4GeneratorValidationTests.swift`:
+  - verifies week/session shape across all focuses
+  - verifies minimum-frequency resolution
+  - verifies mapped variation weight derivation when source 1RMs exist
+  - verifies top-set/backoff ordering
+  - verifies non-negative volume accounting + fatigue budget guardrails
+  - verifies expected deload week placement
+  - verifies review grouping stability for warmups/grouped lifts
+- Implementation note:
+  - this prompt intentionally lays adaptive architecture groundwork and validation safety nets without shipping reactive progression/autoregulation decisions yet
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

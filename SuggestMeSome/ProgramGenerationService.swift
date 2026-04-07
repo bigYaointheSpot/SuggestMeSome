@@ -52,6 +52,15 @@ struct ProgramGenerationService {
         buildProgram(input: input, context: context, shuffleSeed: Int.random(in: 1..<Int.max))
     }
 
+    /// Deterministic helper used by validation paths and tests.
+    func generateProgram(
+        input: ProgramGenerationInput,
+        context: ModelContext,
+        shuffleSeed: Int
+    ) -> TrainingProgram {
+        buildProgram(input: input, context: context, shuffleSeed: shuffleSeed)
+    }
+
     /// Generates a program using different random accessory selections than a previous call.
     func regenerateProgram(input: ProgramGenerationInput, context: ModelContext) -> TrainingProgram {
         buildProgram(input: input, context: context, shuffleSeed: Int.random(in: 1..<Int.max))
@@ -123,6 +132,18 @@ struct ProgramGenerationService {
             }
     }
 
+    private func stampPlannedFatigueSummaries(on program: TrainingProgram) {
+        let byWeek = Dictionary(uniqueKeysWithValues: weeklySummary(for: program).map { ($0.weekNumber, $0) })
+        for week in program.weeks {
+            guard let summary = byWeek[week.weekNumber] else { continue }
+            week.plannedFatigueScore = summary.totalFatigueScore
+            let bySession = Dictionary(uniqueKeysWithValues: summary.sessionSummaries.map { ($0.sessionNumber, $0) })
+            for session in week.sessions {
+                session.plannedFatigueScore = bySession[session.sessionNumber]?.fatigueScore
+            }
+        }
+    }
+
     // MARK: - Core Builder
 
     private func buildProgram(
@@ -135,14 +156,23 @@ struct ProgramGenerationService {
 
         // Step 2: Select session definitions for chosen frequency
         let sessionDefs = resolvedSessionDefs(from: template, frequency: input.sessionsPerWeek)
+        let resolvedFrequency = max(1, sessionDefs.count)
+        let progressionModel = progressionModel(for: input.level)
+        var usedLiftMapping = false
+        var usedTopSetBackoff = false
 
         // Step 5: Create TrainingProgram
         let program = TrainingProgram(
             name: "\(template.displayName) — \(input.level.rawValue.capitalized) \(input.durationWeeks)wk",
             lengthInWeeks: input.durationWeeks,
-            sessionsPerWeek: input.sessionsPerWeek,
+            sessionsPerWeek: resolvedFrequency,
             source: .aiGenerated,
-            descriptionText: periodizationDescription(for: input.level)
+            descriptionText: periodizationDescription(for: input.level),
+            progressionModel: progressionModel,
+            usedLiftMapping: false,
+            usedVolumeBalancing: true,
+            usedFatigueBalancing: true,
+            usedTopSetBackoff: false
         )
         context.insert(program)
 
@@ -155,13 +185,17 @@ struct ProgramGenerationService {
             schedules: schedules,
             focus: input.focus,
             level: input.level,
-            sessionsPerWeek: input.sessionsPerWeek,
+            sessionsPerWeek: resolvedFrequency,
             seed: shuffleSeed
         )
 
         // Step 4: Build week-by-week structure
         for schedule in schedules {
-            let weekTemplate = ProgramWeekTemplate(weekNumber: schedule.weekNumber)
+            let weekTemplate = ProgramWeekTemplate(
+                weekNumber: schedule.weekNumber,
+                isDeloadWeek: schedule.isDeload,
+                progressionPhase: weekProgressionPhase(for: input.level, schedule: schedule)
+            )
             context.insert(weekTemplate)
             weekTemplate.program = program
 
@@ -182,9 +216,11 @@ struct ProgramGenerationService {
                         primary, isPrimary: true,
                         focus: input.focus,
                         schedule: schedule, sessionIdx: sessionIdx,
-                        sessionsPerWeek: input.sessionsPerWeek, level: input.level,
+                        sessionsPerWeek: resolvedFrequency, level: input.level,
                         oneRepMaxes: input.oneRepMaxes,
-                        session: sessionTemplate, orderIdx: orderIdx, context: context
+                        session: sessionTemplate, orderIdx: orderIdx, context: context,
+                        usedLiftMapping: &usedLiftMapping,
+                        usedTopSetBackoff: &usedTopSetBackoff
                     )
                 }
 
@@ -193,13 +229,19 @@ struct ProgramGenerationService {
                         accessory, isPrimary: false,
                         focus: input.focus,
                         schedule: schedule, sessionIdx: sessionIdx,
-                        sessionsPerWeek: input.sessionsPerWeek, level: input.level,
+                        sessionsPerWeek: resolvedFrequency, level: input.level,
                         oneRepMaxes: input.oneRepMaxes,
-                        session: sessionTemplate, orderIdx: orderIdx, context: context
+                        session: sessionTemplate, orderIdx: orderIdx, context: context,
+                        usedLiftMapping: &usedLiftMapping,
+                        usedTopSetBackoff: &usedTopSetBackoff
                     )
                 }
             }
         }
+
+        program.usedLiftMapping = usedLiftMapping
+        program.usedTopSetBackoff = usedTopSetBackoff
+        stampPlannedFatigueSummaries(on: program)
 
         return program
     }
@@ -218,9 +260,18 @@ struct ProgramGenerationService {
         oneRepMaxes: [String: (weight: Double, unit: String)],
         session: ProgramSessionTemplate,
         orderIdx: Int,
-        context: ModelContext
+        context: ModelContext,
+        usedLiftMapping: inout Bool,
+        usedTopSetBackoff: inout Bool
     ) -> Int {
         var idx = orderIdx
+        let phase = progressionPhase(
+            for: level,
+            schedule: schedule,
+            sessionIdx: sessionIdx,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let topBackoffGroupID = UUID()
 
         // Cardio exercises: encode target duration as targetReps (minutes); no sets.
         if templateEx.role == .cardio {
@@ -229,7 +280,10 @@ struct ProgramGenerationService {
                 exerciseName: templateEx.exerciseName,
                 orderIndex: idx,
                 targetSets: nil,
-                targetReps: mins
+                targetReps: mins,
+                targetEffortType: .none,
+                progressionPhase: phase,
+                estimatedFatigueScore: Double(mins) * 0.08
             )
             context.insert(ex)
             ex.session = session
@@ -260,11 +314,12 @@ struct ProgramGenerationService {
         if isPrimary, let workingPct = warmupReferencePct, !schedule.isDeload {
             for (i, multiplier) in [0.40, 0.55, 0.70].enumerated() {
                 let warmupPct = workingPct * multiplier
-                let wt = computePrescribedWeight(
+                let load = computePrescribedLoadContext(
                     exercise: templateEx,
                     percentage1RM: warmupPct,
                     oneRepMaxes: oneRepMaxes
                 )
+                usedLiftMapping = usedLiftMapping || load.usedMappedSourceLift
                 let warmup = ProgramSessionExercise(
                     exerciseName: templateEx.exerciseName,
                     orderIndex: idx + i,
@@ -272,9 +327,21 @@ struct ProgramGenerationService {
                     targetReps: params.reps,
                     targetPercentage1RM: warmupPct,
                     isWarmup: true,
-                    prescribedWeight: wt?.weight,
-                    prescribedWeightUnit: wt?.unit
+                    prescribedWeight: load.prescribedWeight,
+                    prescribedWeightUnit: load.prescribedWeightUnit,
+                    targetEffortType: resolveTargetEffortType(
+                        percentage1RM: warmupPct,
+                        targetRPE: nil,
+                        targetRIR: nil
+                    ),
+                    baseLiftUsed: load.baseLiftUsed,
+                    effectiveOneRepMax: load.effectiveOneRepMax,
+                    effectiveOneRepMaxUnit: load.effectiveOneRepMaxUnit,
+                    usedMappedSourceLift: load.usedMappedSourceLift,
+                    progressionPhase: phase,
+                    topBackoffGroupID: topBackoffGroupID
                 )
+                warmup.estimatedFatigueScore = estimateLoad(for: warmup).fatigueScore
                 context.insert(warmup)
                 warmup.session = session
             }
@@ -282,11 +349,15 @@ struct ProgramGenerationService {
         }
 
         for block in workingBlocks {
-            let wt = computePrescribedWeight(
+            let load = computePrescribedLoadContext(
                 exercise: templateEx,
                 percentage1RM: block.percentage1RM,
                 oneRepMaxes: oneRepMaxes
             )
+            usedLiftMapping = usedLiftMapping || load.usedMappedSourceLift
+            if block.style == .topSet || block.style == .backoff {
+                usedTopSetBackoff = true
+            }
             let working = ProgramSessionExercise(
                 exerciseName: templateEx.exerciseName,
                 orderIndex: idx,
@@ -294,11 +365,23 @@ struct ProgramGenerationService {
                 targetReps: block.reps,
                 targetPercentage1RM: block.percentage1RM,
                 targetRPE: block.rpe,
-                prescribedWeight: wt?.weight,
-                prescribedWeightUnit: wt?.unit,
+                prescribedWeight: load.prescribedWeight,
+                prescribedWeightUnit: load.prescribedWeightUnit,
                 workingSetStyle: block.style,
-                backoffPercentageDrop: block.backoffDrop
+                backoffPercentageDrop: block.backoffDrop,
+                targetEffortType: resolveTargetEffortType(
+                    percentage1RM: block.percentage1RM,
+                    targetRPE: block.rpe,
+                    targetRIR: nil
+                ),
+                baseLiftUsed: load.baseLiftUsed,
+                effectiveOneRepMax: load.effectiveOneRepMax,
+                effectiveOneRepMaxUnit: load.effectiveOneRepMaxUnit,
+                usedMappedSourceLift: load.usedMappedSourceLift,
+                progressionPhase: phase,
+                topBackoffGroupID: topBackoffGroupID
             )
+            working.estimatedFatigueScore = estimateLoad(for: working).fatigueScore
             context.insert(working)
             working.session = session
             idx += 1
@@ -306,24 +389,50 @@ struct ProgramGenerationService {
         return idx
     }
 
-    private func computePrescribedWeight(
+    private struct PrescribedLoadContext {
+        let prescribedWeight: Double?
+        let prescribedWeightUnit: String?
+        let baseLiftUsed: String?
+        let effectiveOneRepMax: Double?
+        let effectiveOneRepMaxUnit: String?
+        let usedMappedSourceLift: Bool
+    }
+
+    private func computePrescribedLoadContext(
         exercise: TemplateExercise,
         percentage1RM: Double?,
         oneRepMaxes: [String: (weight: Double, unit: String)]
-    ) -> (weight: Double, unit: String)? {
-        guard let pct = percentage1RM else { return nil }
+    ) -> PrescribedLoadContext {
+        let baseLift: String?
+        let effectiveORM: (weight: Double, unit: String)?
+        let usedMapped: Bool
 
-        let orm: (weight: Double, unit: String)?
         if let direct = oneRepMaxes[exercise.exerciseName] {
-            orm = direct
+            baseLift = exercise.exerciseName
+            effectiveORM = direct
+            usedMapped = false
         } else if let sourceLift = exercise.loadSourceLift, let sourceORM = oneRepMaxes[sourceLift] {
             let multiplier = exercise.loadMultiplier ?? 1.0
-            orm = (weight: sourceORM.weight * multiplier, unit: sourceORM.unit)
+            baseLift = sourceLift
+            effectiveORM = (weight: sourceORM.weight * multiplier, unit: sourceORM.unit)
+            usedMapped = true
         } else {
-            orm = nil
+            baseLift = nil
+            effectiveORM = nil
+            usedMapped = false
         }
 
-        guard let orm else { return nil }
+        guard let pct = percentage1RM, let orm = effectiveORM else {
+            return PrescribedLoadContext(
+                prescribedWeight: nil,
+                prescribedWeightUnit: nil,
+                baseLiftUsed: baseLift,
+                effectiveOneRepMax: effectiveORM?.weight,
+                effectiveOneRepMaxUnit: effectiveORM?.unit,
+                usedMappedSourceLift: usedMapped
+            )
+        }
+
         let raw = pct * orm.weight
         let rounded: Double
         if orm.unit == "lbs" {
@@ -331,7 +440,14 @@ struct ProgramGenerationService {
         } else {
             rounded = max(2.5, (raw / 2.5).rounded() * 2.5)
         }
-        return (weight: rounded, unit: orm.unit)
+        return PrescribedLoadContext(
+            prescribedWeight: rounded,
+            prescribedWeightUnit: orm.unit,
+            baseLiftUsed: baseLift,
+            effectiveOneRepMax: orm.weight,
+            effectiveOneRepMaxUnit: orm.unit,
+            usedMappedSourceLift: usedMapped
+        )
     }
 
     private struct WorkingSetBlock {
@@ -431,6 +547,67 @@ struct ProgramGenerationService {
             return min(8, max(4, baseReps + max(2, repDelta + 1)))
         }
         return min(15, max(1, baseReps + repDelta))
+    }
+
+    private func progressionModel(for level: ProgramLevel) -> ProgramProgressionModel {
+        switch level {
+        case .beginner: return .linear
+        case .intermediate: return .dup
+        case .advanced: return .block
+        }
+    }
+
+    private func weekProgressionPhase(for level: ProgramLevel, schedule: WeekSchedule) -> ProgramProgressionPhase {
+        if schedule.isDeload { return .deload }
+        switch level {
+        case .beginner: return .linearWorking
+        case .intermediate: return .dupModerate
+        case .advanced:
+            switch schedule.advancedPhase {
+            case .hypertrophy: return .hypertrophy
+            case .strength: return .strength
+            case .peaking: return .peaking
+            case .none: return .hypertrophy
+            }
+        }
+    }
+
+    private func progressionPhase(
+        for level: ProgramLevel,
+        schedule: WeekSchedule,
+        sessionIdx: Int,
+        sessionsPerWeek: Int
+    ) -> ProgramProgressionPhase {
+        if schedule.isDeload { return .deload }
+
+        switch level {
+        case .beginner:
+            return .linearWorking
+        case .intermediate:
+            switch dupTier(sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek) {
+            case .heavy: return .dupHeavy
+            case .moderate: return .dupModerate
+            case .light: return .dupLight
+            }
+        case .advanced:
+            switch schedule.advancedPhase {
+            case .hypertrophy: return .hypertrophy
+            case .strength: return .strength
+            case .peaking: return .peaking
+            case .none: return .hypertrophy
+            }
+        }
+    }
+
+    private func resolveTargetEffortType(
+        percentage1RM: Double?,
+        targetRPE: Double?,
+        targetRIR: Double?
+    ) -> ProgramTargetEffortType {
+        if percentage1RM != nil { return .percentage1RM }
+        if targetRIR != nil { return .rir }
+        if targetRPE != nil { return .rpe }
+        return .none
     }
 
     // MARK: - Periodization Parameter Computation
@@ -922,6 +1099,17 @@ struct ProgramGenerationService {
                             sessionsPerWeek: sessionsPerWeek
                         )
 
+                        if violatesFatigueBudgets(
+                            estimate: estimate,
+                            currentWeekFatigue: weeklyFatigue,
+                            currentSessionFatigue: sessionFatigue[sessionIdx],
+                            previousSessionFatigue: previousSessionFatigue,
+                            fatigueBudgets: fatigueBudgets,
+                            isDeadliftHeavySession: isDeadliftHeavy
+                        ) {
+                            continue
+                        }
+
                         let lastUsed = lastUsedWeekBySession[sessionIdx]?[candidate.exerciseName]
                         let score = scoreAccessoryCandidate(
                             estimate: estimate,
@@ -966,6 +1154,29 @@ struct ProgramGenerationService {
         }
 
         return planByWeek
+    }
+
+    private func violatesFatigueBudgets(
+        estimate: ExerciseLoadEstimate,
+        currentWeekFatigue: Double,
+        currentSessionFatigue: Double,
+        previousSessionFatigue: Double,
+        fatigueBudgets: ProgramFatigueBudgets,
+        isDeadliftHeavySession: Bool
+    ) -> Bool {
+        let sessionBudget = isDeadliftHeavySession
+            ? fatigueBudgets.deadliftSessionBudget
+            : fatigueBudgets.sessionBudget
+        let projectedSessionFatigue = currentSessionFatigue + estimate.fatigueScore
+        if projectedSessionFatigue > sessionBudget { return true }
+
+        let projectedWeekFatigue = currentWeekFatigue + estimate.fatigueScore
+        if projectedWeekFatigue > fatigueBudgets.weekBudget { return true }
+
+        let projectedAdjacentFatigue = previousSessionFatigue + projectedSessionFatigue
+        if projectedAdjacentFatigue > fatigueBudgets.adjacentSessionPairBudget { return true }
+
+        return false
     }
 
     private func scoreAccessoryCandidate(

@@ -19,6 +19,14 @@ struct ReviewPhaseGroup: Identifiable {
     let isDeload: Bool
 }
 
+private struct ProgramLogicSnapshot {
+    let progressionModel: String
+    let usedLiftMapping: Bool
+    let usedVolumeBalancing: Bool
+    let usedFatigueBalancing: Bool
+    let usedTopSetBackoff: Bool
+}
+
 // MARK: - Phase Helpers
 
 private func buildPhaseGroups(
@@ -28,8 +36,11 @@ private func buildPhaseGroups(
     let sorted = weeks.sorted { $0.weekNumber < $1.weekNumber }
     switch input.level {
     case .beginner, .intermediate:
-        let workingWeeks = sorted.filter { $0.weekNumber % 4 != 0 }
-        let deloadWeeks  = sorted.filter { $0.weekNumber % 4 == 0 }
+        let isDeload: (ProgramWeekTemplate) -> Bool = { week in
+            week.isDeloadWeek || (week.weekNumber % 4 == 0)
+        }
+        let workingWeeks = sorted.filter { !isDeload($0) }
+        let deloadWeeks  = sorted.filter(isDeload)
         let scheme = input.level == .beginner
             ? "Linear: template-anchor %1RM with small weekly increases"
             : "DUP: heavy/moderate/light anchor-relative intensity shifts"
@@ -176,7 +187,12 @@ private func exerciseDisplayText(
                 ? "\(Int(w)) \(unit)"
                 : String(format: "%.1f \(unit)", w)
             var detail = "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
-            if let rpe = exercise.targetRPE {
+            if let rir = exercise.targetRIR {
+                let rirStr = rir.truncatingRemainder(dividingBy: 1) == 0
+                    ? String(Int(rir))
+                    : String(format: "%.1f", rir)
+                detail += " · RIR \(rirStr)"
+            } else if let rpe = exercise.targetRPE {
                 let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
                     ? String(Int(rpe))
                     : String(format: "%.1f", rpe)
@@ -199,7 +215,12 @@ private func exerciseDisplayText(
                 ? "\(Int(rounded)) \(orm.unit)"
                 : String(format: "%.1f \(orm.unit)", rounded)
             var detail = "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
-            if let rpe = exercise.targetRPE {
+            if let rir = exercise.targetRIR {
+                let rirStr = rir.truncatingRemainder(dividingBy: 1) == 0
+                    ? String(Int(rir))
+                    : String(format: "%.1f", rir)
+                detail += " · RIR \(rirStr)"
+            } else if let rpe = exercise.targetRPE {
                 let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
                     ? String(Int(rpe))
                     : String(format: "%.1f", rpe)
@@ -211,7 +232,12 @@ private func exerciseDisplayText(
             return detail
         }
         var detail = "\(sStr)×\(rStr) @ \(pctInt)%"
-        if let rpe = exercise.targetRPE {
+        if let rir = exercise.targetRIR {
+            let rirStr = rir.truncatingRemainder(dividingBy: 1) == 0
+                ? String(Int(rir))
+                : String(format: "%.1f", rir)
+            detail += " · RIR \(rirStr)"
+        } else if let rpe = exercise.targetRPE {
             let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
                 ? String(Int(rpe))
                 : String(format: "%.1f", rpe)
@@ -221,6 +247,13 @@ private func exerciseDisplayText(
             detail += String(format: " · -%.0f%%", drop * 100.0)
         }
         return detail
+    }
+
+    if let rir = exercise.targetRIR {
+        let rirStr = rir.truncatingRemainder(dividingBy: 1) == 0
+            ? String(Int(rir))
+            : String(format: "%.1f", rir)
+        return "\(sStr)×\(rStr) @ RIR \(rirStr)"
     }
 
     if let rpe = exercise.targetRPE {
@@ -251,38 +284,6 @@ private func workingSetStyleColor(for exercise: ProgramSessionExercise) -> Color
     }
 }
 
-// MARK: - Exercise Grouping
-
-private struct ExerciseGroup: Identifiable {
-    let id: UUID
-    let workingSet: ProgramSessionExercise
-    let warmupSets: [ProgramSessionExercise]
-}
-
-private func groupedExercises(from exercises: [ProgramSessionExercise]) -> [ExerciseGroup] {
-    var groups: [ExerciseGroup] = []
-    var pendingWarmups: [ProgramSessionExercise] = []
-
-    for ex in exercises {
-        if ex.isWarmup {
-            pendingWarmups.append(ex)
-        } else {
-            let matching  = pendingWarmups.filter { $0.exerciseName == ex.exerciseName }
-            let unmatched = pendingWarmups.filter { $0.exerciseName != ex.exerciseName }
-            for w in unmatched {
-                groups.append(ExerciseGroup(id: w.id, workingSet: w, warmupSets: []))
-            }
-            groups.append(ExerciseGroup(id: ex.id, workingSet: ex, warmupSets: matching))
-            pendingWarmups = []
-        }
-    }
-    // Trailing warmups without a working set (defensive)
-    for w in pendingWarmups {
-        groups.append(ExerciseGroup(id: w.id, workingSet: w, warmupSets: []))
-    }
-    return groups
-}
-
 // MARK: - ProgramReviewView
 
 struct ProgramReviewView: View {
@@ -292,6 +293,7 @@ struct ProgramReviewView: View {
     let onRegenerate: () -> Void
 
     @Environment(\.modelContext) private var modelContext
+    private let generationService = ProgramGenerationService()
 
     @State private var editableName: String = ""
     @State private var isEditingName = false
@@ -305,6 +307,38 @@ struct ProgramReviewView: View {
 
     private var groups: [ReviewPhaseGroup] {
         buildPhaseGroups(input: input, weeks: program.weeks)
+    }
+
+    private var weeklySummariesByWeek: [Int: ProgramGeneratedWeekSummary] {
+        Dictionary(
+            uniqueKeysWithValues: generationService.weeklySummary(for: program).map { ($0.weekNumber, $0) }
+        )
+    }
+
+    private var programLogic: ProgramLogicSnapshot {
+        let mapped = program.usedLiftMapping
+            ?? program.weeks.flatMap(\.sessions).flatMap(\.exercises).contains { $0.usedMappedSourceLift == true }
+        let topBackoff = program.usedTopSetBackoff
+            ?? program.weeks.flatMap(\.sessions).flatMap(\.exercises).contains {
+                $0.workingSetStyle == .topSet || $0.workingSetStyle == .backoff
+            }
+        let progressionName = (program.progressionModel ?? fallbackProgressionModel).displayName
+
+        return ProgramLogicSnapshot(
+            progressionModel: progressionName,
+            usedLiftMapping: mapped,
+            usedVolumeBalancing: program.usedVolumeBalancing ?? true,
+            usedFatigueBalancing: program.usedFatigueBalancing ?? true,
+            usedTopSetBackoff: topBackoff
+        )
+    }
+
+    private var fallbackProgressionModel: ProgramProgressionModel {
+        switch input.level {
+        case .beginner: return .linear
+        case .intermediate: return .dup
+        case .advanced: return .block
+        }
     }
 
     var body: some View {
@@ -367,9 +401,11 @@ struct ProgramReviewView: View {
                 levelBadge
                 Text("\(input.durationWeeks) weeks")
                     .badgeStyle()
-                Text("\(input.sessionsPerWeek)/week")
+                Text("\(program.sessionsPerWeek)/week")
                     .badgeStyle()
             }
+
+            programLogicSection
 
             // Periodization description
             if let desc = program.descriptionText {
@@ -389,6 +425,43 @@ struct ProgramReviewView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
+    }
+
+    private var programLogicSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Program Logic")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 6) {
+                logicRow("Progression", value: programLogic.progressionModel)
+                logicRow("Lift Mapping", value: boolLabel(programLogic.usedLiftMapping))
+                logicRow("Volume Balance", value: boolLabel(programLogic.usedVolumeBalancing))
+                logicRow("Fatigue Balance", value: boolLabel(programLogic.usedFatigueBalancing))
+                logicRow("Top+Backoff", value: boolLabel(programLogic.usedTopSetBackoff))
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func logicRow(_ label: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private func boolLabel(_ value: Bool) -> String {
+        value ? "Yes" : "No"
     }
 
     private var levelBadge: some View {
@@ -439,6 +512,7 @@ struct ProgramReviewView: View {
                     expandedSessions: $expandedSessions,
                     editingExercise: $editingExercise,
                     addingToSession: $addingToSession,
+                    weeklySummariesByWeek: weeklySummariesByWeek,
                     input: input,
                     onTogglePhase: { togglePhase(id: group.id) },
                     onDeleteExercise: deleteExercise
@@ -510,7 +584,8 @@ struct ProgramReviewView: View {
             orderIndex: nextOrder,
             targetSets: 3,
             targetReps: 8,
-            targetRPE: 7.0
+            targetRPE: 7.0,
+            targetEffortType: .rpe
         )
         modelContext.insert(ex)
         ex.session = session
@@ -543,6 +618,7 @@ private struct PhaseCardView: View {
     @Binding var expandedSessions: Set<String>
     @Binding var editingExercise: ProgramSessionExercise?
     @Binding var addingToSession: ProgramSessionTemplate?
+    let weeklySummariesByWeek: [Int: ProgramGeneratedWeekSummary]
     let input: ProgramGenerationInput
     let onTogglePhase: () -> Void
     let onDeleteExercise: (ProgramSessionExercise) -> Void
@@ -558,6 +634,7 @@ private struct PhaseCardView: View {
                         week: week,
                         isDeload: group.isDeload,
                         isExpanded: expandedWeeks.contains(week.weekNumber),
+                        weekSummary: weeklySummariesByWeek[week.weekNumber],
                         expandedSessions: $expandedSessions,
                         editingExercise: $editingExercise,
                         addingToSession: $addingToSession,
@@ -621,6 +698,7 @@ private struct WeekRowView: View {
     let week: ProgramWeekTemplate
     let isDeload: Bool
     let isExpanded: Bool
+    let weekSummary: ProgramGeneratedWeekSummary?
     @Binding var expandedSessions: Set<String>
     @Binding var editingExercise: ProgramSessionExercise?
     @Binding var addingToSession: ProgramSessionTemplate?
@@ -634,6 +712,11 @@ private struct WeekRowView: View {
             if isExpanded {
                 let sortedSessions = week.sessions.sorted { $0.sessionNumber < $1.sessionNumber }
                 VStack(spacing: 0) {
+                    if let summary = weekSummary {
+                        weekSummaryRow(summary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                    }
                     ForEach(sortedSessions) { session in
                         let key = "W\(week.weekNumber)S\(session.sessionNumber)"
                         SessionRowView(
@@ -674,6 +757,15 @@ private struct WeekRowView: View {
                         .foregroundStyle(.orange)
                         .clipShape(Capsule())
                 }
+                if let fatigue = weekSummary?.totalFatigueScore {
+                    Text("Fatigue \(formatOneDecimal(fatigue))")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(.tertiarySystemBackground))
+                        .foregroundStyle(.secondary)
+                        .clipShape(Capsule())
+                }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.bold))
@@ -686,6 +778,43 @@ private struct WeekRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func weekSummaryRow(_ summary: ProgramGeneratedWeekSummary) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Weekly Hard Sets")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(
+                        ProgramVolumeMuscle.allCases.compactMap { muscle -> (ProgramVolumeMuscle, Double)? in
+                            let sets = summary.totalHardSetsByMuscle[muscle] ?? 0
+                            return sets > 0 ? (muscle, sets) : nil
+                        },
+                        id: \.0
+                    ) { muscle, sets in
+                        Text("\(muscle.displayName): \(formatOneDecimal(sets))")
+                            .font(.caption2)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 4)
+                            .background(Color(.tertiarySystemBackground))
+                            .foregroundStyle(.secondary)
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func formatOneDecimal(_ value: Double) -> String {
+        String(format: "%.1f", value)
     }
 }
 
@@ -712,7 +841,7 @@ private struct SessionRowView: View {
             sessionHeader
             if isExpanded {
                 let sorted = session.exercises.sorted { $0.orderIndex < $1.orderIndex }
-                let groups = groupedExercises(from: sorted)
+                let groups = ProgramReviewGrouping.groupedExercises(from: sorted)
                 VStack(spacing: 0) {
                     ForEach(groups) { group in
                         GroupedExerciseRowView(
@@ -769,7 +898,7 @@ private struct SessionRowView: View {
 // MARK: - GroupedExerciseRowView
 
 private struct GroupedExerciseRowView: View {
-    let group: ExerciseGroup
+    let group: ProgramReviewExerciseGroup
     let input: ProgramGenerationInput
     let onTapWorking: () -> Void
     let onDelete: () -> Void
@@ -991,6 +1120,7 @@ struct ExerciseEditSheet: View {
         if !pctText.isEmpty, let pct = Double(pctText), pct > 0 {
             let normalizedPct = min(pct / 100.0, 1.0)
             exercise.targetPercentage1RM = normalizedPct
+            exercise.targetEffortType = .percentage1RM
 
             let name = selectedName.isEmpty ? exercise.exerciseName : selectedName
             if let orm = resolvedOneRepMax(for: name, oneRepMaxes: input.oneRepMaxes) {
@@ -1008,6 +1138,9 @@ struct ExerciseEditSheet: View {
 
         if !rpeText.isEmpty, let rpe = Double(rpeText), rpe > 0 {
             exercise.targetRPE = min(rpe, 10.0)
+            if exercise.targetPercentage1RM == nil {
+                exercise.targetEffortType = .rpe
+            }
         }
         dismiss()
     }
