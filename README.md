@@ -265,7 +265,7 @@ Replaced non-functional program run row taps with an inline expandable detail vi
 
 ### Feature 4 — AI Program Generator
 
-**Status:** In progress
+**Status:** Complete
 
 ---
 
@@ -330,7 +330,7 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Warmup set generation: 3 sets at 40/55/70% of working weight for primary/variation exercises with a %1RM target (skipped on deloads)
 - Accessory rotation: seeded shuffle + cyclic week-to-week rotation; adjacent-week deduplication for `bodybuilding`/`generalFitness`; fixed accessories for `fiveByFive`
 - Cardio duration encoded as `targetReps` (minutes), progressive at +3 min/working week
-- Known limitation: `ProgramSessionExercise` has no weight field; actual weight rounding (nearest 5 lbs / 2.5 kg) is deferred to display/execution time
+- ~~Known limitation: `ProgramSessionExercise` has no weight field~~ — resolved in subsequent bug fix: `prescribedWeight`/`prescribedWeightUnit` added and stamped at generation time
 
 ---
 
@@ -344,6 +344,31 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - **Start Program**: saves `TrainingProgram` to SwiftData, inserts a new `ProgramRun` with `startDate = now`, dismisses sheet → run appears in Training Programs list
 - AI-generated programs saved via "Start Program" appear in "Use Existing Program" with "AI Generated" label (already supported by existing `ProgramSource.aiGenerated` + `ProgramListRow`)
 - New file: `SuggestMeSome/Views/ProgramReviewView.swift` — contains `ReviewPhaseGroup`, `ProgramReviewView`, `PhaseCardView`, `WeekRowView`, `SessionRowView`, `ExerciseRowView`, `ExerciseEditSheet`, `ReviewExercisePickerSheet`
+
+---
+
+#### Bug Fix — Prescribed weights stored at generation time — 2026-04-07
+- **Root cause**: weight display relied on `ProgramGenerationInput.oneRepMaxes`, a transient struct never stored in the model — weights were unavailable after the generation closure
+- **`ProgramSessionExercise`**: added `prescribedWeight: Double?` and `prescribedWeightUnit: String?`; SwiftData handles the lightweight migration automatically
+- **`ProgramGenerationService`**: added `computePrescribedWeight(exerciseName:percentage1RM:oneRepMaxes:)` helper (rounds to nearest 5 lbs / 2.5 kg); `populateExercise` now receives `oneRepMaxes` and stamps both warmup (40/55/70%) and working set objects at creation time
+- **`ProgramReviewView`** `exerciseDisplayText`: prefers stored `prescribedWeight` with fallback to runtime `oneRepMaxes` computation for programs generated before the fix; display format: `4×5 @ 165 lbs (83%)`
+- **`ExerciseEditSheet`**: `save()` recomputes and updates `prescribedWeight` when the user edits the percentage
+- **`TrainingProgramsTab`** `sessionPlannedDetail`: rewrote to read `prescribedWeight` directly — now shows full intensity info (`4×5 @ 165 lbs (83%)`) instead of `"N×M planned"`; warmup rows filtered out as primary entries, shown as `"3 warmup sets"` label
+
+---
+
+#### Bug Fix — Duplicate exercise rows collapsed into grouped display — 2026-04-07
+- **Root cause**: generation correctly creates 3 warmup `ProgramSessionExercise` objects + 1 working set object per primary lift, but the UI displayed all 4 as separate flat rows (e.g. "Back Squat 1×5", "Back Squat 1×5", "Back Squat 1×5", "Back Squat 4×5")
+- Added `ExerciseGroup` struct pairing a working set with its warmup siblings by exercise name
+- Added `groupedExercises(from:)` function that groups consecutive same-name warmup rows under their working set
+- Replaced flat `ForEach` in `SessionRowView` with new `GroupedExerciseRowView`: shows one row per exercise with a collapsible "🔥 N warmups" toggle that expands to show the 40/55/70% sub-rows
+
+---
+
+#### Bug Fix — Phase drill-down expansion state lost on re-render — 2026-04-07
+- **Root cause**: `ReviewPhaseGroup.id` was `let id = UUID()` — a new random UUID on every struct creation; since `groups` is a computed property, any `@State` change (including tapping to expand) rebuilt all groups with new UUIDs, making `expandedPhaseIDs.contains(group.id)` always false — nothing could stay open
+- Changed `ReviewPhaseGroup.id` from `UUID` to a deterministic `String` derived from the phase type (`"working"`, `"deload"`, `"hypertrophy"`, `"deload-5"`, etc.)
+- Changed `expandedPhaseIDs` from `Set<UUID>` to `Set<String>` throughout
 
 ---
 
