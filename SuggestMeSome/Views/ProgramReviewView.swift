@@ -11,7 +11,7 @@ import SwiftData
 // MARK: - Review Phase Group
 
 struct ReviewPhaseGroup: Identifiable {
-    let id = UUID()
+    let id: String   // stable: derived from title so re-renders don't break expansion state
     let title: String
     let weekRange: String
     let schemeDescription: String
@@ -35,6 +35,7 @@ private func buildPhaseGroups(
             : "DUP: Heavy 4×82–93%, Moderate 7×75–90%, Light 10×65–85%"
         var groups = [
             ReviewPhaseGroup(
+                id: "working",
                 title: "Working Weeks",
                 weekRange: weekRangeText(workingWeeks.isEmpty ? sorted : workingWeeks),
                 schemeDescription: scheme,
@@ -44,6 +45,7 @@ private func buildPhaseGroups(
         ]
         if !deloadWeeks.isEmpty {
             groups.append(ReviewPhaseGroup(
+                id: "deload",
                 title: "Deload Weeks",
                 weekRange: weekRangeText(deloadWeeks),
                 schemeDescription: "Reduced volume (~50%), 65% 1RM",
@@ -88,6 +90,7 @@ private func buildBlockPhaseGroups(
             default:            scheme = ""
             }
             groups.append(ReviewPhaseGroup(
+                id: phaseName.lowercased(),
                 title: "\(phaseName) Phase",
                 weekRange: range,
                 schemeDescription: scheme,
@@ -95,7 +98,9 @@ private func buildBlockPhaseGroups(
                 isDeload: false
             ))
         } else {
+            // Multiple deload groups possible; make ID unique by week index
             groups.append(ReviewPhaseGroup(
+                id: "deload-\(weekIdx)",
                 title: "Deload",
                 weekRange: range,
                 schemeDescription: "Reduced volume (~50%), 65% 1RM",
@@ -221,7 +226,7 @@ struct ProgramReviewView: View {
 
     @State private var editableName: String = ""
     @State private var isEditingName = false
-    @State private var expandedPhaseIDs: Set<UUID> = []
+    @State private var expandedPhaseIDs: Set<String> = []
     @State private var expandedWeeks: Set<Int> = []
     @State private var expandedSessions: Set<String> = []
 
@@ -415,7 +420,7 @@ struct ProgramReviewView: View {
         isEditingName = false
     }
 
-    private func togglePhase(id: UUID) {
+    private func togglePhase(id: String) {
         if expandedPhaseIDs.contains(id) { expandedPhaseIDs.remove(id) }
         else { expandedPhaseIDs.insert(id) }
     }
