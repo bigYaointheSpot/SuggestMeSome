@@ -530,6 +530,34 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+### Feature 5 — Home Dashboard
+
+**Status:** In Progress
+
+---
+
+#### Prompt 1 [Home Dashboard Tab + Quick Stats] — 2026-04-07
+
+- **Tab restructure:** Added "Home" tab (house.fill, tag 0) as the first tab in `ContentView`. Workouts shifted to tag 1, Training Programs to tag 2. App opens to Home by default.
+- **DashboardView:** New view at `SuggestMeSome/Views/DashboardView.swift` wrapped in its own `NavigationStack` with a large "Home" title.
+- **Start Workout button:** Prominent full-width blue button that presents a `.confirmationDialog` with three options:
+  - "Start Empty Workout" — navigates to `WorkoutView()` via `navigationDestination`
+  - "SuggestMeSome" — opens `GeneratorSheetRootView` sheet (same flow as Workouts tab)
+  - "Program Workout" — opens `CompleteProgramWorkoutSheet` (only shown when at least one active `ProgramRun` exists)
+- **Time window selector:** Segmented `Picker` with options 4W / 3M / 1Y / All, backed by `DashboardTimeWindow` enum. Default: 4W. Each case exposes `startDate: Date?` (nil for All).
+- **Quick stats bar:** Four `StatCard` tiles in a full-width `HStack`, all filtered by time window except Streak:
+  1. **Workouts** — count of `Workout` records in window (`figure.strengthtraining.traditional`)
+  2. **Time Trained** — sum of `durationSeconds` displayed as "Xh Ym" (`clock.fill`)
+  3. **PRs Hit** — count of `SetEntry` where `isPR == true` across workouts in window (`star.fill`, yellow)
+  4. **Streak** — consecutive Mon–Sun weeks going backwards from current week with at least one workout, ignores time window (`flame.fill`, orange), displayed as "Xwk"
+- **Placeholder sections:** Rounded-rectangle placeholders for PR Feed, Strength Chart, Volume Trend, and Recent Workouts so layout is testable end-to-end.
+- **New file:** `SuggestMeSome/Views/DashboardView.swift`
+- **Edited file:** `SuggestMeSome/ContentView.swift`
+
+**Commit:** `feat: add home dashboard tab with quick stats and start workout flow`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

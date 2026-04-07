@@ -13,14 +13,21 @@ import SwiftData
 struct ContentView: View {
     var body: some View {
         TabView {
+            DashboardView()
+                .tabItem {
+                    Label("Home", systemImage: "house.fill")
+                }
+                .tag(0)
             WorkoutsTab()
                 .tabItem {
                     Label("Workouts", systemImage: "dumbbell")
                 }
+                .tag(1)
             TrainingProgramsTab()
                 .tabItem {
                     Label("Training Programs", systemImage: "list.clipboard")
                 }
+                .tag(2)
         }
     }
 }
