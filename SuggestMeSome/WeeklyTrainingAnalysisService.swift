@@ -155,6 +155,8 @@ enum WeeklyTrainingAnalysisService {
         AdaptiveLoadProgressionService.generateProposals(from: analysis, context: context)
         // Feature 6: generate weekly accessory-volume proposals (user-confirmed before apply).
         AdaptiveVolumeProgressionService.generateProposals(from: analysis, context: context)
+        // Feature 6: detect fatigue accumulation and propose deload/downshift when warranted.
+        AdaptiveFatigueDeloadService.generateProposals(from: analysis, context: context)
 
         return analysis
     }

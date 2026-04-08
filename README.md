@@ -765,6 +765,34 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 6 [Fatigue Detection + Deload/Downshift Proposals] — 2026-04-07
+
+- Added `SuggestMeSome/AdaptiveFatigueDeloadService.swift` and integrated it into weekly program analysis finalization (`WeeklyTrainingAnalysisService.analyzeProgramWeek`)
+- Weekly fatigue evaluation now runs at program-week cadence only and uses training-performance signals only (v1 readiness inputs still excluded)
+- Fatigue signal detection combines:
+  - repeated behind-performance patterns over recent weeks
+  - repeated top-set underperformance patterns
+  - sustained high-effort exposure where prescribed targets exist (high RPE / low RIR rows)
+  - week-over-week performance regression vs recent baseline
+  - excessive weekly volume/fatigue exposure vs planned targets
+  - lift-trend context (count of declining main lifts)
+- Added localized-vs-global guardrail:
+  - when misses are concentrated to one lift while global fatigue/volume signals remain manageable, global deload is suppressed to avoid overreactive behavior
+- Added conservative trigger rules:
+  - moderate fatigue accumulation -> downshift proposal (`decreaseLoad` + small set/intensity reduction)
+  - higher-confidence broad fatigue accumulation -> deload proposal (`deload` with deload factor and downshift fields)
+  - no trigger -> persisted fatigue check event for explainability with computed risk context
+- Proposal persistence and trust controls:
+  - deload/downshift proposals are persisted as `AdaptationProposal` and scoped to future week overlays (no base program mutation)
+  - all fatigue-driven deload/downshift proposals require user confirmation (`pendingUserConfirmation`, `requiresUserConfirmation = true`, `autoApplyEligible = false`)
+  - proposal detail text stores structured signal/risk reasoning for future UI explanation
+  - conflicting open next-week progression proposals are superseded when broader fatigue actions are generated to prevent chaotic mixed directives
+- Existing persisted fatigue fields remain the authoritative weekly state:
+  - `WeeklyTrainingAnalysis.observedFatigueScore`
+  - `WeeklyTrainingAnalysis.fatigueStatus`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
