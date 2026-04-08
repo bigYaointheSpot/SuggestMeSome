@@ -650,6 +650,31 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 2 [Session Outcome Inference + Outcome Persistence] — 2026-04-07
+
+- Added `SuggestMeSome/SessionOutcomeInferenceService.swift` and integrated it into the existing workout save flow (`WorkoutView.saveWorkout`)
+- On each workout save, the service now creates one `ExercisePerformanceOutcome` per non-cardio exercise entry with valid completed sets and persists it in SwiftData
+- Program-linked workout behavior:
+  - when prescription fields exist, outcomes are scored as prescribed-vs-actual using deterministic components:
+    - completion ratio (completed sets vs prescribed sets when available)
+    - top-set load delta vs prescribed load (when available)
+    - top-set reps delta vs prescribed reps (when available)
+  - percentage-based prescriptions are handled via prescribed load comparison (`prescribedWeight` / `prescribedWeightUnit`)
+  - RPE/RIR-targeted prescriptions are handled conservatively (reduced score magnitude + audit note) until explicit RPE/RIR logging is added
+  - top-set weighting is prioritized for powerlifting-oriented lift families (`squat`, `bench`, `deadlift`)
+- Standalone workout behavior (and program entries without usable prescription targets):
+  - infers outcome against a recency-weighted historical baseline from prior sessions
+  - baseline uses exercise identity first, then mapped lift family support via canonical lift-key resolution (including variation source-lift mapping from `FocusTemplateLibrary`)
+  - confidence and signal weight are intentionally lower than program-prescribed signals to avoid over-claiming precision
+- Persisted outcome linkage and auditability:
+  - each outcome links back to `Workout`, `ExerciseEntry`, optional `ProgramRun`, and program week/session numbers when available
+  - stores `canonicalLiftKey`, signal source/confidence/weight, top-set snapshot (with e1RM in lbs for cross-unit consistency), performance score band, inferred fatigue status, and deterministic method notes
+- Important implementation notes:
+  - inference is deterministic and service-driven (no randomness; model structs remain logic-light)
+  - existing PR detection and workout save behavior remain intact; outcome persistence is additive within the same save transaction
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

@@ -502,6 +502,9 @@ struct WorkoutView: View {
             }
         }
 
+        // Feature 6: infer and persist per-exercise outcome signals for adaptive coaching.
+        SessionOutcomeInferenceService.persistOutcomes(for: workout, context: modelContext)
+
         try? modelContext.save()
 
         if let pw = programWorkout {
