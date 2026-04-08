@@ -704,6 +704,37 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 4 [Adaptive Top-Set Load Progression Proposals] — 2026-04-07
+
+- Added `SuggestMeSome/AdaptiveLoadProgressionService.swift` and integrated it into the weekly program analysis pipeline (`WeeklyTrainingAnalysisService.analyzeProgramWeek`)
+- Weekly adaptation cadence is now enforced for load progression:
+  - proposal generation runs only from finalized program-week analyses
+  - proposals target the next program week (`currentWeek + 1`) and never mutate base templates
+- Implemented deterministic per-lift decisioning for main lift families (`squat`, `bench`, `deadlift`) including close variations via lift-key mapping:
+  - uses weekly top-set outcomes as the primary signal
+  - blends recent top-set history and persisted lift trend context
+  - includes fatigue-aware adjustments from inferred performance-only fatigue states
+- Added progression behavior by decision state:
+  - **ahead:** proposes controlled load increases
+  - **onTarget:** maintains baseline Feature 4 progression (no load-change proposal, trend event persisted)
+  - **behind:** proposes hold/reduction, or variation simplification when performance + fatigue indicate high strain
+- Added prescription-style-aware scaling:
+  - percentage-based prescriptions allow fuller deltas
+  - RPE/RIR-informed prescriptions use more conservative deltas due inferred-effort uncertainty
+- Added conservative, bounded week-to-week rules:
+  - inferred beginner/intermediate/advanced policy from program metadata text
+  - beginner changes are most conservative
+  - all deltas quantized and capped to avoid large weekly swings
+- Persisted output and explainability:
+  - writes `AdaptationProposal` records (`increaseLoad`, `decreaseLoad`, `variationSwap`) as non-destructive overlay proposals
+  - supersedes conflicting open proposals for the same run/lift/week to keep proposal state deterministic
+  - writes `AdaptationEventHistory` entries for both proposal creation and maintain decisions with machine-auditable detail strings
+- Scope note:
+  - this prompt persists and manages adaptive load progression proposals only
+  - no direct destructive mutation of `TrainingProgram` / `ProgramSessionExercise` occurs
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

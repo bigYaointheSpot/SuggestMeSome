@@ -151,6 +151,8 @@ enum WeeklyTrainingAnalysisService {
             skippedProgramDuplicateWorkouts: max(0, runWeekWorkouts.count - selectedProgramWorkouts.count),
             context: context
         )
+        // Feature 6: generate weekly top-set-driven load proposals as non-destructive overlays.
+        AdaptiveLoadProgressionService.generateProposals(from: analysis, context: context)
 
         return analysis
     }
