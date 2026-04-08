@@ -74,28 +74,99 @@ enum ProgramOverlayResolutionService {
         switch adjustment.adjustmentType {
         case .variationSwap:
             guard let replacement = adjustment.replacementExerciseName, !replacement.isEmpty else { return }
-            let indices = targetIndices(for: adjustment, rows: rows)
+            let indices = targetIndices(
+                for: adjustment,
+                rows: rows,
+                includeGroupedRows: true
+            )
             guard !indices.isEmpty else { return }
 
             for index in indices {
                 applyVariationSwap(replacement: replacement, to: &rows[index])
             }
 
-        default:
-            // Prompt 8 scope: variation-swap overlays.
-            break
+        case .volume:
+            let indices = targetIndices(
+                for: adjustment,
+                rows: rows,
+                includeGroupedRows: false
+            )
+            for index in indices {
+                applySetAdjustment(
+                    setDelta: adjustment.setDelta,
+                    absoluteTargetSets: adjustment.absoluteTargetSets,
+                    to: &rows[index]
+                )
+            }
+
+        case .load:
+            let indices = targetIndices(
+                for: adjustment,
+                rows: rows,
+                includeGroupedRows: false
+            )
+            for index in indices {
+                applyLoadAdjustment(
+                    loadPercentDelta: adjustment.loadPercentDelta,
+                    absoluteWeight: adjustment.absolutePrescribedWeight,
+                    to: &rows[index]
+                )
+                applySetAdjustment(
+                    setDelta: adjustment.setDelta,
+                    absoluteTargetSets: adjustment.absoluteTargetSets,
+                    to: &rows[index]
+                )
+            }
+
+        case .deload:
+            let indices = targetIndices(
+                for: adjustment,
+                rows: rows,
+                includeGroupedRows: false
+            )
+            for index in indices {
+                applyLoadAdjustment(
+                    loadPercentDelta: adjustment.loadPercentDelta,
+                    absoluteWeight: adjustment.absolutePrescribedWeight,
+                    to: &rows[index]
+                )
+                applySetAdjustment(
+                    setDelta: adjustment.setDelta,
+                    absoluteTargetSets: adjustment.absoluteTargetSets,
+                    to: &rows[index]
+                )
+            }
+
+        case .reps:
+            let indices = targetIndices(
+                for: adjustment,
+                rows: rows,
+                includeGroupedRows: false
+            )
+            for index in indices {
+                applyRepAdjustment(
+                    repDelta: adjustment.repDelta,
+                    absoluteTargetReps: adjustment.absoluteTargetReps,
+                    to: &rows[index]
+                )
+            }
         }
     }
 
     private static func targetIndices(
         for adjustment: AppliedOverlayAdjustment,
-        rows: [ProgramSessionExercise]
+        rows: [ProgramSessionExercise],
+        includeGroupedRows: Bool
     ) -> [Int] {
         guard let targetID = adjustment.targetProgramSessionExerciseID else {
             return rows.indices.map { $0 }
         }
         guard let targetIndex = rows.firstIndex(where: { $0.id == targetID }) else {
             return []
+        }
+
+        guard includeGroupedRows else {
+            return [targetIndex]
         }
 
         let targetGroup = rows[targetIndex].topBackoffGroupID
@@ -147,6 +218,76 @@ enum ProgramOverlayResolutionService {
         let derivedWeight = baseOneRepMax * replacementMultiplier * targetPercent
         row.prescribedWeight = roundedPrescribedWeight(derivedWeight, unit: unit)
         row.prescribedWeightUnit = unit
+    }
+
+    private static func applyLoadAdjustment(
+        loadPercentDelta: Double?,
+        absoluteWeight: Double?,
+        to row: inout ProgramSessionExercise
+    ) {
+        guard !row.isWarmup else { return }
+
+        let unit = normalizedUnit(
+            preferred: row.effectiveOneRepMaxUnit ?? row.prescribedWeightUnit ?? "lbs"
+        )
+        if let absoluteWeight, absoluteWeight > 0 {
+            row.prescribedWeight = roundedPrescribedWeight(absoluteWeight, unit: unit)
+            row.prescribedWeightUnit = unit
+            return
+        }
+
+        guard let loadPercentDelta, abs(loadPercentDelta) > 0.0001 else { return }
+        let factor = max(0.10, 1.0 + loadPercentDelta)
+
+        if let current = row.prescribedWeight, current > 0 {
+            row.prescribedWeight = roundedPrescribedWeight(current * factor, unit: unit)
+            row.prescribedWeightUnit = unit
+        }
+        if let targetPercent = row.targetPercentage1RM, targetPercent > 0 {
+            row.targetPercentage1RM = max(0.35, min(1.10, targetPercent * factor))
+        }
+        if row.prescribedWeight == nil,
+           let orm = row.effectiveOneRepMax,
+           orm > 0,
+           let targetPercent = row.targetPercentage1RM,
+           targetPercent > 0 {
+            let multiplier = FocusTemplateLibrary.loadMapping(for: row.exerciseName)?.multiplier ?? 1.0
+            row.prescribedWeight = roundedPrescribedWeight(
+                orm * multiplier * targetPercent,
+                unit: unit
+            )
+            row.prescribedWeightUnit = unit
+        }
+    }
+
+    private static func applySetAdjustment(
+        setDelta: Int?,
+        absoluteTargetSets: Int?,
+        to row: inout ProgramSessionExercise
+    ) {
+        guard !row.isWarmup else { return }
+        if let absoluteTargetSets, absoluteTargetSets > 0 {
+            row.targetSets = absoluteTargetSets
+            return
+        }
+        guard let setDelta, setDelta != 0 else { return }
+        let currentSets = max(1, row.targetSets ?? 1)
+        row.targetSets = max(1, currentSets + setDelta)
+    }
+
+    private static func applyRepAdjustment(
+        repDelta: Int?,
+        absoluteTargetReps: Int?,
+        to row: inout ProgramSessionExercise
+    ) {
+        guard !row.isWarmup else { return }
+        if let absoluteTargetReps, absoluteTargetReps > 0 {
+            row.targetReps = absoluteTargetReps
+            return
+        }
+        guard let repDelta, repDelta != 0 else { return }
+        let currentReps = max(1, row.targetReps ?? 1)
+        row.targetReps = max(1, currentReps + repDelta)
     }
 
     // MARK: - Clone

@@ -148,6 +148,7 @@ struct ProgramRunExpandableRow: View {
     @Bindable var run: ProgramRun
     let allWorkouts: [Workout]
     @Environment(\.modelContext) private var modelContext
+    @Query private var allProposals: [AdaptationProposal]
 
     @State private var isExpanded = false
     @State private var selectedWeek = 1
@@ -163,6 +164,12 @@ struct ProgramRunExpandableRow: View {
     private var totalWorkouts: Int {
         guard let p = run.program else { return 0 }
         return p.lengthInWeeks * p.sessionsPerWeek
+    }
+
+    private var pendingProposalCount: Int {
+        AdaptationProposalConfirmationService
+            .pendingUserProposals(for: run, proposals: allProposals)
+            .count
     }
 
     private var sourceLabel: String {
@@ -224,6 +231,8 @@ struct ProgramRunExpandableRow: View {
         VStack(alignment: .leading, spacing: 0) {
             Divider()
             infoSection
+            Divider()
+            adaptiveProposalRow
             if !run.isCompleted {
                 Divider()
                 endProgramRow
@@ -275,6 +284,41 @@ struct ProgramRunExpandableRow: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+    }
+
+    // MARK: Adaptive Proposal Row
+
+    private var adaptiveProposalRow: some View {
+        NavigationLink {
+            AdaptationProposalReviewView(run: run)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "brain.head.profile")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.blue)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Adaptive Proposals")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(pendingProposalCount == 0
+                         ? "No pending confirmations"
+                         : "\(pendingProposalCount) pending confirmation\(pendingProposalCount == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(pendingProposalCount == 0 ? Color.secondary : Color.orange)
+                }
+
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
         .background(Color(.secondarySystemBackground))
     }
 
@@ -448,9 +492,12 @@ struct ProgramRunExpandableRow: View {
 
     @ViewBuilder
     private func sessionPlannedDetail(sessionNumber: Int) -> some View {
-        let weekTemplate = run.program?.weeks.first { $0.weekNumber == selectedWeek }
-        let sessionTemplate = weekTemplate?.sessions.first { $0.sessionNumber == sessionNumber }
-        let allExercises = (sessionTemplate?.exercises ?? []).sorted { $0.orderIndex < $1.orderIndex }
+        let allExercises = ProgramOverlayResolutionService.resolvedExercises(
+            for: run,
+            week: selectedWeek,
+            session: sessionNumber,
+            context: modelContext
+        )
         let workingSets = allExercises.filter { !$0.isWarmup }
         let warmupsByName = Dictionary(grouping: allExercises.filter { $0.isWarmup }, by: \.exerciseName)
 

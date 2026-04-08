@@ -846,6 +846,49 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 9 [User Confirmation Flow for Volume/Deload Proposals] — 2026-04-07
+
+- Added `SuggestMeSome/Views/AdaptationProposalReviewView.swift`:
+  - new iOS-native review screen for pending adaptive proposals that require confirmation
+  - supports user decisions for:
+    - volume increase/decrease proposals
+    - deload/downshift proposals
+  - each proposal card shows:
+    - what changes (`changeSummary`)
+    - why (`adjustmentReason` + detail text)
+    - which future week/session is affected
+  - decision actions:
+    - **Approve** (applies overlay + confirms proposal)
+    - **Reject** (rejects proposal)
+    - defer by leaving the item pending
+- Added `SuggestMeSome/AdaptationProposalConfirmationService.swift`:
+  - central service for proposal decision handling (`approve` / `reject`)
+  - persists proposal lifecycle updates:
+    - `pendingUserConfirmation -> confirmed`
+    - `pendingUserConfirmation -> rejected`
+  - on approve:
+    - creates/updates `AppliedProgramOverlay` tied to the proposal (non-destructive)
+    - writes `AppliedOverlayAdjustment` entries for `volume`, `load`, or `deload` actions
+    - writes/updates `AdaptationEventHistory` (`proposalConfirmed`, `overlayApplied`) and resolves pending user-action events
+  - on reject:
+    - marks proposal rejected and writes `proposalRejected` history event
+- Extended `SuggestMeSome/ProgramOverlayResolutionService.swift`:
+  - overlays now resolve more than variation swaps; runtime application now supports:
+    - `volume` adjustments (`setDelta` / absolute sets)
+    - `load` adjustments (load deltas + optional set trim)
+    - `deload` adjustments (global load + set reduction)
+    - `reps` adjustments (future-proof support)
+  - `variationSwap` behavior remains unchanged
+- Updated `SuggestMeSome/Views/TrainingProgramsTab.swift`:
+  - each expanded program-run row now exposes an **Adaptive Proposals** navigation row with pending count
+  - planned-session preview now resolves exercises through `ProgramOverlayResolutionService`, so approved overlays are reflected in future-session views without mutating base templates
+- Behavior and trust notes:
+  - volume and deload/downshift proposals stay user-confirmed before becoming active overlays
+  - approved changes are layered as overlays and remain auditable via event history and proposal records
+  - original generated program templates remain unchanged
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
