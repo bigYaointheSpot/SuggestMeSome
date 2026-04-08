@@ -614,6 +614,42 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+### Feature 6 — Adaptive Coaching Data Layer
+
+**Status:** In Progress
+
+---
+
+#### Prompt 1 [Adaptive Coaching Persistence + Overlay Schema] — 2026-04-07
+
+- Added new persisted adaptive-coaching models in `SuggestMeSome/Models/AdaptiveCoachingModels.swift`:
+  - `ExercisePerformanceOutcome` — exercise-level prescribed-vs-actual snapshot + weighted scoring signal
+  - `WeeklyTrainingAnalysis` — week rollup across both program and standalone workouts
+  - `WeeklyVolumeMetric` — per-muscle weekly hard-set tracking linked to `WeeklyTrainingAnalysis`
+  - `LiftPerformanceTrend` — lift-specific rolling trend and confidence state
+  - `AdaptationProposal` — persisted recommendation object with lifecycle status + explainability text
+  - `AppliedProgramOverlay` — non-destructive applied adaptation layer targeting future weeks/sessions
+  - `AppliedOverlayAdjustment` — concrete adjustment rows (load/volume/reps/variation/deload) inside an overlay
+  - `AdaptationEventHistory` — timeline events for future user-facing adaptation explanations
+- Added Feature 6 enums for adaptive state classification:
+  - `PerformanceScore`, `FatigueStatus`, `LiftTrendStatus`
+  - `ProposalType`, `ProposalStatus`, `AdjustmentReason`
+  - `WorkoutSignalConfidence`, `WorkoutSignalSource`
+  - `OverlayAdjustmentType`, `OverlayStatus`, `AdaptationEventType`
+- Added non-persisted helper types for service-layer logic:
+  - `AdaptiveSignalWeights` (default signal weighting constants)
+  - `AnalysisWeekWindow` (date window helper)
+- Registered all new Feature 6 models in `SuggestMeSomeApp.sharedSchema` so they are included in the SwiftData container
+- Behavior and architecture notes:
+  - standalone workouts are explicitly represented as lower-confidence signals via `WorkoutSignalSource` + `WorkoutSignalConfidence` + numeric `signalWeight`
+  - adaptation application is persisted as overlays (`AppliedProgramOverlay` + `AppliedOverlayAdjustment`) rather than mutating original generated program templates
+  - explainability groundwork is persisted through proposal text fields and `AdaptationEventHistory` snapshots
+- Scope guardrails:
+  - this prompt adds persisted data architecture only
+  - no adaptive engine decision logic has been implemented yet
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

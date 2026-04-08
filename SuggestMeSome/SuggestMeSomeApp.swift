@@ -22,6 +22,14 @@ struct SuggestMeSomeApp: App {
             ProgramSessionTemplate.self,
             ProgramSessionExercise.self,
             ProgramRun.self,
+            ExercisePerformanceOutcome.self,
+            WeeklyTrainingAnalysis.self,
+            WeeklyVolumeMetric.self,
+            LiftPerformanceTrend.self,
+            AdaptationProposal.self,
+            AppliedProgramOverlay.self,
+            AppliedOverlayAdjustment.self,
+            AdaptationEventHistory.self,
         ])
 
     var sharedModelContainer: ModelContainer = {
