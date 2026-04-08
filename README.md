@@ -911,6 +911,29 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 11 [Feature 6 Validation Coverage] — 2026-04-07
+
+- Added `SuggestMeSomeTests/Feature6ValidationTests.swift` with serialized Swift Testing coverage for Feature 6 adaptive coaching persistence and behavior
+- Validation coverage added for:
+  - persisted adaptive model relationship graph (`ExercisePerformanceOutcome`, `WeeklyTrainingAnalysis`, trends, proposals, overlays, history)
+  - session outcome inference for both program-linked and standalone workouts
+  - weekly analysis generation with mixed signal sources and dedupe of repeated program-session logs
+  - top-set-driven load progression proposal generation
+  - weekly volume proposal generation requiring user confirmation
+  - fatigue/deload proposal generation from repeated underperformance patterns
+  - lift-family trend classification with combined program + standalone signal contributions
+  - automatic variation swap overlay creation and non-destructive runtime overlay resolution
+  - proposal approval/rejection lifecycle updates and overlay activation behavior
+  - regression guard for baseline workout/program save flow while adaptive services run
+- Added deterministic in-memory SwiftData fixture helpers inside the test suite to keep validations auditable and repeatable
+- Important implementation note:
+  - volume proposal validation fixture now uses `Lateral Raises` (exact metadata key) so shoulder-volume contributions resolve deterministically
+- Test execution note:
+  - `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature6ValidationTests test` passes
+  - full `SuggestMeSomeTests` run still reports an existing unrelated failure in `Feature4GeneratorValidationTests/volumeAndFatigueAccountingStayWithinSafeBounds()`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
