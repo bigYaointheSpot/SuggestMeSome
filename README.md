@@ -532,7 +532,7 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ### Feature 5 — Home Dashboard
 
-**Status:** In Progress
+**Status:** Complete
 
 ---
 
@@ -596,6 +596,21 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - **Edited files:** `SuggestMeSome/Views/DashboardView.swift`, `SuggestMeSome/ContentView.swift`
 
 **Commit:** `feat: add workout frequency chart and active program progress to dashboard`
+
+---
+
+### [Volume by Muscle Group + Dashboard Polish] — 2026-04-07
+- Added **Volume by Muscle Group** horizontal bar chart (Swift Charts) showing total working sets per muscle group in the selected time window
+  - Set counting: iterates `filteredWorkouts → exerciseEntries` (skipping cardio), looks up each `exerciseName` in `allExercises` to resolve `muscleGroup.name`; exercises with no matching Exercise record are skipped
+  - Fixed color map: Chest=blue, Back=green, Legs=orange, Shoulders=purple, Arms=red, Core=teal; unknown groups fallback to gray
+  - Inline set-count annotations on each bar
+- Improved **empty states** across all sections: encouraging copy for no PRs, no strength data, no frequency data, and no volume data
+- Wrapped all three chart sections (Strength Trends, Workout Frequency, Volume by Muscle Group) in card containers (`secondarySystemBackground`, 16pt padding, 12pt corner radius)
+- Polished **Start Workout button** with a blue linear gradient and a subtle drop shadow
+- Standardized section spacing to 24pt; chart section headers now use consistent `HStack(icon + bold title)` pattern
+- Added `@Query private var allExercises: [Exercise]` to `DashboardView` for muscle group lookups
+- No new models; no new files
+- **Known limitations:** exercises not present in the Exercise library (e.g. ad-hoc names) are silently skipped from volume totals
 
 ---
 

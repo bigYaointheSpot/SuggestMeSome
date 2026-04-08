@@ -2,8 +2,6 @@
 
 ## Architecture
 - SwiftUI + SwiftData
-- Models: MuscleGroup → Exercise → Workout → ExerciseEntry → SetEntry
-- PersonalRecord is a separate table (one per exercise per rep count)
 
 ## Key Decisions
 - Duration stored as seconds, displayed as hh:mm:ss
@@ -16,3 +14,12 @@
 - Use conventional commits: feat:, fix:, refactor:, docs:
 - Commit after completing each logical unit of work
 - Do not push to remote unless asked
+
+## Release Notes
+After each completed feature prompt, append a summary entry 
+to README.md under a "## Changelog" section using this format:
+
+### [Feature Name] — [Date]
+- What was built
+- New models/files added
+- Any known limitations

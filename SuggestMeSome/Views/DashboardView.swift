@@ -31,7 +31,7 @@ enum DashboardTimeWindow: String, CaseIterable {
 
 // MARK: - WeekBucket
 
-private struct WeekBucket: Identifiable {
+fileprivate struct WeekBucket: Identifiable {
     var id: Date { monday }
     let monday: Date
     let count: Int
@@ -47,6 +47,7 @@ struct DashboardView: View {
     @Query(filter: #Predicate<ProgramRun> { run in run.isCompleted == false })
     private var activeProgramRuns: [ProgramRun]
     @Query(sort: \PersonalRecord.dateAchieved, order: .reverse) private var allPRs: [PersonalRecord]
+    @Query private var allExercises: [Exercise]
 
     // MARK: Time window
     @State private var timeWindow: DashboardTimeWindow = .fourWeeks
@@ -133,7 +134,7 @@ struct DashboardView: View {
 
     // MARK: - Frequency chart data
 
-    var workoutFrequencyBuckets: [WeekBucket] {
+    fileprivate var workoutFrequencyBuckets: [WeekBucket] {
         let cal = Calendar.current
         let now = Date()
 
@@ -171,6 +172,42 @@ struct DashboardView: View {
         return Double(total) / Double(buckets.count)
     }
 
+    // MARK: - Muscle group color map
+
+    private static let muscleGroupColors: [String: Color] = [
+        "Chest":      .blue,
+        "Back":       .green,
+        "Legs":       .orange,
+        "Shoulders":  .purple,
+        "Arms":       .red,
+        "Core":       .teal,
+    ]
+
+    // MARK: - Volume by muscle group
+
+    var volumeByMuscleGroup: [(group: String, sets: Int, color: Color)] {
+        var counts: [String: Int] = [:]
+        for workout in filteredWorkouts {
+            for entry in workout.exerciseEntries {
+                guard !entry.isCardio else { continue }
+                let groupName: String
+                if let exercise = allExercises.first(where: { $0.name == entry.exerciseName }),
+                   let mg = exercise.muscleGroup,
+                   mg.name != "Cardio" {
+                    groupName = mg.name
+                } else if allExercises.first(where: { $0.name == entry.exerciseName }) == nil {
+                    continue   // unknown exercise — skip rather than pollute
+                } else {
+                    groupName = "Other"
+                }
+                counts[groupName, default: 0] += entry.sets.count
+            }
+        }
+        return counts
+            .sorted { $0.value > $1.value }
+            .map { (group: $0.key, sets: $0.value, color: Self.muscleGroupColors[$0.key] ?? .gray) }
+    }
+
     private func mondayOf(_ date: Date) -> Date {
         let cal = Calendar.current
         let weekday = cal.component(.weekday, from: date)  // 1=Sun, 2=Mon, …, 7=Sat
@@ -183,13 +220,14 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 24) {
                     startButton
                     timeWindowPicker
                     statsBar
                     prFeedSection
                     strengthChartSection
                     workoutFrequencySection
+                    volumeMuscleGroupSection
                     activeProgramSection
                 }
                 .padding(.horizontal)
@@ -264,9 +302,16 @@ struct DashboardView: View {
                 .font(.title3.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 18)
-                .background(Color.blue)
+                .background(
+                    LinearGradient(
+                        colors: [Color.blue, Color.blue.opacity(0.75)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: Color.blue.opacity(0.35), radius: 6, y: 3)
         }
     }
 
@@ -329,7 +374,7 @@ struct DashboardView: View {
             }
 
             if allPRs.isEmpty {
-                Text("No PRs yet — log workouts to start tracking!")
+                Text("Complete your first workout to start tracking PRs")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -357,8 +402,12 @@ struct DashboardView: View {
         let sparseNames = liftData.filter { $0.points.count < 2 }.map { $0.lift.name }
 
         return VStack(alignment: .leading, spacing: 12) {
-            Text("Strength Trends")
-                .font(.headline)
+            HStack(spacing: 6) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .foregroundStyle(.blue)
+                Text("Strength Trends")
+                    .font(.headline.weight(.bold))
+            }
 
             // Lift pill selector
             ScrollView(.horizontal, showsIndicators: false) {
@@ -378,7 +427,7 @@ struct DashboardView: View {
                                 .font(.subheadline.weight(isActive ? .semibold : .regular))
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 7)
-                                .background(isActive ? lift.color : Color(.secondarySystemBackground))
+                                .background(isActive ? lift.color : Color(.tertiarySystemBackground))
                                 .foregroundStyle(isActive ? Color.white : lift.color)
                                 .clipShape(Capsule())
                                 .overlay(
@@ -393,14 +442,10 @@ struct DashboardView: View {
 
             // Chart or placeholder
             if plotData.isEmpty {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.secondarySystemBackground))
-                    .frame(height: 250)
-                    .overlay {
-                        Text("Not enough data")
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                    }
+                Text("Log workouts to see strength trends")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 200, alignment: .center)
             } else {
                 Chart {
                     ForEach(plotData, id: \.lift.name) { pair in
@@ -430,6 +475,9 @@ struct DashboardView: View {
                 }
             }
         }
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Workout Frequency Section
@@ -443,18 +491,14 @@ struct DashboardView: View {
                 Image(systemName: "calendar")
                     .foregroundStyle(.blue)
                 Text("Workout Frequency")
-                    .font(.headline)
+                    .font(.headline.weight(.bold))
             }
 
             if buckets.isEmpty {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.secondarySystemBackground))
-                    .frame(height: 200)
-                    .overlay {
-                        Text("No workouts in this window")
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                    }
+                Text("Start logging workouts to see your frequency")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
             } else {
                 Chart {
                     ForEach(buckets) { bucket in
@@ -498,6 +542,62 @@ struct DashboardView: View {
                 .frame(height: 200)
             }
         }
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - Volume by Muscle Group Section
+
+    private var volumeMuscleGroupSection: some View {
+        let data = volumeByMuscleGroup
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "figure.arms.open")
+                    .foregroundStyle(.blue)
+                Text("Volume by Muscle Group")
+                    .font(.headline.weight(.bold))
+            }
+
+            if data.isEmpty {
+                Text("No workout data yet — log some sets to see volume breakdown")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
+            } else {
+                Chart {
+                    ForEach(data, id: \.group) { item in
+                        BarMark(
+                            x: .value("Sets", item.sets),
+                            y: .value("Muscle Group", item.group)
+                        )
+                        .foregroundStyle(item.color)
+                        .cornerRadius(4)
+                        .annotation(position: .trailing, alignment: .leading) {
+                            Text("\(item.sets)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                        AxisGridLine()
+                        AxisValueLabel()
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks { _ in
+                        AxisValueLabel()
+                    }
+                }
+                .frame(height: 220)
+            }
+        }
+        .padding(16)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Active Program Section
