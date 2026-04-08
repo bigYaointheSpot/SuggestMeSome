@@ -675,6 +675,35 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 3 [Weekly Analysis Engine + Lift Trend Updates] — 2026-04-07
+
+- Added `SuggestMeSome/WeeklyTrainingAnalysisService.swift` and integrated it into workout save flow (`WorkoutView.saveWorkout`) after session outcome inference
+- Weekly analysis now runs at the week level (not per workout decisioning):
+  - for program runs, weeks are anchored to `ProgramRun.startDate` in 7-day blocks and are analyzed once the week is complete (all sessions done) or when the week boundary has passed
+  - for standalone training, weeks are anchored to ISO calendar weeks (Monday–Sunday) and analyzed only after the week has ended
+- Signal aggregation now persists `WeeklyTrainingAnalysis` rollups with:
+  - blended outcome signals from both program and standalone workouts
+  - program vs standalone signal weighting retained via stored outcome `signalWeight`
+  - weighted weekly performance score, adherence score, observed/planned fatigue, weekly fatigue status
+  - weekly completed hard sets and normalized weekly tonnage (lbs-based)
+- Added weekly muscle-volume aggregation and persistence into `WeeklyVolumeMetric`:
+  - completed hard sets by `ProgramVolumeMuscle`
+  - weighted completed hard sets (confidence-aware)
+  - planned hard sets for program weeks from the original program template
+  - delta between completed and planned volume where available
+- Added lift-family trend update pipeline in the same engine:
+  - updates `LiftPerformanceTrend` per lift key using finalized weekly outcomes
+  - tracks data-point counts, confidence, current/previous/rolling-best e1RM, 4-week change %, trend status, and fatigue status
+  - includes top-set emphasis for main lifts through stored outcome signals
+- Added weekly explainability event persistence via `AdaptationEventHistory` (`weeklyAnalysisFinalized`) including compact debug-style summaries (signals, fatigue, top sets, trend statuses)
+- Double-counting safeguards:
+  - program-week analysis deduplicates repeated session logs by keeping the latest workout per `programSessionNumber`
+  - outcome attachment is upserted per week analysis to keep reruns deterministic and avoid duplicate rollup entries
+- Standalone outside-program behavior:
+  - standalone weeks that overlap any program run are skipped as standalone analyses so those signals are handled in the program-week scope
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

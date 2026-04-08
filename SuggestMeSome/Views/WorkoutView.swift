@@ -504,6 +504,8 @@ struct WorkoutView: View {
 
         // Feature 6: infer and persist per-exercise outcome signals for adaptive coaching.
         SessionOutcomeInferenceService.persistOutcomes(for: workout, context: modelContext)
+        // Feature 6: finalize completed training-week rollups for adaptive decisions.
+        WeeklyTrainingAnalysisService.analyzeCompletedWeeks(triggeredBy: workout, context: modelContext)
 
         try? modelContext.save()
 
