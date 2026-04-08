@@ -793,6 +793,32 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 7 [Lift-Specific Trend Tracking] — 2026-04-07
+
+- Added `SuggestMeSome/LiftTrendTrackingService.swift` and moved lift-trend computation into a dedicated service consumed by weekly analysis finalization
+- Weekly trend updates now run through `LiftTrendTrackingService.updateTrends(for:context:)` from `WeeklyTrainingAnalysisService` for both:
+  - finalized program-week analyses
+  - finalized standalone-week analyses
+- Added persisted weekly trend snapshots for explainability/audit:
+  - new SwiftData model `LiftTrendSnapshot` in `AdaptiveCoachingModels.swift`
+  - linked to both `LiftPerformanceTrend` and `WeeklyTrainingAnalysis`
+  - registered in `SuggestMeSomeApp.sharedSchema`
+- Trend scoring and classification behavior:
+  - tracks canonical lift families (`squat`, `bench`, `deadlift`) plus secondary families (`overheadPress`, `row`) and any other observed mapped families
+  - uses canonical lift keys from persisted outcomes, so mapped lift families matter more than exact exercise-name matching
+  - blends program + standalone outcomes with confidence-aware weighting; program-linked signals retain higher influence
+  - emphasizes top-set signals for main powerlifting lifts by increasing their contribution weight
+  - classifies trend status with robust thresholds (`improving`, `stable` as stagnant-equivalent, `declining`, `volatile`, `insufficientData`)
+- Robustness guardrails to avoid anomalous-overweight behavior:
+  - collapses multiple same-workout signals for a lift family to one representative point
+  - uses trimmed robust weighted averages for rolling/current/prior windows
+  - applies volatility-aware confidence adjustments before final status assignment
+- Persisted output now includes:
+  - updated rolling state in `LiftPerformanceTrend` (confidence, current/baseline e1RM, 4-week change, fatigue, latest top set)
+  - per-analysis `LiftTrendSnapshot` rows with weighted signal composition, change %, status, and explainability note text
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

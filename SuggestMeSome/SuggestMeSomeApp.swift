@@ -26,6 +26,7 @@ struct SuggestMeSomeApp: App {
             WeeklyTrainingAnalysis.self,
             WeeklyVolumeMetric.self,
             LiftPerformanceTrend.self,
+            LiftTrendSnapshot.self,
             AdaptationProposal.self,
             AppliedProgramOverlay.self,
             AppliedOverlayAdjustment.self,

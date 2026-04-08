@@ -134,11 +134,8 @@ enum WeeklyTrainingAnalysisService {
         analysis.isFinalized = true
         analysis.finalizedAt = Date.now
 
-        let liftKeys = Set(selectedOutcomes.compactMap(\.canonicalLiftKey))
-        let trendSummary = updateLiftTrends(
-            liftKeys: liftKeys,
-            scope: .program(run: run),
-            analysisWeekEndDate: window.weekEndDate,
+        let trendSummary = LiftTrendTrackingService.updateTrends(
+            for: analysis,
             context: context
         )
 
@@ -254,11 +251,8 @@ enum WeeklyTrainingAnalysisService {
         analysis.isFinalized = true
         analysis.finalizedAt = Date.now
 
-        let liftKeys = Set(selectedOutcomes.compactMap(\.canonicalLiftKey))
-        let trendSummary = updateLiftTrends(
-            liftKeys: liftKeys,
-            scope: .standalone,
-            analysisWeekEndDate: window.weekEndDate,
+        let trendSummary = LiftTrendTrackingService.updateTrends(
+            for: analysis,
             context: context
         )
         upsertHistoryEvent(
@@ -540,195 +534,6 @@ enum WeeklyTrainingAnalysisService {
         }
     }
 
-    // MARK: - Lift Trend Persistence
-
-    private static func updateLiftTrends(
-        liftKeys: Set<String>,
-        scope: TrendScope,
-        analysisWeekEndDate: Date,
-        context: ModelContext
-    ) -> [String: LiftTrendStatus] {
-        guard !liftKeys.isEmpty else { return [:] }
-
-        let analyses = (try? context.fetch(FetchDescriptor<WeeklyTrainingAnalysis>())) ?? []
-        let trends = (try? context.fetch(FetchDescriptor<LiftPerformanceTrend>())) ?? []
-        let scopedAnalyses: [WeeklyTrainingAnalysis] = analyses.filter {
-            guard $0.isFinalized else { return false }
-            guard $0.weekStartDate <= analysisWeekEndDate else { return false }
-            switch scope {
-            case .program(let run):
-                return $0.programRun?.id == run.id
-            case .standalone:
-                return $0.programRun == nil
-            }
-        }
-
-        var summary: [String: LiftTrendStatus] = [:]
-
-        for liftKey in liftKeys {
-            let points = scopedAnalyses
-                .flatMap(\.outcomes)
-                .filter { $0.canonicalLiftKey == liftKey && $0.actualTopSetEstimated1RM != nil }
-                .sorted {
-                    if $0.workoutDate == $1.workoutDate { return $0.id.uuidString < $1.id.uuidString }
-                    return $0.workoutDate < $1.workoutDate
-                }
-            guard !points.isEmpty else { continue }
-
-            let trend = upsertTrend(
-                for: liftKey,
-                scope: scope,
-                existing: trends,
-                context: context
-            )
-
-            let weightedSignalCount = points.reduce(0.0) { $0 + $1.signalWeight }
-            trend.updatedAt = Date.now
-            trend.totalDataPoints = points.count
-            trend.programLinkedDataPoints = points.filter { $0.signalSource == .programLinked }.count
-            trend.standaloneDataPoints = points.filter { $0.signalSource == .standalone }.count
-            trend.weightedSignalCount = weightedSignalCount
-            trend.confidenceScore = min(1.0, weightedSignalCount / 8.0)
-            trend.firstObservationDate = points.first?.workoutDate ?? Date.now
-            trend.lastObservationDate = points.last?.workoutDate ?? Date.now
-
-            let latestPoints = Array(points.suffix(min(3, points.count)))
-            let previousPoints = Array(points.dropLast(latestPoints.count).suffix(3))
-            let currentE1RM = weightedAverage(
-                values: latestPoints.compactMap { point in
-                    guard let e1rm = point.actualTopSetEstimated1RM else { return nil }
-                    return (e1rm, max(0.01, point.signalWeight))
-                }
-            )
-            let previousE1RM = weightedAverage(
-                values: previousPoints.compactMap { point in
-                    guard let e1rm = point.actualTopSetEstimated1RM else { return nil }
-                    return (e1rm, max(0.01, point.signalWeight))
-                }
-            )
-
-            trend.currentEstimated1RM = currentE1RM
-            trend.previousEstimated1RM = previousE1RM
-            trend.rollingBestEstimated1RM = points.compactMap(\.actualTopSetEstimated1RM).max()
-
-            let currentWindowStart = isoCalendar.date(byAdding: .day, value: -27, to: analysisWeekEndDate) ?? analysisWeekEndDate
-            let priorWindowEnd = isoCalendar.date(byAdding: .day, value: -28, to: analysisWeekEndDate) ?? analysisWeekEndDate
-            let priorWindowStart = isoCalendar.date(byAdding: .day, value: -55, to: analysisWeekEndDate) ?? analysisWeekEndDate
-
-            let currentWindowPoints = points.filter {
-                $0.workoutDate >= currentWindowStart && $0.workoutDate <= analysisWeekEndDate
-            }
-            let priorWindowPoints = points.filter {
-                $0.workoutDate >= priorWindowStart && $0.workoutDate <= priorWindowEnd
-            }
-
-            let currentWindowE1RM = weightedAverage(values: currentWindowPoints.compactMap { point in
-                guard let e1rm = point.actualTopSetEstimated1RM else { return nil }
-                return (e1rm, max(0.01, point.signalWeight))
-            })
-            let priorWindowE1RM = weightedAverage(values: priorWindowPoints.compactMap { point in
-                guard let e1rm = point.actualTopSetEstimated1RM else { return nil }
-                return (e1rm, max(0.01, point.signalWeight))
-            })
-
-            if let currentWindowE1RM, let priorWindowE1RM, priorWindowE1RM > 0 {
-                trend.fourWeekChangePercent = ((currentWindowE1RM - priorWindowE1RM) / priorWindowE1RM) * 100.0
-            } else if let currentE1RM, let previousE1RM, previousE1RM > 0 {
-                trend.fourWeekChangePercent = ((currentE1RM - previousE1RM) / previousE1RM) * 100.0
-            } else {
-                trend.fourWeekChangePercent = nil
-            }
-
-            trend.trendStatus = inferLiftTrendStatus(
-                sampleCount: points.count,
-                fourWeekChangePercent: trend.fourWeekChangePercent,
-                latestValues: latestPoints.compactMap(\.actualTopSetEstimated1RM)
-            )
-            trend.fatigueStatus = inferLiftFatigueStatus(points: points)
-
-            if let latest = points.last {
-                trend.latestTopSetWeight = latest.actualTopSetWeight
-                trend.latestTopSetReps = latest.actualTopSetReps
-                trend.latestPerformanceScoreValue = latest.performanceScoreValue
-                trend.lastPerformanceScore = latest.performanceScore
-            }
-
-            summary[liftKey] = trend.trendStatus
-        }
-
-        return summary
-    }
-
-    private static func upsertTrend(
-        for liftKey: String,
-        scope: TrendScope,
-        existing: [LiftPerformanceTrend],
-        context: ModelContext
-    ) -> LiftPerformanceTrend {
-        if let found = existing.first(where: {
-            $0.canonicalLiftKey == liftKey &&
-            (
-                (scope.runID == nil && $0.programRun == nil) ||
-                (scope.runID != nil && $0.programRun?.id == scope.runID)
-            )
-        }) {
-            return found
-        }
-
-        let trend = LiftPerformanceTrend(
-            programRun: scope.run,
-            trainingProgram: scope.run?.program,
-            canonicalLiftKey: liftKey,
-            liftDisplayName: liftDisplayName(for: liftKey)
-        )
-        context.insert(trend)
-        return trend
-    }
-
-    private static func inferLiftTrendStatus(
-        sampleCount: Int,
-        fourWeekChangePercent: Double?,
-        latestValues: [Double]
-    ) -> LiftTrendStatus {
-        guard sampleCount >= 2 else { return .insufficientData }
-        guard let fourWeekChangePercent else { return .stable }
-
-        if latestValues.count >= 3 {
-            let mean = latestValues.reduce(0, +) / Double(latestValues.count)
-            let variance = latestValues.reduce(0.0) { partial, value in
-                partial + pow(value - mean, 2)
-            } / Double(latestValues.count)
-            if variance > 25 {
-                return .volatile
-            }
-        }
-
-        if abs(fourWeekChangePercent) < 1.0 { return .stable }
-        return fourWeekChangePercent > 0 ? .improving : .declining
-    }
-
-    private static func inferLiftFatigueStatus(points: [ExercisePerformanceOutcome]) -> FatigueStatus {
-        let recent = Array(points.suffix(min(6, points.count)))
-        let score = weightedAverage(values: recent.map { point in
-            let scalar: Double = {
-                switch point.inferredFatigueStatus {
-                case .low: return 0.8
-                case .manageable: return 1.0
-                case .elevated: return 1.3
-                case .high: return 1.8
-                case .critical: return 2.3
-                }
-            }()
-            return (scalar, max(0.01, point.signalWeight))
-        }) ?? 1.0
-
-        if score < 0.9 { return .low }
-        if score < 1.15 { return .manageable }
-        if score < 1.45 { return .elevated }
-        if score < 1.90 { return .high }
-        return .critical
-    }
-
     // MARK: - Explainability Event
 
     private static func upsertHistoryEvent(
@@ -972,17 +777,6 @@ enum WeeklyTrainingAnalysisService {
         unit == .kg ? weight * 2.20462 : weight
     }
 
-    private static func liftDisplayName(for key: String) -> String {
-        switch key {
-        case "squat": return "Squat"
-        case "bench": return "Bench Press"
-        case "deadlift": return "Deadlift"
-        case "overheadPress": return "Overhead Press"
-        case "row": return "Row"
-        default: return key
-        }
-    }
-
     private static func dominantTrendStatus(
         from summary: [String: LiftTrendStatus]
     ) -> LiftTrendStatus? {
@@ -1027,20 +821,4 @@ private struct WeekAggregates {
 private enum AnalysisKey {
     case program(runID: UUID, weekNumber: Int)
     case standalone(weekStartDate: Date)
-}
-
-private enum TrendScope {
-    case program(run: ProgramRun)
-    case standalone
-
-    var run: ProgramRun? {
-        switch self {
-        case .program(let run): return run
-        case .standalone: return nil
-        }
-    }
-
-    var runID: UUID? {
-        run?.id
-    }
 }

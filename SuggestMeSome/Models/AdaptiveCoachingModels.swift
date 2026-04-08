@@ -306,6 +306,9 @@ final class WeeklyTrainingAnalysis {
     @Relationship(deleteRule: .nullify, inverse: \AdaptationProposal.sourceAnalysis)
     var proposals: [AdaptationProposal] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \LiftTrendSnapshot.analysis)
+    var trendSnapshots: [LiftTrendSnapshot] = []
+
     init(
         id: UUID = UUID(),
         createdAt: Date = Date(),
@@ -418,6 +421,9 @@ final class LiftPerformanceTrend {
     var latestPerformanceScoreValue: Double?
     var lastPerformanceScore: PerformanceScore?
 
+    @Relationship(deleteRule: .cascade, inverse: \LiftTrendSnapshot.trend)
+    var snapshots: [LiftTrendSnapshot] = []
+
     init(
         id: UUID = UUID(),
         updatedAt: Date = Date(),
@@ -466,6 +472,104 @@ final class LiftPerformanceTrend {
         self.latestTopSetReps = latestTopSetReps
         self.latestPerformanceScoreValue = latestPerformanceScoreValue
         self.lastPerformanceScore = lastPerformanceScore
+    }
+}
+
+/// Weekly persisted snapshot of a lift trend for explainability and audit history.
+@Model
+final class LiftTrendSnapshot {
+    var id: UUID
+    var createdAt: Date
+
+    var trend: LiftPerformanceTrend?
+    var analysis: WeeklyTrainingAnalysis?
+    var programRun: ProgramRun?
+    var trainingProgram: TrainingProgram?
+
+    var canonicalLiftKey: String
+    var liftDisplayName: String
+    var weekStartDate: Date
+    var weekEndDate: Date
+    var programWeekNumber: Int?
+
+    var totalDataPoints: Int
+    var programLinkedDataPoints: Int
+    var standaloneDataPoints: Int
+    var weightedSignalCount: Double
+    var weightedProgramSignal: Double
+    var weightedStandaloneSignal: Double
+    var confidenceScore: Double
+
+    var currentEstimated1RM: Double?
+    var baselineEstimated1RM: Double?
+    var rollingBestEstimated1RM: Double?
+    var changePercent: Double?
+    var trendStatus: LiftTrendStatus
+    var fatigueStatus: FatigueStatus
+
+    var latestTopSetWeight: Double?
+    var latestTopSetReps: Int?
+    var latestPerformanceScoreValue: Double?
+    var note: String?
+
+    init(
+        id: UUID = UUID(),
+        createdAt: Date = Date(),
+        trend: LiftPerformanceTrend? = nil,
+        analysis: WeeklyTrainingAnalysis? = nil,
+        programRun: ProgramRun? = nil,
+        trainingProgram: TrainingProgram? = nil,
+        canonicalLiftKey: String,
+        liftDisplayName: String,
+        weekStartDate: Date,
+        weekEndDate: Date,
+        programWeekNumber: Int? = nil,
+        totalDataPoints: Int = 0,
+        programLinkedDataPoints: Int = 0,
+        standaloneDataPoints: Int = 0,
+        weightedSignalCount: Double = 0,
+        weightedProgramSignal: Double = 0,
+        weightedStandaloneSignal: Double = 0,
+        confidenceScore: Double = 0,
+        currentEstimated1RM: Double? = nil,
+        baselineEstimated1RM: Double? = nil,
+        rollingBestEstimated1RM: Double? = nil,
+        changePercent: Double? = nil,
+        trendStatus: LiftTrendStatus = .insufficientData,
+        fatigueStatus: FatigueStatus = .manageable,
+        latestTopSetWeight: Double? = nil,
+        latestTopSetReps: Int? = nil,
+        latestPerformanceScoreValue: Double? = nil,
+        note: String? = nil
+    ) {
+        self.id = id
+        self.createdAt = createdAt
+        self.trend = trend
+        self.analysis = analysis
+        self.programRun = programRun
+        self.trainingProgram = trainingProgram
+        self.canonicalLiftKey = canonicalLiftKey
+        self.liftDisplayName = liftDisplayName
+        self.weekStartDate = weekStartDate
+        self.weekEndDate = weekEndDate
+        self.programWeekNumber = programWeekNumber
+        self.totalDataPoints = totalDataPoints
+        self.programLinkedDataPoints = programLinkedDataPoints
+        self.standaloneDataPoints = standaloneDataPoints
+        self.weightedSignalCount = weightedSignalCount
+        self.weightedProgramSignal = weightedProgramSignal
+        self.weightedStandaloneSignal = weightedStandaloneSignal
+        self.confidenceScore = confidenceScore
+        self.currentEstimated1RM = currentEstimated1RM
+        self.baselineEstimated1RM = baselineEstimated1RM
+        self.rollingBestEstimated1RM = rollingBestEstimated1RM
+        self.changePercent = changePercent
+        self.trendStatus = trendStatus
+        self.fatigueStatus = fatigueStatus
+        self.latestTopSetWeight = latestTopSetWeight
+        self.latestTopSetReps = latestTopSetReps
+        self.latestPerformanceScoreValue = latestPerformanceScoreValue
+        self.note = note
     }
 }
 
