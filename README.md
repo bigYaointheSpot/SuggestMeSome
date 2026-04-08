@@ -577,6 +577,28 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 3 [Workout Frequency Chart + Active Program Progress] — 2026-04-07
+
+- **Workout Frequency Chart:** Replaces the "Volume Trend" placeholder using Swift Charts.
+  - **Bar chart:** One `BarMark` per calendar Mon–Sun week in the selected time window, labeled by the Monday date (e.g. "Mar 24"). X axis is time-based with `.weekOfYear` unit.
+  - **Bar coloring:** Weeks meeting or exceeding the target → solid blue. Weeks below target → blue at 40% opacity.
+  - **Target reference line:** Horizontal `RuleMark` (dashed, blue) labeled "Target". Value is the active program's `sessionsPerWeek` when a program is running; otherwise the average workouts/week across the visible window.
+  - Monday alignment computed manually from weekday component to be locale-independent.
+  - Empty window shows a placeholder card.
+- **Active Program Progress:** Replaces the "Recent Workouts" placeholder.
+  - **When a program is active:** Shows the most recently started `ProgramRun` (sorted by `startDate` descending).
+    - **Circular progress ring:** Custom `Circle().trim` arc showing `completedSessions / totalSessions` (total = `lengthInWeeks × sessionsPerWeek`). Percentage displayed in center.
+    - **Week label:** "Week X of Y" computed as `floor((now − startDate) / 7d) + 1`, capped at `lengthInWeeks`.
+    - **This Week indicators:** Row of `checkmark.circle.fill` / `circle` icons for each session slot; filled count = workouts where `programWeekNumber == currentWeek` and `programRun.id` matches.
+    - **Continue Program button:** Full-width blue button that opens `CompleteProgramWorkoutSheet` (same flow as the existing "Program Workout" option in the start dialog).
+  - **When no program is active:** Muted card with "No active program" and a "Browse Programs" button that switches the root `TabView` to the Training Programs tab (tag 2).
+- **Tab selection binding:** `ContentView` now owns `@State private var selectedTab = 0` and passes `$selectedTab` into `DashboardView`. The `TabView` uses `selection: $selectedTab` so DashboardView can programmatically switch tabs.
+- **Edited files:** `SuggestMeSome/Views/DashboardView.swift`, `SuggestMeSome/ContentView.swift`
+
+**Commit:** `feat: add workout frequency chart and active program progress to dashboard`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

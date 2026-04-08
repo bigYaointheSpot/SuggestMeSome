@@ -29,9 +29,19 @@ enum DashboardTimeWindow: String, CaseIterable {
     }
 }
 
+// MARK: - WeekBucket
+
+private struct WeekBucket: Identifiable {
+    var id: Date { monday }
+    let monday: Date
+    let count: Int
+}
+
 // MARK: - DashboardView
 
 struct DashboardView: View {
+    @Binding var selectedTab: Int
+
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Workout.date, order: .reverse) private var allWorkouts: [Workout]
     @Query(filter: #Predicate<ProgramRun> { run in run.isCompleted == false })
@@ -104,7 +114,7 @@ struct DashboardView: View {
         return streak
     }
 
-    // MARK: - Chart data
+    // MARK: - Chart data (strength)
 
     var strengthChartData: [ChartPoint] {
         StrengthAnalytics.chartPoints(
@@ -114,12 +124,58 @@ struct DashboardView: View {
         )
     }
 
-    // (lift option, data points for that lift in the current window)
     var activeLiftData: [(lift: (name: String, color: Color), points: [ChartPoint])] {
         let data = strengthChartData
         return liftOptions
             .filter { selectedLifts.contains($0.name) }
             .map { lift in (lift: lift, points: data.filter { $0.exerciseName == lift.name }) }
+    }
+
+    // MARK: - Frequency chart data
+
+    var workoutFrequencyBuckets: [WeekBucket] {
+        let cal = Calendar.current
+        let now = Date()
+
+        let windowStart: Date
+        if let c = timeWindow.startDate {
+            windowStart = c
+        } else if let earliest = allWorkouts.map(\.date).min() {
+            windowStart = earliest
+        } else {
+            return []
+        }
+
+        let firstMonday = mondayOf(windowStart)
+        let thisMonday  = mondayOf(now)
+
+        var buckets: [WeekBucket] = []
+        var weekStart = firstMonday
+        while weekStart <= thisMonday {
+            let weekEnd = cal.date(byAdding: .day, value: 7, to: weekStart)!
+            let count = filteredWorkouts.filter { $0.date >= weekStart && $0.date < weekEnd }.count
+            buckets.append(WeekBucket(monday: weekStart, count: count))
+            weekStart = weekEnd
+        }
+        return buckets
+    }
+
+    var frequencyTarget: Double {
+        let sortedRuns = activeProgramRuns.sorted { $0.startDate > $1.startDate }
+        if let run = sortedRuns.first, let program = run.program {
+            return Double(program.sessionsPerWeek)
+        }
+        let buckets = workoutFrequencyBuckets
+        guard !buckets.isEmpty else { return 3 }
+        let total = buckets.reduce(0) { $0 + $1.count }
+        return Double(total) / Double(buckets.count)
+    }
+
+    private func mondayOf(_ date: Date) -> Date {
+        let cal = Calendar.current
+        let weekday = cal.component(.weekday, from: date)  // 1=Sun, 2=Mon, …, 7=Sat
+        let daysToMonday = (weekday + 5) % 7
+        return cal.startOfDay(for: cal.date(byAdding: .day, value: -daysToMonday, to: date)!)
     }
 
     // MARK: - Body
@@ -133,8 +189,8 @@ struct DashboardView: View {
                     statsBar
                     prFeedSection
                     strengthChartSection
-                    placeholderSection("Volume Trend")
-                    placeholderSection("Recent Workouts")
+                    workoutFrequencySection
+                    activeProgramSection
                 }
                 .padding(.horizontal)
                 .padding(.top, 12)
@@ -376,21 +432,203 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Remaining placeholder sections
+    // MARK: - Workout Frequency Section
 
-    private func placeholderSection(_ title: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemBackground))
-                .frame(height: 80)
-                .overlay {
-                    Text(title)
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
+    private var workoutFrequencySection: some View {
+        let buckets = workoutFrequencyBuckets
+        let target  = frequencyTarget
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar")
+                    .foregroundStyle(.blue)
+                Text("Workout Frequency")
+                    .font(.headline)
+            }
+
+            if buckets.isEmpty {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.secondarySystemBackground))
+                    .frame(height: 200)
+                    .overlay {
+                        Text("No workouts in this window")
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
+                    }
+            } else {
+                Chart {
+                    ForEach(buckets) { bucket in
+                        BarMark(
+                            x: .value("Week", bucket.monday, unit: .weekOfYear),
+                            y: .value("Workouts", bucket.count)
+                        )
+                        .foregroundStyle(
+                            Double(bucket.count) >= target
+                                ? Color.blue
+                                : Color.blue.opacity(0.4)
+                        )
+                        .cornerRadius(4)
+                    }
+                    RuleMark(y: .value("Target", target))
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4]))
+                        .foregroundStyle(Color.blue.opacity(0.7))
+                        .annotation(position: .top, alignment: .leading) {
+                            Text("Target")
+                                .font(.caption2)
+                                .foregroundStyle(Color.blue.opacity(0.8))
+                        }
                 }
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .weekOfYear)) { value in
+                        if let date = value.as(Date.self) {
+                            AxisValueLabel {
+                                Text(date, format: .dateTime.month(.abbreviated).day())
+                                    .font(.caption2)
+                            }
+                        }
+                        AxisGridLine()
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisGridLine()
+                        AxisValueLabel()
+                    }
+                }
+                .frame(height: 200)
+            }
         }
+    }
+
+    // MARK: - Active Program Section
+
+    private var activeProgramSection: some View {
+        let sortedRuns = activeProgramRuns.sorted { $0.startDate > $1.startDate }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "list.clipboard")
+                    .foregroundStyle(.blue)
+                Text("Active Program")
+                    .font(.headline)
+            }
+
+            if let run = sortedRuns.first, let program = run.program {
+                ActiveProgramCard(
+                    run: run,
+                    program: program,
+                    allWorkouts: allWorkouts,
+                    onContinue: { showingCompleteProgramSheet = true }
+                )
+            } else {
+                HStack {
+                    Text("No active program")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Browse Programs") {
+                        selectedTab = 2
+                    }
+                    .font(.subheadline)
+                    .buttonStyle(.bordered)
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        }
+    }
+}
+
+// MARK: - ActiveProgramCard
+
+private struct ActiveProgramCard: View {
+    let run: ProgramRun
+    let program: TrainingProgram
+    let allWorkouts: [Workout]
+    let onContinue: () -> Void
+
+    private var currentWeek: Int {
+        let weeks = Int(Date().timeIntervalSince(run.startDate) / (7 * 86400)) + 1
+        return min(max(weeks, 1), program.lengthInWeeks)
+    }
+
+    private var programWorkouts: [Workout] {
+        allWorkouts.filter { $0.programRun?.id == run.id }
+    }
+
+    private var completedCount: Int { programWorkouts.count }
+
+    private var totalSessions: Int { program.lengthInWeeks * program.sessionsPerWeek }
+
+    private var progress: Double {
+        guard totalSessions > 0 else { return 0 }
+        return min(Double(completedCount) / Double(totalSessions), 1.0)
+    }
+
+    private var thisWeekCompletedCount: Int {
+        programWorkouts.filter { $0.programWeekNumber == currentWeek }.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Progress ring + info
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.blue.opacity(0.2), lineWidth: 8)
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(Color.blue, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Text("\(Int(progress * 100))%")
+                        .font(.caption.weight(.semibold))
+                }
+                .frame(width: 60, height: 60)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(program.name)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(2)
+                    Text("Week \(currentWeek) of \(program.lengthInWeeks)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(completedCount) of \(totalSessions) sessions complete")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+
+            // This week session dots
+            VStack(alignment: .leading, spacing: 6) {
+                Text("This Week")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    ForEach(1...max(program.sessionsPerWeek, 1), id: \.self) { i in
+                        Image(systemName: i <= thisWeekCompletedCount ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(i <= thisWeekCompletedCount ? Color.green : Color(.systemGray3))
+                    }
+                }
+            }
+
+            // Continue button
+            Button(action: onContinue) {
+                Text("Continue Program")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.blue)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
