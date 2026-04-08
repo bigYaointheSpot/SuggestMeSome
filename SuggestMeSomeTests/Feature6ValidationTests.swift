@@ -555,6 +555,128 @@ struct Feature6ValidationTests {
         #expect((squatProposal?.proposedLoadPercentDelta ?? 0) > 0)
     }
 
+    @Test func topSetProgressionIgnoresStaleDuplicateOutcomeRows() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let fixture = makeAdaptiveProgramFixture(name: "Powerlifting Intermediate")
+        persistProgram(fixture.program, context: context)
+
+        let run = ProgramRun(startDate: day(0))
+        run.program = fixture.program
+        context.insert(run)
+
+        let analysis = WeeklyTrainingAnalysis(
+            weekStartDate: day(0),
+            weekEndDate: day(6),
+            programRun: run,
+            trainingProgram: fixture.program,
+            programWeekNumber: 1,
+            fatigueStatus: .manageable,
+            isFinalized: true,
+            finalizedAt: day(7)
+        )
+        context.insert(analysis)
+
+        let workout = insertWorkout(
+            date: day(3),
+            run: run,
+            week: 1,
+            session: 1,
+            entries: [
+                EntrySpec(
+                    exerciseName: "Back Squats",
+                    sourceProgramSessionExerciseID: fixture.week1Main.id,
+                    prescribedTargetSets: 3,
+                    prescribedTargetReps: 5,
+                    prescribedWeight: 315,
+                    prescribedWeightUnit: "lbs",
+                    sets: [SetSpec(setNumber: 1, reps: 5, weight: 315)]
+                )
+            ],
+            context: context
+        )
+        guard let entry = workout.exerciseEntries.first else {
+            #expect(Bool(false), "Expected workout to contain an exercise entry")
+            return
+        }
+
+        let stale = ExercisePerformanceOutcome(
+            createdAt: day(4),
+            programRun: run,
+            workout: workout,
+            exerciseEntry: entry,
+            workoutDate: day(3),
+            programWeekNumber: 1,
+            programSessionNumber: 1,
+            sourceProgramSessionExerciseID: fixture.week1Main.id,
+            exerciseName: "Back Squats",
+            canonicalLiftKey: "squat",
+            signalSource: .programLinked,
+            signalConfidence: .high,
+            signalWeight: 1.0,
+            actualSetCount: 3,
+            actualAverageReps: 5,
+            actualAverageWeight: 285,
+            actualTopSetReps: 5,
+            actualTopSetWeight: 285,
+            actualTopSetEstimated1RM: 332,
+            performanceScoreValue: -14,
+            performanceScore: .severeUnderperformance,
+            inferredFatigueStatus: .manageable,
+            isTopSetSignal: true,
+            notes: "stale-duplicate"
+        )
+
+        let refreshed = ExercisePerformanceOutcome(
+            createdAt: day(5),
+            programRun: run,
+            workout: workout,
+            exerciseEntry: entry,
+            workoutDate: day(3),
+            programWeekNumber: 1,
+            programSessionNumber: 1,
+            sourceProgramSessionExerciseID: fixture.week1Main.id,
+            exerciseName: "Back Squats",
+            canonicalLiftKey: "squat",
+            signalSource: .programLinked,
+            signalConfidence: .high,
+            signalWeight: 1.0,
+            actualSetCount: 3,
+            actualAverageReps: 5,
+            actualAverageWeight: 335,
+            actualTopSetReps: 5,
+            actualTopSetWeight: 335,
+            actualTopSetEstimated1RM: 390,
+            performanceScoreValue: 14,
+            performanceScore: .exceptionalPerformance,
+            inferredFatigueStatus: .manageable,
+            isTopSetSignal: true,
+            notes: "fresh-duplicate"
+        )
+        context.insert(stale)
+        context.insert(refreshed)
+
+        AdaptiveLoadProgressionService.generateProposals(from: analysis, context: context)
+        try context.save()
+
+        let proposals = try fetchAll(AdaptationProposal.self, context)
+        let squatIncrease = proposals.first {
+            $0.targetLiftKey == "squat" &&
+            $0.targetWeekStart == 2 &&
+            $0.proposalType == .increaseLoad
+        }
+
+        #expect(squatIncrease != nil)
+        #expect((squatIncrease?.proposedLoadPercentDelta ?? 0) > 0)
+        let hasSquatDecrease = proposals.contains(where: {
+            $0.targetLiftKey == "squat" &&
+            $0.targetWeekStart == 2 &&
+            $0.proposalType == .decreaseLoad
+        })
+        #expect(hasSquatDecrease == false)
+    }
+
     @Test func volumeEngineCreatesUserConfirmedProposal() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext

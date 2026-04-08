@@ -43,6 +43,7 @@ enum AdaptiveLoadProgressionService {
         let fetchedTrends = (try? context.fetch(FetchDescriptor<LiftPerformanceTrend>())) ?? []
         var proposals = (try? context.fetch(FetchDescriptor<AdaptationProposal>())) ?? []
         var events = (try? context.fetch(FetchDescriptor<AdaptationEventHistory>())) ?? []
+        let dedupedOutcomes = dedupeOutcomes(fetchedOutcomes)
 
         let level = inferredLevel(for: program)
 
@@ -53,7 +54,7 @@ enum AdaptiveLoadProgressionService {
                 analysis: analysis,
                 run: run,
                 level: level,
-                outcomes: fetchedOutcomes,
+                outcomes: dedupedOutcomes,
                 trends: fetchedTrends
             )
 
@@ -687,6 +688,38 @@ enum AdaptiveLoadProgressionService {
     }
 
     // MARK: - Scoring Helpers
+
+    private static func dedupeOutcomes(
+        _ outcomes: [ExercisePerformanceOutcome]
+    ) -> [ExercisePerformanceOutcome] {
+        var byEntry: [UUID: ExercisePerformanceOutcome] = [:]
+        var noEntry: [ExercisePerformanceOutcome] = []
+
+        for outcome in outcomes {
+            guard let entryID = outcome.exerciseEntry?.id else {
+                noEntry.append(outcome)
+                continue
+            }
+
+            guard let existing = byEntry[entryID] else {
+                byEntry[entryID] = outcome
+                continue
+            }
+
+            if outcome.createdAt > existing.createdAt {
+                byEntry[entryID] = outcome
+                continue
+            }
+            if outcome.createdAt == existing.createdAt && outcome.id.uuidString > existing.id.uuidString {
+                byEntry[entryID] = outcome
+            }
+        }
+
+        return (Array(byEntry.values) + noEntry).sorted { lhs, rhs in
+            if lhs.workoutDate == rhs.workoutDate { return lhs.id.uuidString < rhs.id.uuidString }
+            return lhs.workoutDate < rhs.workoutDate
+        }
+    }
 
     private static func weightedAverage(values: [(Double, Double)]) -> Double? {
         let valid = values.filter { $0.1 > 0 }
