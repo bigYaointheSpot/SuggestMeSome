@@ -169,6 +169,7 @@ struct CompleteProgramWorkoutSheet: View {
     let activeRuns: [ProgramRun]
     let onStart: (ProgramWorkoutContext) -> Void
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Workout.date) private var allWorkouts: [Workout]
 
@@ -348,10 +349,12 @@ struct CompleteProgramWorkoutSheet: View {
     }
 
     private func sessionExercises(run: ProgramRun, week: Int, session: Int) -> [ProgramSessionExercise] {
-        guard let program = run.program else { return [] }
-        let wk = program.weeks.first { $0.weekNumber == week }
-        let sess = wk?.sessions.first { $0.sessionNumber == session }
-        return (sess?.exercises ?? []).sorted { $0.orderIndex < $1.orderIndex }
+        ProgramOverlayResolutionService.resolvedExercises(
+            for: run,
+            week: week,
+            session: session,
+            context: modelContext
+        )
     }
 }
 

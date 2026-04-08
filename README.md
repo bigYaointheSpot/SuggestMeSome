@@ -819,6 +819,33 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 8 [Automatic Variation Swap Overlays] — 2026-04-07
+
+- Added `SuggestMeSome/AdaptiveVariationSwapService.swift` and integrated it into weekly program analysis finalization (`WeeklyTrainingAnalysisService.analyzeProgramWeek`)
+- Automatic swap behavior now runs at weekly cadence and only for future program weeks (no direct mutation of `TrainingProgram` / `ProgramSessionExercise`)
+- Swap trigger logic combines:
+  - lift-trend direction/confidence (`LiftPerformanceTrend`)
+  - weekly + lift fatigue context (`WeeklyTrainingAnalysis.fatigueStatus`, trend fatigue)
+  - recent outcome underperformance/top-set miss patterns
+  - conservative plateau and recoverability heuristics
+- Profile-aware prioritization:
+  - **Powerlifting:** most conservative (max 1 swap/week, specificity-first replacements)
+  - **Powerbuilding / Bodybuilding:** still conservative, but allows slightly broader variation choices
+- Replacement selection uses the existing template/library ecosystem and continuity guards:
+  - chooses from known lift-family variation pools (e.g., pause/close-grip/deficit/block/front variants)
+  - requires load-mapping continuity (`FocusTemplateLibrary.loadMapping`) or direct competition-lift fallback
+  - avoids unnecessary novelty by preferring recently unused alternatives
+- Auto-application persistence:
+  - writes `AdaptationProposal` as `variationSwap` with `proposalStatus = .autoApplied`
+  - writes `AppliedProgramOverlay` + `AppliedOverlayAdjustment` (`adjustmentType = .variationSwap`) for target future week/session
+  - writes `AdaptationEventHistory` entries (`overlayApplied`) with explanation details for future user-facing history
+- Added `SuggestMeSome/ProgramOverlayResolutionService.swift` and wired `CompleteProgramWorkoutSheet` to resolve session exercises through overlays at runtime
+  - active overlays are applied when preparing future session workouts
+  - base program rows are cloned and adjusted in-memory, preserving non-destructive overlay architecture
+  - variation swap resolution updates replacement exercise identity and mapped load metadata for continuity
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

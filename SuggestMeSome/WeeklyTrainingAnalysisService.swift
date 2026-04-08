@@ -154,6 +154,8 @@ enum WeeklyTrainingAnalysisService {
         AdaptiveVolumeProgressionService.generateProposals(from: analysis, context: context)
         // Feature 6: detect fatigue accumulation and propose deload/downshift when warranted.
         AdaptiveFatigueDeloadService.generateProposals(from: analysis, context: context)
+        // Feature 6: auto-apply conservative variation swaps via non-destructive overlays.
+        AdaptiveVariationSwapService.generateAndApply(from: analysis, context: context)
 
         return analysis
     }
