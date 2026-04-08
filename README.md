@@ -558,6 +558,25 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 2 [PR Feed + Strength Trends Chart] — 2026-04-07
+
+- **Recent PRs Feed:** Replaces the "PR Feed" placeholder. Shows the 5 most recent `PersonalRecord` entries (sorted by `dateAchieved` descending, always unfiltered by time window). Each row displays exercise name + rep count, date, current PR weight, and a delta badge:
+  - **"+X lbs/kg" in green** — computed by scanning all `SetEntry` records for that exercise+repCount in workouts _before_ the PR date, taking the previous best weight and subtracting from the PR weight.
+  - **"First PR" badge in blue** — shown when no prior history exists for that exercise+repCount.
+  - "See All" link navigates to the existing `PersonalRecordsView`.
+- **Strength Trends Chart:** Replaces the "Strength Chart" placeholder using Swift Charts (`import Charts`).
+  - **Lift pill selector:** Horizontal scroll row of capsule pills for Bench Press, Squat, Deadlift, Overhead Press. Max 3 active at once. Each pill has a fixed color (blue, green, orange, purple). Active = filled, inactive = outlined.
+  - **Line chart:** One `LineMark` + `PointMark` series per active exercise. X axis = date filtered by time window. Y axis = estimated 1RM in lbs (auto-scaled). Uses `.catmullRom` interpolation.
+  - **e1RM formula (Epley):** `weight × (1 + reps / 30.0)`. Returns `weight` unchanged for single-rep sets. One data point per workout = the best e1RM across all sets of that exercise in the session.
+  - Exercises with fewer than 2 data points in the selected window are excluded from the chart; a "Not enough data for: …" caption is shown below when applicable.
+  - If all active lifts lack sufficient data, the chart area shows a placeholder card instead.
+- **New file:** `SuggestMeSome/Services/StrengthAnalytics.swift` — contains `ChartPoint` struct and `StrengthAnalytics` enum with three static helpers: `estimatedOneRepMax`, `chartPoints`, `previousBest`.
+- **Edited file:** `SuggestMeSome/Views/DashboardView.swift`
+
+**Commit:** `feat: add PR feed and strength trends chart to dashboard`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
