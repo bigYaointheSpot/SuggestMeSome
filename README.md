@@ -934,6 +934,18 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+### [Feature 5 Dashboard Enhancement — 2026-04-07]
+- Replaced single "Start Workout" button + confirmation dialog with three direct quick-action buttons (Empty / Suggest / Program) — Program is always visible and navigates to the Programs tab when no run is active
+- Added AI Coaching Insights card surfacing `WeeklyTrainingAnalysis` fatigue status (color-coded Low → Critical), weekly performance vs. target, and adherence score — intelligence previously invisible to the user
+- Added adaptive proposals banner: shows pending `AdaptationProposal` count with the top proposal's summary text and a one-tap link into `AdaptationProposalReviewView`
+- Added pending proposal badge on the Program quick-start button so the count is always in view
+- Added Lift Trend Badges row above the strength chart — pulls from `LiftPerformanceTrend` to display 4-week change % and trend status (improving / stable / declining / volatile) per tracked lift
+- Active Program card moved above the time-window picker when a program is active; now shows live fatigue status and adherence % from the most recent `WeeklyTrainingAnalysis`, plus a shortcut brain button to open proposal review
+- Active Program "browse" CTA remains at the bottom when no program is active
+- No new models or files added — all new UI reads from Feature 6 persisted SwiftData models
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
