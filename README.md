@@ -735,6 +735,36 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 5 [Weekly Accessory Volume Adjustment Proposals] — 2026-04-07
+
+- Added `SuggestMeSome/AdaptiveVolumeProgressionService.swift` and integrated it into weekly program analysis finalization (`WeeklyTrainingAnalysisService.analyzeProgramWeek`)
+- Weekly volume adaptation now runs on finalized weeks and targets the next week only (`currentWeek + 1`)
+- Decision inputs combine:
+  - weekly hard-set volume by muscle from `WeeklyVolumeMetric`
+  - recent muscle-level performance inferred from `ExercisePerformanceOutcome`
+  - weekly/recent fatigue state for recoverability protection
+  - existing Feature 4/4.5 volume targets via `ProgramExerciseMetadataService.weeklyVolumeTargets`
+- Added profile-aware volume logic:
+  - **Powerlifting:** lowest accessory aggressiveness; only limited support-muscle increases (e.g. upper back, triceps, abs, posterior chain) when clearly underdosed and recoverable
+  - **Bodybuilding:** highest volume tolerance; prioritizes underdosed muscles for small increases when fatigue allows
+  - **Powerbuilding:** blended logic between powerlifting specificity and hypertrophy volume needs
+- Proposal behavior:
+  - creates persisted `AdaptationProposal` records with type `increaseVolume` / `decreaseVolume`
+  - all volume proposals are `pendingUserConfirmation` and `requiresUserConfirmation = true`
+  - no auto-apply for volume (`autoApplyEligible = false`)
+  - each proposal is scoped to a concrete future accessory row (`targetProgramSessionExerciseID`, `targetSessionNumber`, target week)
+  - uses small set adjustments only (`proposedSetDelta = +1` or `-1`)
+- Overlay and state management:
+  - proposals remain non-destructive overlays; base program templates are unchanged
+  - conflicting open volume proposals for the same run/week/muscle are superseded deterministically
+  - `AdaptationEventHistory` proposal-created events are persisted with explicit reasons/details for future user-facing explainability
+- Recoverability guardrails:
+  - high/critical fatigue weeks bias toward reductions only
+  - elevated fatigue dampens increases unless underdose is strong
+  - per-week change count is capped by profile to avoid broad volume swings
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
