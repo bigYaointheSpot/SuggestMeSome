@@ -889,6 +889,28 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+#### Prompt 10 [Adaptation Explainability + History Surface] — 2026-04-07
+
+- Added `SuggestMeSome/Views/AdaptationHistoryView.swift`:
+  - compact, debug-friendly Feature 6 history screen scoped to a single `ProgramRun`
+  - surfaces persisted adaptive data in one place:
+    - recent `WeeklyTrainingAnalysis` rollups (including fatigue status)
+    - latest `LiftTrendSnapshot` by lift family
+    - `AdaptationProposal` lifecycle records (created, approved, rejected, auto-applied, superseded)
+    - auto-applied variation swap proposals as a dedicated section
+    - `AppliedProgramOverlay` records with effective week ranges and adjustment counts
+    - `AdaptationEventHistory` timeline with reason badges and explanation text
+  - includes a `Show Debug` toggle to separate user-facing summaries from raw internal detail strings and technical metadata
+- Updated `SuggestMeSome/Views/TrainingProgramsTab.swift`:
+  - added a new **Adaptation History** navigation row inside each expanded program run
+  - row shows whether adaptation events exist for quick visibility
+- Explainability/UX behavior notes:
+  - event and proposal entries display friendly labels plus explicit reason text (`AdjustmentReason`)
+  - raw explanation payloads (`detailText`, `explanation`) remain accessible in debug mode for auditability
+  - overlay architecture is visible in UI (`AppliedProgramOverlay` + adjustment summaries) without mutating base program templates
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

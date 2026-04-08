@@ -149,6 +149,7 @@ struct ProgramRunExpandableRow: View {
     let allWorkouts: [Workout]
     @Environment(\.modelContext) private var modelContext
     @Query private var allProposals: [AdaptationProposal]
+    @Query private var allEvents: [AdaptationEventHistory]
 
     @State private var isExpanded = false
     @State private var selectedWeek = 1
@@ -170,6 +171,10 @@ struct ProgramRunExpandableRow: View {
         AdaptationProposalConfirmationService
             .pendingUserProposals(for: run, proposals: allProposals)
             .count
+    }
+
+    private var adaptationEventCount: Int {
+        allEvents.filter { $0.programRun?.id == run.id }.count
     }
 
     private var sourceLabel: String {
@@ -232,6 +237,8 @@ struct ProgramRunExpandableRow: View {
             Divider()
             infoSection
             Divider()
+            adaptationHistoryRow
+            Divider()
             adaptiveProposalRow
             if !run.isCompleted {
                 Divider()
@@ -284,6 +291,41 @@ struct ProgramRunExpandableRow: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+    }
+
+    // MARK: Adaptation History Row
+
+    private var adaptationHistoryRow: some View {
+        NavigationLink {
+            AdaptationHistoryView(run: run)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.teal)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Adaptation History")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(adaptationEventCount == 0
+                         ? "No adaptation events yet"
+                         : "\(adaptationEventCount) recorded event\(adaptationEventCount == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
         .background(Color(.secondarySystemBackground))
     }
 
