@@ -1030,6 +1030,20 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Preserved generated-program persistence/data model behavior and kept template library/data storage wiring intact
 - **Commit:** `feat: refactor generator to use focus-specific progression strategies`
 
+#### Prompt 3 [Focus-Specific Volume and Fatigue Rule Split] — 2026-04-10
+- Replaced coarse focus archetype collapsing in `ProgramExerciseMetadataService` with explicit per-`ProgramFocus` volume/fatigue profiles used by weekly target and fatigue budget resolution
+- Defined distinct hard-set target ranges per focus to reflect programming intent, including:
+  - tighter accessory pressure for max-lift and strength-specialization focuses
+  - balanced strength/hypertrophy exposure for powerbuilding
+  - higher hypertrophy-oriented volume ceilings for bodybuilding with recoverability-oriented fatigue caps
+  - sustainable whole-body floors for general fitness and full-body, with tighter adjacent-session fatigue control for full-body
+  - upper-body-biased targets with lower-body minimum floors for push/pull
+  - lower-accessory-noise strength-biased ranges for fiveByFive
+  - cardio-endurance special handling that zeros resistance-style hard-set targets to avoid distortion
+- Updated fatigue budget profiles per focus with explicit weekly/session/adjacent scaling differences while preserving existing weekly summary and fatigue accounting integration
+- Added Feature 4 validation tests for focus-specific volume target and fatigue budget resolution so each focus resolves distinct, defensible rules
+- **Commit:** `feat: split generator volume and fatigue rules by focus`
+
 ---
 
 ## Project Setup

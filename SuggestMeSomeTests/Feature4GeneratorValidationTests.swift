@@ -58,6 +58,103 @@ struct Feature4GeneratorValidationTests {
         #expect(service.progressionModel(for: .cardioEndurance, level: level) == .linear)
     }
 
+    @Test func focusSpecificVolumeTargetsAreDistinctAndDefensible() {
+        let level: ProgramLevel = .intermediate
+
+        let maxSquat = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: .increaseMaxSquat, level: level)
+        #expect(maxSquat.range(for: .quads).minHardSets > maxSquat.range(for: .chest).minHardSets)
+
+        let maxBench = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: .increaseMaxBench, level: level)
+        #expect(maxBench.range(for: .chest).minHardSets > maxBench.range(for: .quads).minHardSets)
+
+        let maxDeadlift = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: .increaseMaxDeadlift, level: level)
+        #expect(maxDeadlift.range(for: .hamstrings).minHardSets > maxDeadlift.range(for: .chest).minHardSets)
+
+        let pushPull = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: .pushPull, level: level)
+        #expect(pushPull.range(for: .upperBackLats).minHardSets > pushPull.range(for: .quads).minHardSets)
+        #expect(pushPull.range(for: .chest).minHardSets > pushPull.range(for: .hamstrings).minHardSets)
+
+        let fiveByFive = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: .fiveByFive, level: level)
+        let powerbuilding = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: .powerbuilding, level: level)
+        #expect(fiveByFive.range(for: .biceps).maxHardSets < powerbuilding.range(for: .biceps).maxHardSets)
+        #expect(fiveByFive.range(for: .triceps).maxHardSets < powerbuilding.range(for: .triceps).maxHardSets)
+
+        let cardio = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: .cardioEndurance, level: level)
+        for muscle in ProgramVolumeMuscle.allCases {
+            #expect(cardio.range(for: muscle).minHardSets == 0)
+            #expect(cardio.range(for: muscle).maxHardSets == 0)
+        }
+    }
+
+    @Test func focusSpecificFatigueBudgetsAreDistinctAndDefensible() {
+        let level: ProgramLevel = .intermediate
+        let sessionsPerWeek = 4
+
+        let powerlifting = ProgramExerciseMetadataService.fatigueBudgets(
+            focus: .powerlifting,
+            level: level,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let powerbuilding = ProgramExerciseMetadataService.fatigueBudgets(
+            focus: .powerbuilding,
+            level: level,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let bodybuilding = ProgramExerciseMetadataService.fatigueBudgets(
+            focus: .bodybuilding,
+            level: level,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let general = ProgramExerciseMetadataService.fatigueBudgets(
+            focus: .generalFitness,
+            level: level,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let fullBody = ProgramExerciseMetadataService.fatigueBudgets(
+            focus: .fullBody,
+            level: level,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let fiveByFive = ProgramExerciseMetadataService.fatigueBudgets(
+            focus: .fiveByFive,
+            level: level,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let maxDeadlift = ProgramExerciseMetadataService.fatigueBudgets(
+            focus: .increaseMaxDeadlift,
+            level: level,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let maxBench = ProgramExerciseMetadataService.fatigueBudgets(
+            focus: .increaseMaxBench,
+            level: level,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let cardio = ProgramExerciseMetadataService.fatigueBudgets(
+            focus: .cardioEndurance,
+            level: level,
+            sessionsPerWeek: sessionsPerWeek
+        )
+
+        #expect(powerlifting.weekBudget < powerbuilding.weekBudget)
+        #expect(powerbuilding.weekBudget < bodybuilding.weekBudget)
+        #expect(fiveByFive.weekBudget < powerlifting.weekBudget)
+        #expect(fullBody.adjacentSessionPairBudget < general.adjacentSessionPairBudget)
+        #expect(maxDeadlift.deadliftSessionBudget < maxBench.deadliftSessionBudget)
+        #expect(cardio.weekBudget < bodybuilding.weekBudget)
+
+        let uniqueBudgets = Set(
+            ProgramFocus.allCases.map { focus in
+                Int(ProgramExerciseMetadataService.fatigueBudgets(
+                    focus: focus,
+                    level: level,
+                    sessionsPerWeek: sessionsPerWeek
+                ).weekBudget.rounded())
+            }
+        )
+        #expect(uniqueBudgets.count >= 9)
+    }
+
     @Test func eachFocusBuildsExpectedWeeksAndResolvedSessions() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
