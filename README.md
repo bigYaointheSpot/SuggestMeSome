@@ -1117,6 +1117,18 @@ A program-first daily coaching system that collects readiness check-ins, surface
 - All changes are additive and backward-compatible; no existing behavior altered
 - **Commit:** `feat: add daily coach data foundation`
 
+#### Prompt 2 [Daily Coach First Tab Shell] — 2026-04-10
+- Added `DailyCoachView.swift` at `Views/DailyCoach/DailyCoachView.swift` — a `NavigationStack`-based scroll view with five distinct sections
+- Restructured `ContentView` tab order: Daily Coach (tag 0, `brain.head.profile`), Home (tag 1), Workouts (tag 2), Training Programs (tag 3); app opens to Daily Coach by default
+- **Today's Training card**: when an active `ProgramRun` exists, shows program name, current week / total weeks / sessions-per-week, and latest fatigue status dot from `WeeklyTrainingAnalysis`; falls back to a friendly standalone state when no program is running
+- **Readiness card** (placeholder): shows today's `DailyCoachCheckIn` stats (sleep, energy, soreness, stress) if one exists; otherwise shows a "not yet recorded" placeholder with a deferred-feature note
+- **Coach Recommendation card** (placeholder): static text indicating the engine is coming in a future prompt
+- **Pending Proposals row**: compact orange-tinted row showing the count of `AdaptationProposal` entries with `.pendingUserConfirmation` status; only rendered when at least one exists
+- **Latest Weekly Review card**: renders the most recent `DailyCoachWeeklyReview` (date range, headline, win, watchout) with a "New" badge when `hasBeenSeen == false`; falls back to an empty state when no reviews exist
+- All data is read via `@Query`; no writes or services introduced in this prompt
+- Existing Home dashboard tab is fully preserved and functional at tag 1
+- **Commit:** `feat: add daily coach first tab shell`
+
 ---
 
 ## Project Setup

@@ -15,21 +15,26 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
+            DailyCoachView()
+                .tabItem {
+                    Label("Daily Coach", systemImage: "brain.head.profile")
+                }
+                .tag(0)
             DashboardView(selectedTab: $selectedTab)
                 .tabItem {
                     Label("Home", systemImage: "house.fill")
                 }
-                .tag(0)
+                .tag(1)
             WorkoutsTab()
                 .tabItem {
                     Label("Workouts", systemImage: "dumbbell")
                 }
-                .tag(1)
+                .tag(2)
             TrainingProgramsTab()
                 .tabItem {
                     Label("Training Programs", systemImage: "list.clipboard")
                 }
-                .tag(2)
+                .tag(3)
         }
     }
 }
