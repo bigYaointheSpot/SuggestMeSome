@@ -82,8 +82,11 @@ struct SuggestMeSomeApp: App {
             ContentView()
                 .preferredColorScheme(.dark)
                 .onAppear {
+                    // v1.0: Populates default MuscleGroups and Exercises on first launch.
                     seedDefaultDataIfNeeded(context: sharedModelContainer.mainContext)
+                    // v1.1: Backfills exerciseType on existing exercises and adds the Cardio group.
                     migrateExerciseTypesIfNeeded(context: sharedModelContainer.mainContext)
+                    // v1.2: Adds expanded exercise library introduced for the AI program generator.
                     migrateExercisesV2IfNeeded(context: sharedModelContainer.mainContext)
                 }
         }

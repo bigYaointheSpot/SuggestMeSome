@@ -41,9 +41,4 @@ enum ProgramOutcomeComparisonService {
             completedAverageWeight: avgWeight
         )
     }
-
-    // TODO: Reactive deloads — trigger week-level deload recommendations when comparison drift exceeds thresholds.
-    // TODO: Performance-based progression — increase/decrease load targets from comparison trends.
-    // TODO: Adherence scoring — aggregate completion quality across sets/sessions/weeks.
-    // TODO: Next-week adjustments — apply comparison outputs back into future week prescriptions.
 }

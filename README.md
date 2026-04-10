@@ -1006,6 +1006,12 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - All view-body references updated to `viewModel.propertyName`; bindings use `$viewModel.property` via `@Observable`+`@State` Bindable projection (iOS 17+)
 - No visual or behavioral changes — pure logic extraction
 
+### [Feature 6.5 — Cleanup] — 2026-04-10
+- Removed "Show Debug" / "Hide Debug" toolbar button and all `showDebugDetails`-gated blocks from `AdaptationHistoryView.swift`; event explanation always shows user-facing text with a 3-line limit
+- Added inline comments above each migration call in `SuggestMeSomeApp.swift` annotating the schema version / feature each migration was introduced for
+- Removed 4 stale `// TODO` comments from `ProgramOutcomeComparisonService.swift` (planned future features that are out of scope for the current build)
+- `print(` statements in `WorkoutView.swift` catch blocks retained as intentional F6 error logging
+
 ---
 
 ## Project Setup
