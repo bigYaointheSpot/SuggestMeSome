@@ -73,6 +73,8 @@ enum ProgramWeeklyExposurePriority: String, Codable, CaseIterable {
 enum ProgramTopSetBackoffPolicy: String, Codable {
     case disabled
     case templateDriven
+    /// Mostly straight-set programming with optional opener top/backoff on selected compounds.
+    case compoundOpener
 }
 
 enum ProgramDefaultDeloadStyle: String, Codable {
@@ -220,7 +222,7 @@ enum ProgramFocusProgrammingProfileLibrary {
                 primaryAdaptationGoal: .hypertrophy,
                 progressionStrategyFamily: .hypertrophyVolume,
                 weeklyExposurePriorities: [.horizontalPush, .verticalPush, .horizontalPull, .verticalPull, .singleLeg, .trunk],
-                topSetBackoffPolicy: .disabled,
+                topSetBackoffPolicy: .compoundOpener,
                 defaultDeloadStyle: .fixedInterval,
                 recoveryProfile: .robust,
                 cardioProgrammingProfile: nil

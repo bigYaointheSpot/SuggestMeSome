@@ -222,6 +222,7 @@ struct ProgramGenerationService {
                 for primary in sessionDef.primaryExercises {
                     orderIdx = populateExercise(
                         primary, isPrimary: true,
+                        isSessionOpener: orderIdx == 0,
                         strategy: strategy,
                         focusProfile: focusProfile,
                         schedule: schedule, sessionIdx: sessionIdx,
@@ -236,6 +237,7 @@ struct ProgramGenerationService {
                 for accessory in accessories {
                     orderIdx = populateExercise(
                         accessory, isPrimary: false,
+                        isSessionOpener: false,
                         strategy: strategy,
                         focusProfile: focusProfile,
                         schedule: schedule, sessionIdx: sessionIdx,
@@ -262,6 +264,7 @@ struct ProgramGenerationService {
     private func populateExercise(
         _ templateEx: TemplateExercise,
         isPrimary: Bool,
+        isSessionOpener: Bool,
         strategy: ProgressionStrategy,
         focusProfile: ProgramFocusProgrammingProfile,
         schedule: WeekSchedule,
@@ -304,12 +307,14 @@ struct ProgramGenerationService {
         let params = computeParams(
             exercise: templateEx,
             strategy: strategy,
+            focusProfile: focusProfile,
             schedule: schedule,
             sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek
         )
         let effectiveWorkingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
         let workingBlocks = buildWorkingSetBlocks(
             exercise: templateEx,
+            isSessionOpener: isSessionOpener,
             focusProfile: focusProfile,
             level: level,
             schedule: schedule,
@@ -377,6 +382,7 @@ struct ProgramGenerationService {
                 targetReps: block.reps,
                 targetPercentage1RM: block.percentage1RM,
                 targetRPE: block.rpe,
+                targetRIR: block.rir,
                 prescribedWeight: load.prescribedWeight,
                 prescribedWeightUnit: load.prescribedWeightUnit,
                 workingSetStyle: block.style,
@@ -384,7 +390,7 @@ struct ProgramGenerationService {
                 targetEffortType: resolveTargetEffortType(
                     percentage1RM: block.percentage1RM,
                     targetRPE: block.rpe,
-                    targetRIR: nil
+                    targetRIR: block.rir
                 ),
                 baseLiftUsed: load.baseLiftUsed,
                 effectiveOneRepMax: load.effectiveOneRepMax,
@@ -468,11 +474,13 @@ struct ProgramGenerationService {
         let reps: Int
         let percentage1RM: Double?
         let rpe: Double?
+        let rir: Double?
         let backoffDrop: Double?
     }
 
     private func buildWorkingSetBlocks(
         exercise: TemplateExercise,
+        isSessionOpener: Bool,
         focusProfile: ProgramFocusProgrammingProfile,
         level: ProgramLevel,
         schedule: WeekSchedule,
@@ -484,7 +492,13 @@ struct ProgramGenerationService {
             return [straightSetBlock(from: params, sets: totalWorkingSets)]
         }
 
-        guard shouldUseTopBackoff(for: exercise, focusProfile: focusProfile, level: level, params: params),
+        guard shouldUseTopBackoff(
+            for: exercise,
+            isSessionOpener: isSessionOpener,
+            focusProfile: focusProfile,
+            level: level,
+            params: params
+        ),
               let top = exercise.topSetPrescription,
               let backoff = exercise.backoffPrescription,
               let topPct = params.percentage1RM else {
@@ -507,6 +521,7 @@ struct ProgramGenerationService {
                 reps: topReps,
                 percentage1RM: topPct,
                 rpe: topRPE,
+                rir: nil,
                 backoffDrop: nil
             ),
             WorkingSetBlock(
@@ -515,6 +530,7 @@ struct ProgramGenerationService {
                 reps: backoffReps,
                 percentage1RM: backoffPct,
                 rpe: params.rpe,
+                rir: nil,
                 backoffDrop: drop
             )
         ]
@@ -522,6 +538,7 @@ struct ProgramGenerationService {
 
     private func shouldUseTopBackoff(
         for exercise: TemplateExercise,
+        isSessionOpener: Bool,
         focusProfile: ProgramFocusProgrammingProfile,
         level: ProgramLevel,
         params: ExerciseParams
@@ -529,8 +546,15 @@ struct ProgramGenerationService {
         if focusProfile.topSetBackoffPolicy == .disabled { return false }
         // Beginner templates stay predominantly straight-set.
         if level == .beginner { return false }
-        // High-rep hypertrophy work should stay straight-set.
-        if params.reps >= 8 { return false }
+        if focusProfile.topSetBackoffPolicy == .compoundOpener {
+            if !isSessionOpener { return false }
+            if exercise.role != .primary && exercise.role != .variation { return false }
+            // Bodybuilding opener logic should stay mostly strength-endurance, not peaking.
+            if params.reps < 5 || params.reps > 7 { return false }
+        } else {
+            // High-rep hypertrophy work should stay straight-set.
+            if params.reps >= 8 { return false }
+        }
         // Only %1RM-based work can support load-dropped backoffs.
         if exercise.percentage1RM == nil { return false }
         return exercise.topSetPrescription != nil && exercise.backoffPrescription != nil
@@ -543,6 +567,7 @@ struct ProgramGenerationService {
             reps: params.reps,
             percentage1RM: params.percentage1RM,
             rpe: params.rpe,
+            rir: params.rir,
             backoffDrop: nil
         )
     }
@@ -768,11 +793,13 @@ struct ProgramGenerationService {
         let reps: Int
         let percentage1RM: Double?
         let rpe: Double?
+        let rir: Double?
     }
 
     private func computeParams(
         exercise: TemplateExercise,
         strategy: ProgressionStrategy,
+        focusProfile: ProgramFocusProgrammingProfile,
         schedule: WeekSchedule,
         sessionIdx: Int,
         sessionsPerWeek: Int
@@ -797,6 +824,7 @@ struct ProgramGenerationService {
         case .hypertrophyVolume:
             return hypertrophyParams(
                 exercise: exercise,
+                focus: focusProfile.focus,
                 level: strategy.level,
                 schedule: schedule
             )
@@ -845,14 +873,16 @@ struct ProgramGenerationService {
                     sets: exercise.defaultSets,
                     reps: exercise.defaultReps,
                     percentage1RM: pct,
-                    rpe: nil
+                    rpe: nil,
+                    rir: nil
                 )
             }
             return ExerciseParams(
                 sets: exercise.defaultSets,
                 reps: exercise.defaultReps,
                 percentage1RM: nil,
-                rpe: BeginnerTuning.deloadRPE
+                rpe: BeginnerTuning.deloadRPE,
+                rir: nil
             )
         }
 
@@ -870,7 +900,8 @@ struct ProgramGenerationService {
                 sets: exercise.defaultSets,
                 reps: exercise.defaultReps,
                 percentage1RM: pct,
-                rpe: nil
+                rpe: nil,
+                rir: nil
             )
         }
 
@@ -879,7 +910,8 @@ struct ProgramGenerationService {
             sets: exercise.defaultSets,
             reps: exercise.defaultReps,
             percentage1RM: nil,
-            rpe: exercise.targetRPE ?? 7.0
+            rpe: exercise.targetRPE ?? 7.0,
+            rir: nil
         )
     }
 
@@ -934,9 +966,14 @@ struct ProgramGenerationService {
 
     private func hypertrophyParams(
         exercise: TemplateExercise,
+        focus: ProgramFocus,
         level: ProgramLevel,
         schedule: WeekSchedule
     ) -> ExerciseParams {
+        if focus == .bodybuilding {
+            return bodybuildingHypertrophyParams(exercise: exercise, level: level, schedule: schedule)
+        }
+
         let targetRepsByLevel: [ProgramLevel: Int] = [
             .beginner: 12,
             .intermediate: 10,
@@ -956,14 +993,16 @@ struct ProgramGenerationService {
                     sets: max(3, exercise.defaultSets),
                     reps: targetReps,
                     percentage1RM: pct,
-                    rpe: nil
+                    rpe: nil,
+                    rir: nil
                 )
             }
             return ExerciseParams(
                 sets: max(3, exercise.defaultSets),
                 reps: targetReps,
                 percentage1RM: nil,
-                rpe: HypertrophyTuning.deloadRPE
+                rpe: HypertrophyTuning.deloadRPE,
+                rir: nil
             )
         }
 
@@ -978,7 +1017,8 @@ struct ProgramGenerationService {
                 sets: max(3, exercise.defaultSets),
                 reps: targetReps,
                 percentage1RM: pct,
-                rpe: nil
+                rpe: nil,
+                rir: nil
             )
         }
 
@@ -992,8 +1032,121 @@ struct ProgramGenerationService {
             sets: max(3, exercise.defaultSets),
             reps: targetReps,
             percentage1RM: nil,
-            rpe: clampedRPE(rpeAnchor + (rpeTuningByLevel[level] ?? 0.0))
+            rpe: clampedRPE(rpeAnchor + (rpeTuningByLevel[level] ?? 0.0)),
+            rir: nil
         )
+    }
+
+    private enum BodybuildingExerciseClass {
+        case compound
+        case stableVariation
+        case pumpIsolation
+    }
+
+    private func bodybuildingExerciseClass(for exercise: TemplateExercise) -> BodybuildingExerciseClass {
+        if exercise.role == .primary, exercise.percentage1RM != nil { return .compound }
+        if exercise.role == .variation || exercise.percentage1RM != nil { return .stableVariation }
+        return .pumpIsolation
+    }
+
+    private func bodybuildingHypertrophyParams(
+        exercise: TemplateExercise,
+        level: ProgramLevel,
+        schedule: WeekSchedule
+    ) -> ExerciseParams {
+        let cls = bodybuildingExerciseClass(for: exercise)
+        let progressionStep = Double(schedule.progressionIndex)
+
+        if schedule.isDeload {
+            if let anchor = exercise.percentage1RM {
+                let pct = clampedPercentage(
+                    anchor: anchor,
+                    candidate: anchor - 0.10,
+                    minOffset: -0.14,
+                    maxOffset: 0.08
+                )
+                let deloadSets: Int
+                let deloadReps: Int
+                switch cls {
+                case .compound:
+                    deloadSets = max(2, min(3, exercise.defaultSets))
+                    deloadReps = max(6, exercise.defaultReps)
+                case .stableVariation:
+                    deloadSets = max(2, min(3, exercise.defaultSets))
+                    deloadReps = max(8, exercise.defaultReps)
+                case .pumpIsolation:
+                    deloadSets = max(2, min(3, exercise.defaultSets))
+                    deloadReps = max(12, exercise.defaultReps)
+                }
+                return ExerciseParams(
+                    sets: deloadSets,
+                    reps: deloadReps,
+                    percentage1RM: pct,
+                    rpe: nil,
+                    rir: 3.0
+                )
+            }
+
+            let deloadReps: Int
+            switch cls {
+            case .compound: deloadReps = max(8, exercise.defaultReps)
+            case .stableVariation: deloadReps = max(10, exercise.defaultReps)
+            case .pumpIsolation: deloadReps = max(12, exercise.defaultReps)
+            }
+            return ExerciseParams(
+                sets: max(2, min(3, exercise.defaultSets)),
+                reps: deloadReps,
+                percentage1RM: nil,
+                rpe: 6.5,
+                rir: 3.0
+            )
+        }
+
+        switch cls {
+        case .compound:
+            let repsByLevel: [ProgramLevel: Int] = [.beginner: 8, .intermediate: 7, .advanced: 6]
+            let reps = max(6, repsByLevel[level] ?? 7)
+            let sets = max(3, min(5, exercise.defaultSets))
+            if let anchor = exercise.percentage1RM {
+                let pct = clampedPercentage(
+                    anchor: anchor,
+                    candidate: anchor - 0.02 + progressionStep * 0.004,
+                    minOffset: -0.10,
+                    maxOffset: 0.08
+                )
+                return ExerciseParams(sets: sets, reps: reps, percentage1RM: pct, rpe: nil, rir: nil)
+            }
+            return ExerciseParams(sets: sets, reps: reps, percentage1RM: nil, rpe: clampedRPE((exercise.targetRPE ?? 8.0) - 0.2), rir: 2.0)
+
+        case .stableVariation:
+            let repsByLevel: [ProgramLevel: Int] = [.beginner: 11, .intermediate: 10, .advanced: 9]
+            let reps = max(8, repsByLevel[level] ?? 10)
+            let sets = max(3, min(4, exercise.defaultSets))
+            if let anchor = exercise.percentage1RM {
+                let pct = clampedPercentage(
+                    anchor: anchor,
+                    candidate: anchor - 0.04 + progressionStep * 0.003,
+                    minOffset: -0.12,
+                    maxOffset: 0.07
+                )
+                return ExerciseParams(sets: sets, reps: reps, percentage1RM: pct, rpe: nil, rir: nil)
+            }
+            let rirByLevel: [ProgramLevel: Double] = [.beginner: 2.5, .intermediate: 2.0, .advanced: 1.5]
+            return ExerciseParams(sets: sets, reps: reps, percentage1RM: nil, rpe: clampedRPE(exercise.targetRPE ?? 7.5), rir: rirByLevel[level] ?? 2.0)
+
+        case .pumpIsolation:
+            let repsByLevel: [ProgramLevel: Int] = [.beginner: 14, .intermediate: 13, .advanced: 12]
+            let reps = max(10, repsByLevel[level] ?? 13)
+            let sets = max(3, min(4, exercise.defaultSets))
+            let rirByLevel: [ProgramLevel: Double] = [.beginner: 3.0, .intermediate: 2.0, .advanced: 1.0]
+            return ExerciseParams(
+                sets: sets,
+                reps: reps,
+                percentage1RM: nil,
+                rpe: clampedRPE((exercise.targetRPE ?? 7.0) - 0.3 + (level == .advanced ? 0.2 : 0.0)),
+                rir: rirByLevel[level] ?? 2.0
+            )
+        }
     }
 
     private func balancedTrainingParams(
@@ -1045,14 +1198,16 @@ struct ProgramGenerationService {
                     sets: sets,
                     reps: reps,
                     percentage1RM: pct,
-                    rpe: nil
+                    rpe: nil,
+                    rir: nil
                 )
             }
             return ExerciseParams(
                 sets: sets,
                 reps: reps,
                 percentage1RM: nil,
-                rpe: EnduranceTuning.deloadRPE
+                rpe: EnduranceTuning.deloadRPE,
+                rir: nil
             )
         }
 
@@ -1067,7 +1222,8 @@ struct ProgramGenerationService {
                 sets: sets,
                 reps: reps,
                 percentage1RM: pct,
-                rpe: nil
+                rpe: nil,
+                rir: nil
             )
         }
 
@@ -1076,7 +1232,8 @@ struct ProgramGenerationService {
             sets: sets,
             reps: reps,
             percentage1RM: nil,
-            rpe: clampedRPE(rpeAnchor - 0.3)
+            rpe: clampedRPE(rpeAnchor - 0.3),
+            rir: nil
         )
     }
 
@@ -1171,14 +1328,16 @@ struct ProgramGenerationService {
                     sets: baseSets,
                     reps: DUPTier.light.repCount,
                     percentage1RM: pct,
-                    rpe: nil
+                    rpe: nil,
+                    rir: nil
                 )
             }
             return ExerciseParams(
                 sets: baseSets,
                 reps: DUPTier.light.repCount,
                 percentage1RM: nil,
-                rpe: IntermediateTuning.deloadRPE
+                rpe: IntermediateTuning.deloadRPE,
+                rir: nil
             )
         }
 
@@ -1196,7 +1355,8 @@ struct ProgramGenerationService {
                 sets: tier.defaultSets,
                 reps: tier.repCount,
                 percentage1RM: pct,
-                rpe: nil
+                rpe: nil,
+                rir: nil
             )
         }
 
@@ -1205,7 +1365,8 @@ struct ProgramGenerationService {
             sets: tier.defaultSets,
             reps: tier.repCount,
             percentage1RM: nil,
-            rpe: clampedRPE(rpeAnchor + tier.rpeAnchorOffset)
+            rpe: clampedRPE(rpeAnchor + tier.rpeAnchorOffset),
+            rir: nil
         )
     }
 
@@ -1269,14 +1430,16 @@ struct ProgramGenerationService {
                     sets: phase.defaultSets,
                     reps: phase.midReps,
                     percentage1RM: pct,
-                    rpe: nil
+                    rpe: nil,
+                    rir: nil
                 )
             }
             return ExerciseParams(
                 sets: phase.defaultSets,
                 reps: phase.midReps,
                 percentage1RM: nil,
-                rpe: AdvancedTuning.deloadRPE
+                rpe: AdvancedTuning.deloadRPE,
+                rir: nil
             )
         }
 
@@ -1298,7 +1461,8 @@ struct ProgramGenerationService {
                 sets: phase.defaultSets,
                 reps: phase.midReps,
                 percentage1RM: pct,
-                rpe: nil
+                rpe: nil,
+                rir: nil
             )
         }
 
@@ -1307,7 +1471,8 @@ struct ProgramGenerationService {
             sets: phase.defaultSets,
             reps: phase.midReps,
             percentage1RM: nil,
-            rpe: clampedRPE(rpeAnchor + phase.rpeAnchorOffset)
+            rpe: clampedRPE(rpeAnchor + phase.rpeAnchorOffset),
+            rir: nil
         )
     }
 
@@ -1529,7 +1694,12 @@ struct ProgramGenerationService {
 
             // Accessory picks are selected to fill under-target muscles first, then maintain variability.
             for (sessionIdx, sessionDef) in sessionDefs.enumerated() {
-                let selectionCount = min(sessionDef.accessoryCount, sessionDef.accessoryPool.count)
+                let selectionCount = resolvedAccessorySelectionCount(
+                    focus: focus,
+                    sessionName: sessionDef.sessionName,
+                    requested: sessionDef.accessoryCount,
+                    available: sessionDef.accessoryPool.count
+                )
                 guard selectionCount > 0 else { continue }
 
                 let isDeadliftHeavy = isDeadliftHeavySession(sessionDef)
@@ -1561,6 +1731,16 @@ struct ProgramGenerationService {
                             sessionsPerWeek: sessionsPerWeek
                         )
 
+                        if focus == .bodybuilding,
+                           isJunkBodybuildingAccessory(
+                            estimate: estimate,
+                            currentWeeklyMuscleSets: weeklyMuscleSets,
+                            volumeTargets: volumeTargets,
+                            sessionName: sessionDef.sessionName
+                           ) {
+                            continue
+                        }
+
                         if violatesFatigueBudgets(
                             estimate: estimate,
                             currentWeekFatigue: weeklyFatigue,
@@ -1583,6 +1763,8 @@ struct ProgramGenerationService {
                             previousSessionHighFatigue: previousSessionHighFatigue,
                             fatigueBudgets: fatigueBudgets,
                             isDeadliftHeavySession: isDeadliftHeavy,
+                            focus: focus,
+                            sessionName: sessionDef.sessionName,
                             currentWeekNumber: schedule.weekNumber,
                             lastUsedWeek: lastUsed,
                             rng: &rng
@@ -1651,6 +1833,8 @@ struct ProgramGenerationService {
         previousSessionHighFatigue: Double,
         fatigueBudgets: ProgramFatigueBudgets,
         isDeadliftHeavySession: Bool,
+        focus: ProgramFocus,
+        sessionName: String,
         currentWeekNumber: Int,
         lastUsedWeek: Int?,
         rng: inout SeededRNG
@@ -1707,8 +1891,95 @@ struct ProgramGenerationService {
             score += 1.0
         }
 
+        if focus == .bodybuilding {
+            let sessionTargets = bodybuildingSessionPriorityMuscles(sessionName: sessionName)
+            let targetContribution = sessionTargets.reduce(0.0) { partial, muscle in
+                partial + (estimate.hardSetsByMuscle[muscle] ?? 0)
+            }
+            score += targetContribution * 1.4
+
+            let offTargetContribution = ProgramVolumeMuscle.allCases
+                .filter { !sessionTargets.contains($0) }
+                .reduce(0.0) { partial, muscle in
+                    partial + (estimate.hardSetsByMuscle[muscle] ?? 0)
+                }
+            score -= offTargetContribution * 0.30
+        }
+
         score += randomJitter(using: &rng, magnitude: 0.16)
         return score
+    }
+
+    private func resolvedAccessorySelectionCount(
+        focus: ProgramFocus,
+        sessionName: String,
+        requested: Int,
+        available: Int
+    ) -> Int {
+        var count = min(requested, available)
+        guard focus == .bodybuilding else { return count }
+
+        if sessionName.lowercased().contains("arms") {
+            count = min(count, 3)
+        } else {
+            count = min(count, 4)
+        }
+        return max(1, count)
+    }
+
+    private func isJunkBodybuildingAccessory(
+        estimate: ExerciseLoadEstimate,
+        currentWeeklyMuscleSets: [ProgramVolumeMuscle: Double],
+        volumeTargets: ProgramWeeklyVolumeTargets,
+        sessionName: String
+    ) -> Bool {
+        let usefulTowardDeficit = ProgramVolumeMuscle.allCases.reduce(0.0) { total, muscle in
+            let current = currentWeeklyMuscleSets[muscle] ?? 0
+            let deficit = max(0, volumeTargets.range(for: muscle).minHardSets - current)
+            let added = estimate.hardSetsByMuscle[muscle] ?? 0
+            return total + min(deficit, added)
+        }
+
+        let sessionTargets = bodybuildingSessionPriorityMuscles(sessionName: sessionName)
+        let targetContribution = sessionTargets.reduce(0.0) { partial, muscle in
+            partial + (estimate.hardSetsByMuscle[muscle] ?? 0)
+        }
+
+        // Reject accessories that neither address meaningful weekly deficits nor reinforce session identity.
+        return usefulTowardDeficit < 0.8 && targetContribution < 1.0
+    }
+
+    private func bodybuildingSessionPriorityMuscles(sessionName: String) -> Set<ProgramVolumeMuscle> {
+        let lower = sessionName.lowercased()
+
+        if lower.contains("chest") && lower.contains("tricep") {
+            return [.chest, .triceps, .shoulders]
+        }
+        if lower.contains("back") && lower.contains("biceps") {
+            return [.upperBackLats, .biceps, .hamstrings]
+        }
+        if lower.contains("shoulder") {
+            return [.shoulders, .triceps, .upperBackLats]
+        }
+        if lower.contains("quad") {
+            return [.quads, .glutes, .calves]
+        }
+        if lower.contains("hamstring") || lower.contains("glute") {
+            return [.hamstrings, .glutes, .calves]
+        }
+        if lower.contains("leg") {
+            return [.quads, .hamstrings, .glutes, .calves]
+        }
+        if lower.contains("arm") {
+            return [.biceps, .triceps, .shoulders]
+        }
+        if lower.contains("chest") {
+            return [.chest, .shoulders, .triceps]
+        }
+        if lower.contains("back") {
+            return [.upperBackLats, .biceps, .hamstrings]
+        }
+        return [.chest, .upperBackLats, .quads, .hamstrings, .shoulders]
     }
 
     private func estimateLoad(
@@ -1732,6 +2003,7 @@ struct ProgramGenerationService {
         let params = computeParams(
             exercise: exercise,
             strategy: strategy,
+            focusProfile: focusProfile,
             schedule: schedule,
             sessionIdx: sessionIdx,
             sessionsPerWeek: sessionsPerWeek
@@ -1739,6 +2011,7 @@ struct ProgramGenerationService {
         let effectiveWorkingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
         let blocks = buildWorkingSetBlocks(
             exercise: exercise,
+            isSessionOpener: exercise.role == .primary,
             focusProfile: focusProfile,
             level: level,
             schedule: schedule,
@@ -1782,6 +2055,9 @@ struct ProgramGenerationService {
         } else if let rpe = params.rpe {
             if rpe >= 8.5 { intensityMultiplier += 0.15 }
             if rpe <= 6.5 { intensityMultiplier -= 0.05 }
+        } else if let rir = params.rir {
+            if rir <= 1.0 { intensityMultiplier += 0.15 }
+            else if rir >= 3.0 { intensityMultiplier -= 0.08 }
         }
         if schedule.isDeload {
             intensityMultiplier *= 0.78
@@ -1839,6 +2115,9 @@ struct ProgramGenerationService {
         } else if let rpe = exercise.targetRPE {
             if rpe >= 8.5 { intensityMultiplier += 0.15 }
             else if rpe <= 6.5 { intensityMultiplier -= 0.05 }
+        } else if let rir = exercise.targetRIR {
+            if rir <= 1.0 { intensityMultiplier += 0.15 }
+            else if rir >= 3.0 { intensityMultiplier -= 0.08 }
         }
 
         let sets = Double(setCount)

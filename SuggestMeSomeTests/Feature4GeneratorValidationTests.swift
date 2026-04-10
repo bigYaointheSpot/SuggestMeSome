@@ -282,7 +282,7 @@ struct Feature4GeneratorValidationTests {
         let context = container.mainContext
 
         let bodybuildingProfile = service.programmingProfile(for: .bodybuilding)
-        #expect(bodybuildingProfile.topSetBackoffPolicy == .disabled)
+        #expect(bodybuildingProfile.topSetBackoffPolicy == .compoundOpener)
 
         let bodybuildingProgram = service.generateProgram(
             input: makeInput(focus: .bodybuilding, level: .advanced, durationWeeks: 8, sessionsPerWeek: 4),
@@ -292,8 +292,10 @@ struct Feature4GeneratorValidationTests {
         let bodybuildingStyles = flattenedExercises(from: bodybuildingProgram)
             .filter { !$0.isWarmup }
             .map(\.workingSetStyle)
-        #expect(!bodybuildingStyles.contains(.topSet))
-        #expect(!bodybuildingStyles.contains(.backoff))
+        let bodybuildingTopBackoffCount = bodybuildingStyles.filter { $0 == .topSet || $0 == .backoff }.count
+        let bodybuildingStraightCount = bodybuildingStyles.filter { $0 == .straight }.count
+        #expect(bodybuildingTopBackoffCount > 0)
+        #expect(bodybuildingStraightCount > bodybuildingTopBackoffCount)
 
         let powerliftingProfile = service.programmingProfile(for: .powerlifting)
         #expect(powerliftingProfile.topSetBackoffPolicy == .templateDriven)
@@ -308,6 +310,109 @@ struct Feature4GeneratorValidationTests {
             .map(\.workingSetStyle)
         #expect(powerliftingStyles.contains(.topSet))
         #expect(powerliftingStyles.contains(.backoff))
+    }
+
+    @Test func bodybuildingWeeklyFrequencyHitsSplitIntent() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let program = service.generateProgram(
+            input: makeInput(focus: .bodybuilding, level: .intermediate, durationWeeks: 8, sessionsPerWeek: 5),
+            context: context,
+            shuffleSeed: 4121
+        )
+
+        guard let firstWeek = service.weeklySummary(for: program).first else {
+            Issue.record("Missing generated week summary for bodybuilding frequency test")
+            return
+        }
+
+        let exposuresByMuscle = ProgramVolumeMuscle.allCases.reduce(into: [ProgramVolumeMuscle: Int]()) { map, muscle in
+            map[muscle] = firstWeek.sessionSummaries.filter { ($0.hardSetsByMuscle[muscle] ?? 0) >= 3.0 }.count
+        }
+
+        #expect((exposuresByMuscle[.chest] ?? 0) >= 1)
+        #expect((exposuresByMuscle[.upperBackLats] ?? 0) >= 1)
+        #expect((exposuresByMuscle[.quads] ?? 0) >= 1)
+        #expect((exposuresByMuscle[.hamstrings] ?? 0) >= 1)
+        #expect((exposuresByMuscle[.biceps] ?? 0) >= 2)
+        #expect((exposuresByMuscle[.triceps] ?? 0) >= 2)
+        #expect((exposuresByMuscle[.shoulders] ?? 0) >= 2)
+    }
+
+    @Test func bodybuildingSessionsAvoidUnderdosedOrBloatedPatterns() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let input = makeInput(
+            focus: .bodybuilding,
+            level: .intermediate,
+            durationWeeks: 8,
+            sessionsPerWeek: 5
+        )
+        let program = service.generateProgram(
+            input: input,
+            context: context,
+            shuffleSeed: 4141
+        )
+
+        let volumeTargets = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: .bodybuilding, level: .intermediate)
+        let weeklySummaries = service.weeklySummary(for: program)
+        guard let firstWeek = weeklySummaries.first else {
+            Issue.record("Missing generated week summary for bodybuilding dosing test")
+            return
+        }
+
+        for session in firstWeek.sessionSummaries {
+            let workingExerciseCount = program.weeks
+                .first(where: { $0.weekNumber == firstWeek.weekNumber })?
+                .sessions
+                .first(where: { $0.sessionNumber == session.sessionNumber })?
+                .exercises
+                .filter { !$0.isWarmup }
+                .count ?? 0
+            #expect(workingExerciseCount >= 3)
+            #expect(workingExerciseCount <= 9)
+            #expect(session.fatigueScore > 0)
+        }
+
+        for muscle in [.chest, .upperBackLats, .quads, .hamstrings, .shoulders, .biceps, .triceps] as [ProgramVolumeMuscle] {
+            let total = firstWeek.totalHardSetsByMuscle[muscle] ?? 0
+            let target = volumeTargets.range(for: muscle)
+            #expect(total >= target.minHardSets * 0.60)
+            #expect(total <= target.maxHardSets * 1.15)
+        }
+    }
+
+    @Test func bodybuildingSessionsPreserveHypertrophyIdentity() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let program = service.generateProgram(
+            input: makeInput(focus: .bodybuilding, level: .advanced, durationWeeks: 8, sessionsPerWeek: 6),
+            context: context,
+            shuffleSeed: 4163
+        )
+
+        for week in program.weeks where !week.isDeloadWeek {
+            var sessionsWithPumpRows = 0
+            for session in week.sessions {
+                let working = session.exercises.filter { !$0.isWarmup }
+                guard !working.isEmpty else {
+                    Issue.record("Bodybuilding session \(session.sessionNumber) has no working rows")
+                    continue
+                }
+
+                let pumpRows = working.filter { ($0.targetReps ?? 0) >= 10 }
+                if !pumpRows.isEmpty {
+                    sessionsWithPumpRows += 1
+                }
+
+                let veryLowRepRows = working.filter { ($0.targetReps ?? 0) <= 4 }
+                #expect(veryLowRepRows.count == 0)
+
+                let hasProximityControl = working.contains { $0.targetRIR != nil || $0.targetRPE != nil }
+                #expect(hasProximityControl)
+            }
+            #expect(sessionsWithPumpRows >= max(1, week.sessions.count - 1))
+        }
     }
 
     @Test func volumeAndFatigueAccountingStayWithinSafeBounds() throws {

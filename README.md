@@ -1044,6 +1044,17 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Added Feature 4 validation tests for focus-specific volume target and fatigue budget resolution so each focus resolves distinct, defensible rules
 - **Commit:** `feat: split generator volume and fatigue rules by focus`
 
+#### Prompt 4 [Bodybuilding Generation Rigor Upgrade] — 2026-04-10
+- Upgraded hypertrophy progression in `ProgramGenerationService` with bodybuilding-specific parameter logic that explicitly separates compound, stable-variation, and pump/isolation prescriptions for reps, set bounds, and progression behavior
+- Added proximity-to-failure handling for bodybuilding sessions via `targetRIR` programming on hypertrophy work where appropriate, while retaining percentage-based loading anchors for key compounds
+- Replaced blunt bodybuilding top-set exclusion with a focused `compoundOpener` policy in `ProgramGenerationMetadata`, allowing limited opener top/backoff use on suitable compound session openers while keeping bodybuilding predominantly straight-set
+- Tightened bodybuilding accessory planning to reduce junk volume and session sprawl by:
+  - capping accessory picks per session with explicit bodybuilding limits
+  - rejecting low-value accessories that do not address weekly deficits or session priorities
+  - biasing candidate scoring toward session-identity muscles (e.g., chest/triceps, back/biceps, quads, hamstrings/glutes)
+- Added Feature 4 validation tests covering bodybuilding weekly frequency intent, anti-bloat/anti-underdose dosing bounds, and hypertrophy session identity protections
+- **Commit:** `feat: upgrade bodybuilding program generation rigor`
+
 ---
 
 ## Project Setup
