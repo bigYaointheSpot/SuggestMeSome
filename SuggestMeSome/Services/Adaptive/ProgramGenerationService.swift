@@ -1655,6 +1655,10 @@ struct ProgramGenerationService {
         seed: Int
     ) -> [Int: [[TemplateExercise]]] {
         let volumeTargets = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: focus, level: level)
+        let movementTargets = ProgramExerciseMetadataService.weeklyMovementPatternTargets(
+            focus: focus,
+            sessionsPerWeek: sessionsPerWeek
+        )
         let fatigueBudgets = ProgramExerciseMetadataService.fatigueBudgets(
             focus: focus,
             level: level,
@@ -1673,6 +1677,8 @@ struct ProgramGenerationService {
             var sessionFatigue = Array(repeating: 0.0, count: sessionDefs.count)
             var sessionHighFatigue = Array(repeating: 0.0, count: sessionDefs.count)
             var weekAccessories = Array(repeating: [TemplateExercise](), count: sessionDefs.count)
+            var sessionPatternCoverage = Array(repeating: Set<ProgramMovementPattern>(), count: sessionDefs.count)
+            var weeklyPatternExposure = Dictionary(uniqueKeysWithValues: ProgramMovementPattern.allCases.map { ($0, 0) })
 
             // Baseline from primaries/variations establishes the week's starting deficits and fatigue.
             for (sessionIdx, sessionDef) in sessionDefs.enumerated() {
@@ -1689,6 +1695,14 @@ struct ProgramGenerationService {
                     sessionFatigue[sessionIdx] += estimate.fatigueScore
                     sessionHighFatigue[sessionIdx] += estimate.highFatigueScore
                     weeklyFatigue += estimate.fatigueScore
+                    sessionPatternCoverage[sessionIdx].formUnion(
+                        ProgramExerciseMetadataService.movementPatterns(for: primary.exerciseName)
+                    )
+                }
+            }
+            for patterns in sessionPatternCoverage {
+                for pattern in patterns {
+                    weeklyPatternExposure[pattern, default: 0] += 1
                 }
             }
 
@@ -1703,6 +1717,9 @@ struct ProgramGenerationService {
                 guard selectionCount > 0 else { continue }
 
                 let isDeadliftHeavy = isDeadliftHeavySession(sessionDef)
+                let sessionAccessoryPatterns = sessionDef.accessoryPool.reduce(into: Set<ProgramMovementPattern>()) {
+                    $0.formUnion(ProgramExerciseMetadataService.movementPatterns(for: $1.exerciseName))
+                }
                 var chosen: [TemplateExercise] = []
                 var chosenNames: Set<String> = []
 
@@ -1730,6 +1747,9 @@ struct ProgramGenerationService {
                             sessionIdx: sessionIdx,
                             sessionsPerWeek: sessionsPerWeek
                         )
+                        let candidatePatterns = ProgramExerciseMetadataService.movementPatterns(
+                            for: candidate.exerciseName
+                        )
 
                         if focus == .bodybuilding,
                            isJunkBodybuildingAccessory(
@@ -1738,6 +1758,18 @@ struct ProgramGenerationService {
                             volumeTargets: volumeTargets,
                             sessionName: sessionDef.sessionName
                            ) {
+                            continue
+                        }
+
+                        if shouldRejectMovementCandidate(
+                            focus: focus,
+                            sessionName: sessionDef.sessionName,
+                            candidatePatterns: candidatePatterns,
+                            currentSessionPatterns: sessionPatternCoverage[sessionIdx],
+                            movementTargets: movementTargets,
+                            weeklyPatternExposure: weeklyPatternExposure,
+                            sessionAccessoryPatterns: sessionAccessoryPatterns
+                        ) {
                             continue
                         }
 
@@ -1767,6 +1799,10 @@ struct ProgramGenerationService {
                             sessionName: sessionDef.sessionName,
                             currentWeekNumber: schedule.weekNumber,
                             lastUsedWeek: lastUsed,
+                            movementTargets: movementTargets,
+                            weeklyPatternExposure: weeklyPatternExposure,
+                            currentSessionPatterns: sessionPatternCoverage[sessionIdx],
+                            candidatePatterns: candidatePatterns,
                             rng: &rng
                         )
 
@@ -1785,6 +1821,14 @@ struct ProgramGenerationService {
                     weeklyFatigue += best.estimate.fatigueScore
                     sessionFatigue[sessionIdx] += best.estimate.fatigueScore
                     sessionHighFatigue[sessionIdx] += best.estimate.highFatigueScore
+                    let selectedPatterns = ProgramExerciseMetadataService.movementPatterns(
+                        for: best.exercise.exerciseName
+                    )
+                    let newlyAdded = selectedPatterns.subtracting(sessionPatternCoverage[sessionIdx])
+                    sessionPatternCoverage[sessionIdx].formUnion(selectedPatterns)
+                    for pattern in newlyAdded {
+                        weeklyPatternExposure[pattern, default: 0] += 1
+                    }
 
                     var history = lastUsedWeekBySession[sessionIdx] ?? [:]
                     history[best.exercise.exerciseName] = schedule.weekNumber
@@ -1837,6 +1881,10 @@ struct ProgramGenerationService {
         sessionName: String,
         currentWeekNumber: Int,
         lastUsedWeek: Int?,
+        movementTargets: [ProgramMovementPattern: Int],
+        weeklyPatternExposure: [ProgramMovementPattern: Int],
+        currentSessionPatterns: Set<ProgramMovementPattern>,
+        candidatePatterns: Set<ProgramMovementPattern>,
         rng: inout SeededRNG
     ) -> Double {
         var score = 0.0
@@ -1891,6 +1939,73 @@ struct ProgramGenerationService {
             score += 1.0
         }
 
+        let patternsAddingNewExposure = candidatePatterns.subtracting(currentSessionPatterns)
+        for pattern in patternsAddingNewExposure {
+            let currentExposure = weeklyPatternExposure[pattern] ?? 0
+            let targetExposure = movementTargets[pattern] ?? 0
+            guard targetExposure > 0 else { continue }
+
+            if currentExposure < targetExposure {
+                score += 3.0
+            } else {
+                score += 0.25
+            }
+        }
+
+        if focus == .fullBody {
+            let sessionCombined = currentSessionPatterns.union(candidatePatterns)
+            if !sessionCombined.contains(.squatKneeDominant) && !sessionCombined.contains(.hinge) {
+                score -= 4.0
+            }
+            if !sessionCombined.contains(.horizontalPush) && !sessionCombined.contains(.verticalPush) {
+                score -= 3.2
+            }
+            if !sessionCombined.contains(.horizontalPull) && !sessionCombined.contains(.verticalPull) {
+                score -= 3.2
+            }
+            if !sessionCombined.contains(.trunk) {
+                score -= 0.8
+            }
+        }
+
+        if focus == .generalFitness {
+            let sessionCombined = currentSessionPatterns.union(candidatePatterns)
+            if !sessionCombined.contains(.squatKneeDominant) && !sessionCombined.contains(.hinge) {
+                score -= 1.8
+            }
+            if !sessionCombined.contains(.horizontalPush) && !sessionCombined.contains(.verticalPush) {
+                score -= 1.4
+            }
+            if !sessionCombined.contains(.horizontalPull) && !sessionCombined.contains(.verticalPull) {
+                score -= 1.4
+            }
+        }
+
+        if focus == .pushPull {
+            let lower = sessionName.lowercased()
+            let combined = currentSessionPatterns.union(candidatePatterns)
+
+            if lower.contains("push") {
+                if !combined.contains(.horizontalPush) && !combined.contains(.verticalPush) {
+                    score -= 3.4
+                }
+                if combined.contains(.verticalPull) || combined.contains(.horizontalPull) {
+                    score -= 0.3
+                }
+            } else if lower.contains("pull") {
+                if !combined.contains(.horizontalPull) && !combined.contains(.verticalPull) {
+                    score -= 3.4
+                }
+                if combined.contains(.horizontalPush) || combined.contains(.verticalPush) {
+                    score -= 0.3
+                }
+            } else if lower.contains("leg") || lower.contains("lower") {
+                if !combined.contains(.squatKneeDominant) && !combined.contains(.hinge) {
+                    score -= 3.0
+                }
+            }
+        }
+
         if focus == .bodybuilding {
             let sessionTargets = bodybuildingSessionPriorityMuscles(sessionName: sessionName)
             let targetContribution = sessionTargets.reduce(0.0) { partial, muscle in
@@ -1917,14 +2032,83 @@ struct ProgramGenerationService {
         available: Int
     ) -> Int {
         var count = min(requested, available)
-        guard focus == .bodybuilding else { return count }
-
-        if sessionName.lowercased().contains("arms") {
+        switch focus {
+        case .generalFitness:
             count = min(count, 3)
-        } else {
-            count = min(count, 4)
+            return max(2, count)
+        case .fullBody:
+            count = min(count, 2)
+            return max(1, count)
+        case .pushPull:
+            if sessionName.lowercased().contains("legs") || sessionName.lowercased().contains("lower") {
+                count = min(count, 3)
+            } else {
+                count = min(count, 2)
+            }
+            return max(1, count)
+        case .bodybuilding:
+            if sessionName.lowercased().contains("arms") {
+                count = min(count, 3)
+            } else {
+                count = min(count, 4)
+            }
+            return max(1, count)
+        default:
+            return count
         }
-        return max(1, count)
+    }
+
+    private func shouldRejectMovementCandidate(
+        focus: ProgramFocus,
+        sessionName: String,
+        candidatePatterns: Set<ProgramMovementPattern>,
+        currentSessionPatterns: Set<ProgramMovementPattern>,
+        movementTargets: [ProgramMovementPattern: Int],
+        weeklyPatternExposure: [ProgramMovementPattern: Int],
+        sessionAccessoryPatterns: Set<ProgramMovementPattern>
+    ) -> Bool {
+        if focus == .fullBody {
+            let combined = currentSessionPatterns.union(candidatePatterns)
+            let hasLower = combined.contains(.squatKneeDominant) || combined.contains(.hinge)
+            let hasPush = combined.contains(.horizontalPush) || combined.contains(.verticalPush)
+            let hasPull = combined.contains(.horizontalPull) || combined.contains(.verticalPull)
+            if !hasLower && !candidatePatterns.contains(.squatKneeDominant) && !candidatePatterns.contains(.hinge) {
+                return true
+            }
+            if !hasPush && !candidatePatterns.contains(.horizontalPush) && !candidatePatterns.contains(.verticalPush) {
+                return true
+            }
+            if !hasPull && !candidatePatterns.contains(.horizontalPull) && !candidatePatterns.contains(.verticalPull) {
+                return true
+            }
+        }
+
+        if focus == .pushPull {
+            let lower = sessionName.lowercased()
+            if (lower.contains("push") && candidatePatterns.isDisjoint(with: Set([.horizontalPush, .verticalPush]))) ||
+                (lower.contains("pull") && candidatePatterns.isDisjoint(with: Set([.horizontalPull, .verticalPull]))) ||
+                ((lower.contains("leg") || lower.contains("lower")) && candidatePatterns.isDisjoint(with: Set([.squatKneeDominant, .hinge, .singleLeg]))) {
+                return true
+            }
+        }
+
+        if focus == .generalFitness || focus == .fullBody || focus == .pushPull {
+            let combined = currentSessionPatterns.union(candidatePatterns)
+            let unresolvedCriticalPatterns = movementTargets
+                .filter { $0.value > 0 }
+                .filter { (weeklyPatternExposure[$0.key] ?? 0) < $0.value }
+                .filter { sessionAccessoryPatterns.contains($0.key) }
+                .map(\.key)
+
+            if !unresolvedCriticalPatterns.isEmpty &&
+                unresolvedCriticalPatterns.allSatisfy({ !candidatePatterns.contains($0) }) &&
+                combined.contains(.horizontalPush) &&
+                combined.contains(.horizontalPull) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func isJunkBodybuildingAccessory(

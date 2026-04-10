@@ -1055,6 +1055,18 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Added Feature 4 validation tests covering bodybuilding weekly frequency intent, anti-bloat/anti-underdose dosing bounds, and hypertrophy session identity protections
 - **Commit:** `feat: upgrade bodybuilding program generation rigor`
 
+#### Prompt 5 [Balanced Focus Movement-Coverage Rigor Upgrade] — 2026-04-10
+- Added explicit movement-pattern metadata in `ProgramExerciseMetadataService` (`ProgramMovementPattern`) and centralized pattern mapping/heuristics for all generator exercises, including optional conditioning classification for cardio movements
+- Added focus-specific weekly movement-coverage targets for `generalFitness`, `fullBody`, and `pushPull`, covering squat/knee-dominant, hinge, horizontal push, vertical push, horizontal pull, vertical pull, single-leg, trunk, and optional conditioning where appropriate
+- Refactored accessory planning in `ProgramGenerationService` to track per-session pattern coverage and weekly pattern exposures, then score/reject candidates using movement-target gaps in addition to existing volume/fatigue constraints
+- Strengthened focus identity guardrails in accessory selection:
+  - `generalFitness`: balanced weekly coverage with sustainable accessory caps
+  - `fullBody`: each session maintains lower + push + pull pattern identity with tighter accessory count
+  - `pushPull`: upper-specialized session identity preserved while enforcing lower-body minimum effective weekly floor
+- Added optional conditioning candidates to relevant `generalFitness` and `fullBody` template accessory pools so weekly work-capacity targets can be satisfied without bloating default session structure
+- Added Feature 4 validation tests verifying weekly movement-pattern coverage and focus identity for `generalFitness`, `fullBody`, and `pushPull`
+- **Commit:** `feat: strengthen balanced focus program generation logic`
+
 ---
 
 ## Project Setup

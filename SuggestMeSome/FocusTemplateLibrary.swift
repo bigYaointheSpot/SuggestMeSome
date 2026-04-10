@@ -755,6 +755,7 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Face Pulls",       role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
                 .init(exerciseName: "Barbell Curl",     role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
                 .init(exerciseName: "Tricep Pushdown",  role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Rowing Machine",   role: .cardio,    defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: nil),
             ],
             accessoryCount: 3
         )
@@ -837,6 +838,7 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Face Pulls",     role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
                 .init(exerciseName: "Reverse Flyes",  role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
                 .init(exerciseName: "Tricep Pushdown",role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Exercise Bike",  role: .cardio,    defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: nil),
             ],
             accessoryCount: 2
         )
@@ -934,6 +936,7 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Incline Dumbbell Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
                 .init(exerciseName: "Face Pulls",         role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
                 .init(exerciseName: "Reverse Flyes",      role: .accessory, defaultSets: 3, defaultReps: 15, percentage1RM: nil, targetRPE: 6),
+                .init(exerciseName: "Rowing Machine",     role: .cardio,    defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: nil),
             ],
             accessoryCount: 3
         )
@@ -1063,6 +1066,7 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Glute Bridge", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 6),
                 .init(exerciseName: "Overhead Tricep Extension", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
                 .init(exerciseName: "Cable Curl", role: .accessory, defaultSets: 3, defaultReps: 12, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Exercise Bike", role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: nil),
             ],
             accessoryCount: 2
         )
@@ -1081,6 +1085,7 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Leg Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
                 .init(exerciseName: "Concentration Curl", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
                 .init(exerciseName: "Ab Rollout", role: .accessory, defaultSets: 3, defaultReps: 10, percentage1RM: nil, targetRPE: 7),
+                .init(exerciseName: "Rowing Machine", role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: nil),
             ],
             accessoryCount: 2
         )

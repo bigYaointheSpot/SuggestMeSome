@@ -516,6 +516,107 @@ struct Feature4GeneratorValidationTests {
         }
     }
 
+    @Test func generalFitnessWeeklyMovementCoverageMeetsBalancedTargets() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let sessionsPerWeek = 5
+        let input = makeInput(
+            focus: .generalFitness,
+            level: .intermediate,
+            durationWeeks: 8,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let program = service.generateProgram(
+            input: input,
+            context: context,
+            shuffleSeed: 5101
+        )
+
+        guard let firstWeek = program.weeks.first(where: { $0.weekNumber == 1 }) else {
+            Issue.record("Missing first week for general fitness movement coverage test")
+            return
+        }
+
+        let exposures = movementPatternExposureCounts(for: firstWeek)
+        #expect((exposures[.squatKneeDominant] ?? 0) >= 1)
+        #expect((exposures[.hinge] ?? 0) >= 1)
+        #expect((exposures[.horizontalPush] ?? 0) >= 1 || (exposures[.verticalPush] ?? 0) >= 1)
+        #expect((exposures[.horizontalPull] ?? 0) >= 1 || (exposures[.verticalPull] ?? 0) >= 1)
+        #expect((exposures[.singleLeg] ?? 0) >= 1 || (exposures[.trunk] ?? 0) >= 1)
+        let represented = exposures.values.filter { $0 > 0 }.count
+        #expect(represented >= 5)
+    }
+
+    @Test func fullBodyMaintainsPerSessionCorePatternIdentity() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let sessionsPerWeek = 5
+        let input = makeInput(
+            focus: .fullBody,
+            level: .intermediate,
+            durationWeeks: 8,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let program = service.generateProgram(
+            input: input,
+            context: context,
+            shuffleSeed: 5102
+        )
+
+        guard let firstWeek = program.weeks.first(where: { $0.weekNumber == 1 }) else {
+            Issue.record("Missing first week for full body movement identity test")
+            return
+        }
+
+        for session in firstWeek.sessions {
+            let patterns = movementPatterns(in: session.exercises.filter { !$0.isWarmup }.map(\.exerciseName))
+            let hasLower = patterns.contains(.squatKneeDominant) || patterns.contains(.hinge)
+            let hasPush = patterns.contains(.horizontalPush) || patterns.contains(.verticalPush)
+            let hasPull = patterns.contains(.horizontalPull) || patterns.contains(.verticalPull)
+            #expect(hasLower)
+            #expect(hasPush)
+            #expect(hasPull)
+        }
+
+        let exposures = movementPatternExposureCounts(for: firstWeek)
+        #expect((exposures[.squatKneeDominant] ?? 0) >= 1)
+        #expect((exposures[.hinge] ?? 0) >= 1)
+        #expect((exposures[.horizontalPush] ?? 0) + (exposures[.verticalPush] ?? 0) >= 2)
+        #expect((exposures[.horizontalPull] ?? 0) + (exposures[.verticalPull] ?? 0) >= 2)
+    }
+
+    @Test func pushPullPreservesUpperBiasWithoutDroppingLowerFloor() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let sessionsPerWeek = 5
+        let input = makeInput(
+            focus: .pushPull,
+            level: .intermediate,
+            durationWeeks: 8,
+            sessionsPerWeek: sessionsPerWeek
+        )
+        let program = service.generateProgram(
+            input: input,
+            context: context,
+            shuffleSeed: 5103
+        )
+
+        guard let firstWeek = program.weeks.first(where: { $0.weekNumber == 1 }) else {
+            Issue.record("Missing first week for push/pull movement identity test")
+            return
+        }
+
+        let exposures = movementPatternExposureCounts(for: firstWeek)
+        let upperBiasExposure = (exposures[.horizontalPush] ?? 0) + (exposures[.verticalPush] ?? 0)
+            + (exposures[.horizontalPull] ?? 0) + (exposures[.verticalPull] ?? 0)
+        let lowerExposure = (exposures[.squatKneeDominant] ?? 0) + (exposures[.hinge] ?? 0) + (exposures[.singleLeg] ?? 0)
+        #expect(upperBiasExposure >= lowerExposure)
+
+        #expect((exposures[.horizontalPush] ?? 0) >= 1 || (exposures[.verticalPush] ?? 0) >= 1)
+        #expect((exposures[.horizontalPull] ?? 0) >= 1 || (exposures[.verticalPull] ?? 0) >= 1)
+        #expect((exposures[.squatKneeDominant] ?? 0) + (exposures[.hinge] ?? 0) + (exposures[.singleLeg] ?? 0) >= 2)
+    }
+
     @Test func deloadWeeksAppearAtExpectedPositions() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
@@ -679,5 +780,25 @@ struct Feature4GeneratorValidationTests {
         let metadata = ProgramExerciseMetadataService.metadata(for: exerciseName)
         return (metadata.muscleContributions[.upperBackLats] ?? 0) > 0 ||
             (metadata.muscleContributions[.biceps] ?? 0) > 0
+    }
+
+    private func movementPatternExposureCounts(for week: ProgramWeekTemplate) -> [ProgramMovementPattern: Int] {
+        var counts = Dictionary(uniqueKeysWithValues: ProgramMovementPattern.allCases.map { ($0, 0) })
+        for session in week.sessions {
+            let names = session.exercises
+                .filter { !$0.isWarmup }
+                .map(\.exerciseName)
+            let patterns = movementPatterns(in: names)
+            for pattern in patterns {
+                counts[pattern, default: 0] += 1
+            }
+        }
+        return counts
+    }
+
+    private func movementPatterns(in exerciseNames: [String]) -> Set<ProgramMovementPattern> {
+        exerciseNames.reduce(into: Set<ProgramMovementPattern>()) { patterns, name in
+            patterns.formUnion(ProgramExerciseMetadataService.movementPatterns(for: name))
+        }
     }
 }

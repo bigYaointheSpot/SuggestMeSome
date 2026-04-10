@@ -82,6 +82,18 @@ struct ProgramFatigueBudgets {
     let adjacentSessionPairBudget: Double
 }
 
+enum ProgramMovementPattern: String, CaseIterable, Codable {
+    case squatKneeDominant
+    case hinge
+    case horizontalPush
+    case verticalPush
+    case horizontalPull
+    case verticalPull
+    case singleLeg
+    case trunk
+    case conditioning
+}
+
 enum ProgramExerciseMetadataService {
     private struct FocusFatigueProfile {
         let baseWeekBudget: Double
@@ -176,6 +188,64 @@ enum ProgramExerciseMetadataService {
             deadliftSessionBudget: sessionBudget * profile.fatigue.deadliftSessionScale,
             adjacentSessionPairBudget: sessionBudget * profile.fatigue.adjacentSessionPairScale
         )
+    }
+
+    static func movementPatterns(for exerciseName: String) -> Set<ProgramMovementPattern> {
+        if let exact = exerciseMovementPatterns[exerciseName] {
+            return exact
+        }
+        return heuristicMovementPatterns(for: exerciseName)
+    }
+
+    static func weeklyMovementPatternTargets(
+        focus: ProgramFocus,
+        sessionsPerWeek: Int
+    ) -> [ProgramMovementPattern: Int] {
+        switch focus {
+        case .generalFitness:
+            var targets: [ProgramMovementPattern: Int] = [
+                .squatKneeDominant: 2,
+                .hinge: 2,
+                .horizontalPush: 2,
+                .verticalPush: 1,
+                .horizontalPull: 2,
+                .verticalPull: 1,
+                .singleLeg: 1,
+                .trunk: 2,
+            ]
+            if sessionsPerWeek >= 4 {
+                targets[.conditioning] = 1
+            }
+            return targets
+        case .fullBody:
+            var targets: [ProgramMovementPattern: Int] = [
+                .squatKneeDominant: 2,
+                .hinge: 2,
+                .horizontalPush: 2,
+                .verticalPush: 1,
+                .horizontalPull: 2,
+                .verticalPull: 2,
+                .singleLeg: 1,
+                .trunk: 2,
+            ]
+            if sessionsPerWeek >= 5 {
+                targets[.conditioning] = 1
+            }
+            return targets
+        case .pushPull:
+            return [
+                .horizontalPush: 2,
+                .verticalPush: 2,
+                .horizontalPull: 2,
+                .verticalPull: 2,
+                .squatKneeDominant: 1,
+                .hinge: 1,
+                .singleLeg: 1,
+                .trunk: 1,
+            ]
+        default:
+            return [:]
+        }
     }
 
     private static func volumeLevelScale(for level: ProgramLevel, focus: ProgramFocus) -> Double {
@@ -447,6 +517,55 @@ enum ProgramExerciseMetadataService {
         }
 
         return .init(muscleContributions: [:], defaultFatigueTier: .low)
+    }
+
+    private static func heuristicMovementPatterns(for exerciseName: String) -> Set<ProgramMovementPattern> {
+        let lower = exerciseName.lowercased()
+        var patterns = Set<ProgramMovementPattern>()
+
+        if containsAny(lower, terms: ["bike", "treadmill", "elliptical", "stair", "jump rope", "rowing"]) {
+            patterns.insert(.conditioning)
+            return patterns
+        }
+
+        if containsAny(lower, terms: ["split squat", "lunge"]) {
+            patterns.insert(.singleLeg)
+            patterns.insert(.squatKneeDominant)
+        }
+
+        if containsAny(lower, terms: ["squat", "leg press", "leg extension", "hack squat", "goblet squat"]) {
+            patterns.insert(.squatKneeDominant)
+        }
+
+        if containsAny(lower, terms: ["deadlift", "romanian", "rdl", "hip thrust", "glute bridge", "good morning", "pull through", "leg curl"]) {
+            patterns.insert(.hinge)
+        }
+
+        if containsAny(lower, terms: ["bench", "fly", "dip", "push-up", "floor press", "close grip"]) {
+            patterns.insert(.horizontalPush)
+        }
+
+        if containsAny(lower, terms: ["overhead press", "strict press", "shoulder press", "arnold", "lateral raise", "front raise"]) {
+            patterns.insert(.verticalPush)
+        }
+
+        if containsAny(lower, terms: ["row", "face pull", "reverse fly"]) {
+            patterns.insert(.horizontalPull)
+        }
+
+        if containsAny(lower, terms: ["lat pulldown", "pull-up", "pullups", "chin-up", "chinups", "straight arm pulldown"]) {
+            patterns.insert(.verticalPull)
+        }
+
+        if containsAny(lower, terms: ["ab", "crunch", "pallof", "dead bug", "rollout", "hanging leg raises"]) {
+            patterns.insert(.trunk)
+        }
+
+        return patterns
+    }
+
+    private static func containsAny(_ input: String, terms: [String]) -> Bool {
+        terms.contains { input.contains($0) }
     }
 
     private static func contribution(
@@ -768,5 +887,79 @@ enum ProgramExerciseMetadataService {
         "Stairmaster": .init(muscleContributions: [:], defaultFatigueTier: .low),
         "Elliptical": .init(muscleContributions: [:], defaultFatigueTier: .low),
         "Jump Rope": .init(muscleContributions: [:], defaultFatigueTier: .low),
+    ]
+
+    private static let exerciseMovementPatterns: [String: Set<ProgramMovementPattern>] = [
+        "Back Squats": [.squatKneeDominant],
+        "Pause Squat": [.squatKneeDominant],
+        "Front Squat": [.squatKneeDominant],
+        "Box Squat": [.squatKneeDominant],
+        "Hack Squat": [.squatKneeDominant],
+        "Leg Press": [.squatKneeDominant],
+        "Leg Extension": [.squatKneeDominant],
+        "Bulgarian Split Squat": [.squatKneeDominant, .singleLeg],
+        "Walking Lunges": [.squatKneeDominant, .singleLeg],
+        "Goblet Squat": [.squatKneeDominant],
+
+        "Deadlift": [.hinge],
+        "Sumo Deadlift": [.hinge],
+        "Deficit Deadlift": [.hinge],
+        "Block Pull": [.hinge],
+        "Romanian Deadlift": [.hinge],
+        "Good Mornings": [.hinge],
+        "Hip Thrust": [.hinge],
+        "Glute Bridge": [.hinge],
+        "Cable Pull Through": [.hinge],
+        "Leg Curl": [.hinge],
+
+        "Bench Press": [.horizontalPush],
+        "Pause Bench Press": [.horizontalPush],
+        "Close Grip Bench Press": [.horizontalPush],
+        "Floor Press": [.horizontalPush],
+        "Incline Bench": [.horizontalPush],
+        "Dumbbell Bench Press": [.horizontalPush],
+        "Incline Dumbbell Press": [.horizontalPush],
+        "Chest Dip": [.horizontalPush],
+        "Dips": [.horizontalPush],
+        "Cable Flyes": [.horizontalPush],
+        "Dumbbell Flyes": [.horizontalPush],
+        "Pec Deck Machine Fly": [.horizontalPush],
+        "Close Grip Push-ups": [.horizontalPush],
+
+        "Overhead Press": [.verticalPush],
+        "Barbell Strict Press": [.verticalPush],
+        "DB Shoulder Press": [.verticalPush],
+        "Arnold Press": [.verticalPush],
+        "Machine Shoulder Press": [.verticalPush],
+        "Lateral Raises": [.verticalPush],
+        "Cable Lateral Raise": [.verticalPush],
+        "Front Raises": [.verticalPush],
+
+        "Barbell Row": [.horizontalPull],
+        "Pendlay Row": [.horizontalPull],
+        "T-Bar Row": [.horizontalPull],
+        "Dumbbell Row": [.horizontalPull],
+        "Seated Cable Row": [.horizontalPull],
+        "Face Pulls": [.horizontalPull],
+        "Reverse Flyes": [.horizontalPull],
+
+        "Lat Pulldown": [.verticalPull],
+        "Straight Arm Pulldown": [.verticalPull],
+        "Pull-ups": [.verticalPull],
+        "Chin-ups": [.verticalPull],
+
+        "Ab Rollout": [.trunk],
+        "Hanging Leg Raises": [.trunk],
+        "Cable Crunch": [.trunk],
+        "Pallof Press": [.trunk],
+        "Dead Bug": [.trunk],
+
+        "Treadmill": [.conditioning],
+        "Incline Treadmill": [.conditioning],
+        "Exercise Bike": [.conditioning],
+        "Rowing Machine": [.conditioning],
+        "Stairmaster": [.conditioning],
+        "Elliptical": [.conditioning],
+        "Jump Rope": [.conditioning],
     ]
 }
