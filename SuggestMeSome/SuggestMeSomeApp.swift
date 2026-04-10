@@ -31,6 +31,9 @@ struct SuggestMeSomeApp: App {
             AppliedProgramOverlay.self,
             AppliedOverlayAdjustment.self,
             AdaptationEventHistory.self,
+            // Feature 7 — Daily Coach
+            DailyCoachCheckIn.self,
+            DailyCoachWeeklyReview.self,
         ])
 
     var sharedModelContainer: ModelContainer = {

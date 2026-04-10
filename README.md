@@ -1100,6 +1100,25 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ---
 
+### Feature 7 — Daily Coach
+
+**Status:** In Progress
+
+A program-first daily coaching system that collects readiness check-ins, surfaces weekly reviews, and will use check-in data to personalize daily session suggestions.
+
+---
+
+#### Prompt 1 [Daily Coach Data Foundation] — 2026-04-10
+- Added `WorkoutEffortFeedback` enum (`tooEasy`, `onTarget`, `tooHard`) — `Codable` + `RawRepresentable` via `String`
+- Added `DailyCoachCheckIn` SwiftData model: `id`, `date`, `dayStart`, `sleepQuality`, `soreness`, `energy`, `stress`, `availableTimeMinutes`, `hasPainOrDiscomfort`, `painNotes?`, optional `programRun` relationship, `createdAt`, `updatedAt`
+- Added `DailyCoachWeeklyReview` SwiftData model: `id`, `weekStart`, `weekEnd`, `isProgramWeek`, optional `programRun` relationship, `headline`, `winText`, `watchoutText`, `nextActionText`, `sourceWeeklyAnalysisIDText?`, `hasBeenSeen`, `createdAt`
+- Added additive fields to `ExerciseEntry`: `effortFeedback: WorkoutEffortFeedback?` and `topSetRPE: Double?`
+- Registered `DailyCoachCheckIn` and `DailyCoachWeeklyReview` in the shared SwiftData schema in `SuggestMeSomeApp`
+- All changes are additive and backward-compatible; no existing behavior altered
+- **Commit:** `feat: add daily coach data foundation`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

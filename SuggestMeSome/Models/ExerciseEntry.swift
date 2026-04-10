@@ -32,6 +32,12 @@ final class ExerciseEntry {
     var prescribedWorkingSetStyle: ProgramWorkingSetStyle?
     var prescribedTargetEffortType: ProgramTargetEffortType?
 
+    // MARK: Feature 7 — Daily Coach effort capture
+    /// User's subjective effort rating for this exercise after the session.
+    var effortFeedback: WorkoutEffortFeedback?
+    /// RPE of the top (heaviest/hardest) set for this exercise, 1–10 scale.
+    var topSetRPE: Double?
+
     var workout: Workout?
 
     @Relationship(deleteRule: .cascade, inverse: \SetEntry.exerciseEntry)
