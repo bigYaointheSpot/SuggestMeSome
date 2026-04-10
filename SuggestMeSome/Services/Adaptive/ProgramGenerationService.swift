@@ -168,7 +168,7 @@ struct ProgramGenerationService {
         var usedLiftMapping = false
         var usedTopSetBackoff = false
 
-        // Step 5: Create TrainingProgram
+        // Step 3: Create TrainingProgram shell (flags are updated after generation)
         let program = TrainingProgram(
             name: "\(template.displayName) — \(input.level.rawValue.capitalized) \(input.durationWeeks)wk",
             lengthInWeeks: input.durationWeeks,
@@ -183,10 +183,10 @@ struct ProgramGenerationService {
         )
         context.insert(program)
 
-        // Steps 3–4: Build periodized week schedules
+        // Step 4: Build periodized week schedules
         let schedules = buildWeekSchedules(strategy: strategy, durationWeeks: input.durationWeeks, focusProfile: focusProfile)
 
-        // Step 6: Build weekly accessory selections using volume and fatigue accounting.
+        // Step 5: Build weekly accessory selections using volume and fatigue accounting
         let weeklyAccessoryPlan = buildAdaptiveAccessoryPlan(
             sessionDefs: sessionDefs,
             schedules: schedules,
@@ -197,7 +197,7 @@ struct ProgramGenerationService {
             seed: shuffleSeed
         )
 
-        // Step 4: Build week-by-week structure
+        // Step 6: Build week-by-week structure
         for schedule in schedules {
             let weekTemplate = ProgramWeekTemplate(
                 weekNumber: schedule.weekNumber,

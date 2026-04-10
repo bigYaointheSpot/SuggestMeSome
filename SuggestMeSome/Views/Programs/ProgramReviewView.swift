@@ -37,7 +37,7 @@ private func buildPhaseGroups(
     switch input.level {
     case .beginner, .intermediate:
         let isDeload: (ProgramWeekTemplate) -> Bool = { week in
-            week.isDeloadWeek || (week.weekNumber % 4 == 0)
+            week.isDeloadWeek
         }
         let workingWeeks = sorted.filter { !isDeload($0) }
         let deloadWeeks  = sorted.filter(isDeload)

@@ -1090,6 +1090,14 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Expanded Feature 4 generator validation with new whole-program checks for explainability coverage, strength specificity/heavy exposure constraints, bodybuilding frequency+volume-floor identity, balanced-focus movement coverage, and cardio session-type/intensity explainability behavior
 - **Commit:** `feat: add generator explainability and focus-specific validation`
 
+#### Prompt 8 [Integration and Hardening Pass] — 2026-04-10
+- Resolved stale step-numbering comments in `ProgramGenerationService.buildProgram` — comments had drifted to 1, 5, 3–4, 6, 4 across earlier refactors; renumbered sequentially 1–6 to match actual execution order
+- Removed dead `|| (week.weekNumber % 4 == 0)` fallback from `ProgramReviewView.buildPhaseGroups`; `isDeloadWeek` is reliably stamped during generation for all focus and deload-style combinations, making the week-modulo condition incorrect for focuses with non-every-4th-week deload schedules
+- Tightened `ProgramFocusProgrammingProfileLibrary`: `fiveByFive` previously shared an identical profile with `powerlifting`; updated `fiveByFive` to `recoveryProfile: .conservative` and added `.verticalPush` to `weeklyExposurePriorities` to reflect its deliberately low-volume, three-day-per-week identity built around Squat / Bench / OHP / Deadlift / Row
+- Feature 6.5 README entries verified for consistent `#### Prompt N [Title] — YYYY-MM-DD` heading format; no heading syntax corrections were needed
+- Residual risk: `volumeAndFatigueAccountingStayWithinSafeBounds` is a pre-existing failure noted in Feature 4 Prompt 11 validation output; this pass does not introduce new regressions to that test
+- **Commit:** `feat: finalize focus-specific program generation overhaul`
+
 ---
 
 ## Project Setup

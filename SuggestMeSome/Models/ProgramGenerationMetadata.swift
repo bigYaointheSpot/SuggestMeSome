@@ -309,10 +309,10 @@ enum ProgramFocusProgrammingProfileLibrary {
                 focus: focus,
                 primaryAdaptationGoal: .maximalStrength,
                 progressionStrategyFamily: .strengthSkill,
-                weeklyExposurePriorities: [.squat, .horizontalPush, .hinge, .horizontalPull],
+                weeklyExposurePriorities: [.squat, .horizontalPush, .verticalPush, .hinge, .horizontalPull],
                 topSetBackoffPolicy: .templateDriven,
                 defaultDeloadStyle: .fixedInterval,
-                recoveryProfile: .moderate,
+                recoveryProfile: .conservative,
                 cardioProgrammingProfile: nil
             )
         case .powerbuilding:
