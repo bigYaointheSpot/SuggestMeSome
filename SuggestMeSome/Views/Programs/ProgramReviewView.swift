@@ -284,6 +284,14 @@ private func workingSetStyleColor(for exercise: ProgramSessionExercise) -> Color
     }
 }
 
+private func exercisePurposeLabel(for exercise: ProgramSessionExercise) -> String? {
+    exercise.explainabilityPurpose?.shortLabel
+}
+
+private func exerciseSelectionReasonLabel(for exercise: ProgramSessionExercise) -> String? {
+    exercise.explainabilitySelectionReason?.shortLabel
+}
+
 // MARK: - ProgramReviewView
 
 struct ProgramReviewView: View {
@@ -740,6 +748,7 @@ private struct WeekRowView: View {
                         SessionRowView(
                             session: session,
                             isExpanded: expandedSessions.contains(key),
+                            showAdditionalInfo: showAdditionalInfo,
                             editingExercise: $editingExercise,
                             addingToSession: $addingToSession,
                             input: input,
@@ -841,6 +850,7 @@ private struct WeekRowView: View {
 private struct SessionRowView: View {
     let session: ProgramSessionTemplate
     let isExpanded: Bool
+    let showAdditionalInfo: Bool
     @Binding var editingExercise: ProgramSessionExercise?
     @Binding var addingToSession: ProgramSessionTemplate?
     let input: ProgramGenerationInput
@@ -864,6 +874,7 @@ private struct SessionRowView: View {
                     ForEach(groups) { group in
                         GroupedExerciseRowView(
                             group: group,
+                            showAdditionalInfo: showAdditionalInfo,
                             input: input,
                             onTapWorking: { editingExercise = group.workingSet },
                             onDelete: { onDeleteExercise(group.workingSet) }
@@ -895,9 +906,20 @@ private struct SessionRowView: View {
     private var sessionHeader: some View {
         Button(action: onToggleSession) {
             HStack {
-                Text(sessionTitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(sessionTitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                    if showAdditionalInfo, let reason = session.explainabilityReason {
+                        Text(reason.shortLabel)
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(.tertiarySystemBackground))
+                            .foregroundStyle(.secondary)
+                            .clipShape(Capsule())
+                    }
+                }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.bold))
@@ -917,6 +939,7 @@ private struct SessionRowView: View {
 
 private struct GroupedExerciseRowView: View {
     let group: ProgramReviewExerciseGroup
+    let showAdditionalInfo: Bool
     let input: ProgramGenerationInput
     let onTapWorking: () -> Void
     let onDelete: () -> Void
@@ -946,6 +969,28 @@ private struct GroupedExerciseRowView: View {
                     Text(exerciseDisplayText(exercise: group.workingSet, oneRepMaxes: input.oneRepMaxes))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if showAdditionalInfo {
+                        HStack(spacing: 4) {
+                            if let purpose = exercisePurposeLabel(for: group.workingSet) {
+                                Text(purpose)
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color(.tertiarySystemBackground))
+                                    .foregroundStyle(.secondary)
+                                    .clipShape(Capsule())
+                            }
+                            if let reason = exerciseSelectionReasonLabel(for: group.workingSet) {
+                                Text(reason)
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color(.tertiarySystemBackground))
+                                    .foregroundStyle(.secondary)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
                 }
 
                 Spacer()

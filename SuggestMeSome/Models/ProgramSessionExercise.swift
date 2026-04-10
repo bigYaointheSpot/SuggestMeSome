@@ -58,6 +58,10 @@ final class ProgramSessionExercise {
     var estimatedFatigueScore: Double?
     /// Shared group id tying warmup/top/backoff rows for the same lift prescription block.
     var topBackoffGroupID: UUID?
+    /// Compact reason describing the role of this exercise row in the generated plan.
+    var explainabilityPurpose: ProgramExercisePurposeCode?
+    /// Accessory-specific reason code for why this exercise was selected.
+    var explainabilitySelectionReason: ProgramAccessorySelectionReason?
 
     var session: ProgramSessionTemplate?
 
@@ -82,7 +86,9 @@ final class ProgramSessionExercise {
         usedMappedSourceLift: Bool? = nil,
         progressionPhase: ProgramProgressionPhase? = nil,
         estimatedFatigueScore: Double? = nil,
-        topBackoffGroupID: UUID? = nil
+        topBackoffGroupID: UUID? = nil,
+        explainabilityPurpose: ProgramExercisePurposeCode? = nil,
+        explainabilitySelectionReason: ProgramAccessorySelectionReason? = nil
     ) {
         self.id = id
         self.exerciseName = exerciseName
@@ -105,5 +111,58 @@ final class ProgramSessionExercise {
         self.progressionPhase = progressionPhase
         self.estimatedFatigueScore = estimatedFatigueScore
         self.topBackoffGroupID = topBackoffGroupID
+        self.explainabilityPurpose = explainabilityPurpose
+        self.explainabilitySelectionReason = explainabilitySelectionReason
+    }
+
+    /// Backward-compatible initializer retained for existing call sites.
+    convenience init(
+        id: UUID = UUID(),
+        exerciseName: String,
+        orderIndex: Int,
+        targetSets: Int? = nil,
+        targetReps: Int? = nil,
+        targetPercentage1RM: Double? = nil,
+        targetRPE: Double? = nil,
+        targetRIR: Double? = nil,
+        isWarmup: Bool = false,
+        prescribedWeight: Double? = nil,
+        prescribedWeightUnit: String? = nil,
+        workingSetStyle: ProgramWorkingSetStyle? = nil,
+        backoffPercentageDrop: Double? = nil,
+        targetEffortType: ProgramTargetEffortType? = nil,
+        baseLiftUsed: String? = nil,
+        effectiveOneRepMax: Double? = nil,
+        effectiveOneRepMaxUnit: String? = nil,
+        usedMappedSourceLift: Bool? = nil,
+        progressionPhase: ProgramProgressionPhase? = nil,
+        estimatedFatigueScore: Double? = nil,
+        topBackoffGroupID: UUID? = nil
+    ) {
+        self.init(
+            id: id,
+            exerciseName: exerciseName,
+            orderIndex: orderIndex,
+            targetSets: targetSets,
+            targetReps: targetReps,
+            targetPercentage1RM: targetPercentage1RM,
+            targetRPE: targetRPE,
+            targetRIR: targetRIR,
+            isWarmup: isWarmup,
+            prescribedWeight: prescribedWeight,
+            prescribedWeightUnit: prescribedWeightUnit,
+            workingSetStyle: workingSetStyle,
+            backoffPercentageDrop: backoffPercentageDrop,
+            targetEffortType: targetEffortType,
+            baseLiftUsed: baseLiftUsed,
+            effectiveOneRepMax: effectiveOneRepMax,
+            effectiveOneRepMaxUnit: effectiveOneRepMaxUnit,
+            usedMappedSourceLift: usedMappedSourceLift,
+            progressionPhase: progressionPhase,
+            estimatedFatigueScore: estimatedFatigueScore,
+            topBackoffGroupID: topBackoffGroupID,
+            explainabilityPurpose: nil,
+            explainabilitySelectionReason: nil
+        )
     }
 }

@@ -17,6 +17,8 @@ final class ProgramSessionTemplate {
     var sessionName: String?
     /// Planned fatigue score computed from generated prescription.
     var plannedFatigueScore: Double?
+    /// Compact machine-readable reason describing why this session exists.
+    var explainabilityReason: ProgramSessionReasonCode?
 
     var week: ProgramWeekTemplate?
 
@@ -27,11 +29,29 @@ final class ProgramSessionTemplate {
         id: UUID = UUID(),
         sessionNumber: Int,
         sessionName: String? = nil,
-        plannedFatigueScore: Double? = nil
+        plannedFatigueScore: Double? = nil,
+        explainabilityReason: ProgramSessionReasonCode? = nil
     ) {
         self.id = id
         self.sessionNumber = sessionNumber
         self.sessionName = sessionName
         self.plannedFatigueScore = plannedFatigueScore
+        self.explainabilityReason = explainabilityReason
+    }
+
+    /// Backward-compatible initializer retained for existing call sites.
+    convenience init(
+        id: UUID = UUID(),
+        sessionNumber: Int,
+        sessionName: String? = nil,
+        plannedFatigueScore: Double? = nil
+    ) {
+        self.init(
+            id: id,
+            sessionNumber: sessionNumber,
+            sessionName: sessionName,
+            plannedFatigueScore: plannedFatigueScore,
+            explainabilityReason: nil
+        )
     }
 }

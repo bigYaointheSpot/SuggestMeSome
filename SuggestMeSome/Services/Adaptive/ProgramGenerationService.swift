@@ -210,7 +210,13 @@ struct ProgramGenerationService {
             for (sessionIdx, sessionDef) in sessionDefs.enumerated() {
                 let sessionTemplate = ProgramSessionTemplate(
                     sessionNumber: sessionIdx + 1,
-                    sessionName: sessionDef.sessionName
+                    sessionName: sessionDef.sessionName,
+                    explainabilityReason: resolveSessionReasonCode(
+                        focusProfile: focusProfile,
+                        strategy: strategy,
+                        schedule: schedule,
+                        sessionName: sessionDef.sessionName
+                    )
                 )
                 context.insert(sessionTemplate)
                 sessionTemplate.week = weekTemplate
@@ -236,7 +242,7 @@ struct ProgramGenerationService {
 
                 for accessory in accessories {
                     orderIdx = populateExercise(
-                        accessory, isPrimary: false,
+                        accessory.exercise, isPrimary: false,
                         isSessionOpener: false,
                         strategy: strategy,
                         focusProfile: focusProfile,
@@ -245,7 +251,8 @@ struct ProgramGenerationService {
                         oneRepMaxes: input.oneRepMaxes,
                         session: sessionTemplate, orderIdx: orderIdx, context: context,
                         usedLiftMapping: &usedLiftMapping,
-                        usedTopSetBackoff: &usedTopSetBackoff
+                        usedTopSetBackoff: &usedTopSetBackoff,
+                        accessorySelectionReason: accessory.reason
                     )
                 }
             }
@@ -276,7 +283,8 @@ struct ProgramGenerationService {
         orderIdx: Int,
         context: ModelContext,
         usedLiftMapping: inout Bool,
-        usedTopSetBackoff: inout Bool
+        usedTopSetBackoff: inout Bool,
+        accessorySelectionReason: ProgramAccessorySelectionReason? = nil
     ) -> Int {
         var idx = orderIdx
         let phase = progressionPhase(
@@ -286,6 +294,12 @@ struct ProgramGenerationService {
             sessionsPerWeek: sessionsPerWeek
         )
         let topBackoffGroupID = UUID()
+        let explainabilityPurpose = resolveExercisePurposeCode(
+            templateExercise: templateEx,
+            isPrimary: isPrimary,
+            schedule: schedule,
+            sessionName: session.sessionName ?? ""
+        )
 
         // Cardio exercises: encode duration as targetReps (minutes) and effort as targetRPE.
         if templateEx.role == .cardio {
@@ -302,7 +316,8 @@ struct ProgramGenerationService {
                 targetRPE: cardioPrescription.targetRPE,
                 targetEffortType: ProgramTargetEffortType.rpe,
                 progressionPhase: phase,
-                estimatedFatigueScore: cardioPrescription.estimatedFatigueScore
+                estimatedFatigueScore: cardioPrescription.estimatedFatigueScore,
+                explainabilityPurpose: explainabilityPurpose
             )
             context.insert(ex)
             ex.session = session
@@ -361,7 +376,8 @@ struct ProgramGenerationService {
                     effectiveOneRepMaxUnit: load.effectiveOneRepMaxUnit,
                     usedMappedSourceLift: load.usedMappedSourceLift,
                     progressionPhase: phase,
-                    topBackoffGroupID: topBackoffGroupID
+                    topBackoffGroupID: topBackoffGroupID,
+                    explainabilityPurpose: .technique
                 )
                 warmup.estimatedFatigueScore = estimateLoad(for: warmup).fatigueScore
                 context.insert(warmup)
@@ -402,7 +418,9 @@ struct ProgramGenerationService {
                 effectiveOneRepMaxUnit: load.effectiveOneRepMaxUnit,
                 usedMappedSourceLift: load.usedMappedSourceLift,
                 progressionPhase: phase,
-                topBackoffGroupID: topBackoffGroupID
+                topBackoffGroupID: topBackoffGroupID,
+                explainabilityPurpose: explainabilityPurpose,
+                explainabilitySelectionReason: isPrimary ? nil : accessorySelectionReason
             )
             working.estimatedFatigueScore = estimateLoad(for: working).fatigueScore
             context.insert(working)
@@ -789,6 +807,54 @@ struct ProgramGenerationService {
         if targetRIR != nil { return .rir }
         if targetRPE != nil { return .rpe }
         return .none
+    }
+
+    private func resolveSessionReasonCode(
+        focusProfile: ProgramFocusProgrammingProfile,
+        strategy: ProgressionStrategy,
+        schedule: WeekSchedule,
+        sessionName: String
+    ) -> ProgramSessionReasonCode {
+        if schedule.isDeload { return .deloadRecovery }
+
+        let lower = sessionName.lowercased()
+        if strategy.family == .enduranceConditioning {
+            if lower.contains("recovery") { return .enduranceRecovery }
+            if lower.contains("long") { return .enduranceLong }
+            if lower.contains("interval") || lower.contains("vo2") || lower.contains("threshold") || lower.contains("tempo") {
+                return .enduranceQuality
+            }
+            return .enduranceBase
+        }
+
+        switch focusProfile.primaryAdaptationGoal {
+        case .maximalStrength: return .specificityExposure
+        case .strengthHypertrophy: return .specificityExposure
+        case .hypertrophy: return .hypertrophyVolume
+        case .balancedFitness: return .balancedCoverage
+        case .aerobicEndurance: return .enduranceBase
+        }
+    }
+
+    private func resolveExercisePurposeCode(
+        templateExercise: TemplateExercise,
+        isPrimary: Bool,
+        schedule: WeekSchedule,
+        sessionName: String
+    ) -> ProgramExercisePurposeCode {
+        if templateExercise.role == .cardio {
+            let type = resolveCardioSessionType(sessionName: sessionName)
+            switch type {
+            case .recovery: return .recovery
+            case .interval, .threshold: return .conditioningQuality
+            case .easyAerobic, .longSession: return .conditioningBase
+            }
+        }
+
+        if schedule.isDeload { return .fatigueControl }
+        if templateExercise.role == .variation { return .technique }
+        if isPrimary { return .specificity }
+        return .volumeFill
     }
 
     // MARK: - Periodization Parameter Computation
@@ -1647,7 +1713,13 @@ struct ProgramGenerationService {
     private struct AccessoryCandidate {
         let exercise: TemplateExercise
         let estimate: ExerciseLoadEstimate
+        let reason: ProgramAccessorySelectionReason
         let score: Double
+    }
+
+    private struct SelectedAccessory {
+        let exercise: TemplateExercise
+        let reason: ProgramAccessorySelectionReason
     }
 
     private func buildAdaptiveAccessoryPlan(
@@ -1658,7 +1730,7 @@ struct ProgramGenerationService {
         level: ProgramLevel,
         sessionsPerWeek: Int,
         seed: Int
-    ) -> [Int: [[TemplateExercise]]] {
+    ) -> [Int: [[SelectedAccessory]]] {
         let volumeTargets = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: focus, level: level)
         let movementTargets = ProgramExerciseMetadataService.weeklyMovementPatternTargets(
             focus: focus,
@@ -1670,7 +1742,7 @@ struct ProgramGenerationService {
             sessionsPerWeek: sessionsPerWeek
         )
 
-        var planByWeek: [Int: [[TemplateExercise]]] = [:]
+        var planByWeek: [Int: [[SelectedAccessory]]] = [:]
         var lastUsedWeekBySession: [Int: [String: Int]] = [:]
         var previousWeekLastSessionFatigue = 0.0
         var previousWeekLastSessionHighFatigue = 0.0
@@ -1681,7 +1753,7 @@ struct ProgramGenerationService {
             var weeklyFatigue = 0.0
             var sessionFatigue = Array(repeating: 0.0, count: sessionDefs.count)
             var sessionHighFatigue = Array(repeating: 0.0, count: sessionDefs.count)
-            var weekAccessories = Array(repeating: [TemplateExercise](), count: sessionDefs.count)
+            var weekAccessories = Array(repeating: [SelectedAccessory](), count: sessionDefs.count)
             var sessionPatternCoverage = Array(repeating: Set<ProgramMovementPattern>(), count: sessionDefs.count)
             var weeklyPatternExposure = Dictionary(uniqueKeysWithValues: ProgramMovementPattern.allCases.map { ($0, 0) })
 
@@ -1813,7 +1885,24 @@ struct ProgramGenerationService {
                             rng: &rng
                         )
 
-                        let scored = AccessoryCandidate(exercise: candidate, estimate: estimate, score: score)
+                        let reason = resolveAccessorySelectionReason(
+                            focus: focus,
+                            sessionName: sessionDef.sessionName,
+                            estimate: estimate,
+                            candidatePatterns: candidatePatterns,
+                            currentWeeklyMuscleSets: weeklyMuscleSets,
+                            volumeTargets: volumeTargets,
+                            currentSessionFatigue: sessionFatigue[sessionIdx],
+                            fatigueBudgets: fatigueBudgets,
+                            currentWeekNumber: schedule.weekNumber,
+                            lastUsedWeek: lastUsed
+                        )
+                        let scored = AccessoryCandidate(
+                            exercise: candidate,
+                            estimate: estimate,
+                            reason: reason,
+                            score: score
+                        )
                         if let best, scored.score <= best.score { continue }
                         best = scored
                     }
@@ -1822,7 +1911,7 @@ struct ProgramGenerationService {
 
                     chosen.append(best.exercise)
                     chosenNames.insert(best.exercise.exerciseName)
-                    weekAccessories[sessionIdx].append(best.exercise)
+                    weekAccessories[sessionIdx].append(.init(exercise: best.exercise, reason: best.reason))
 
                     addMuscleSets(best.estimate.hardSetsByMuscle, into: &weeklyMuscleSets)
                     weeklyFatigue += best.estimate.fatigueScore
@@ -2030,6 +2119,47 @@ struct ProgramGenerationService {
 
         score += randomJitter(using: &rng, magnitude: 0.16)
         return score
+    }
+
+    private func resolveAccessorySelectionReason(
+        focus: ProgramFocus,
+        sessionName: String,
+        estimate: ExerciseLoadEstimate,
+        candidatePatterns: Set<ProgramMovementPattern>,
+        currentWeeklyMuscleSets: [ProgramVolumeMuscle: Double],
+        volumeTargets: ProgramWeeklyVolumeTargets,
+        currentSessionFatigue: Double,
+        fatigueBudgets: ProgramFatigueBudgets,
+        currentWeekNumber: Int,
+        lastUsedWeek: Int?
+    ) -> ProgramAccessorySelectionReason {
+        let usefulDeficitFill = ProgramVolumeMuscle.allCases.reduce(0.0) { total, muscle in
+            let deficit = max(0, volumeTargets.range(for: muscle).minHardSets - (currentWeeklyMuscleSets[muscle] ?? 0))
+            return total + min(deficit, estimate.hardSetsByMuscle[muscle] ?? 0)
+        }
+        if usefulDeficitFill >= 1.2 { return .muscleDeficit }
+
+        if !candidatePatterns.isEmpty { return .movementCoverage }
+
+        let projectedSessionFatigue = currentSessionFatigue + estimate.fatigueScore
+        if projectedSessionFatigue >= fatigueBudgets.sessionBudget * 0.82 { return .fatigueFit }
+
+        if focus == .bodybuilding {
+            let targets = bodybuildingSessionPriorityMuscles(sessionName: sessionName)
+            let contribution = targets.reduce(0.0) { partial, muscle in
+                partial + (estimate.hardSetsByMuscle[muscle] ?? 0)
+            }
+            if contribution >= 1.0 { return .sessionSpecificity }
+        }
+
+        if let lastUsedWeek {
+            if currentWeekNumber - lastUsedWeek >= 2 { return .noveltyRotation }
+        } else {
+            return .noveltyRotation
+        }
+
+        if estimate.highFatigueScore <= 0.02 { return .recoveryBias }
+        return .defaultRule
     }
 
     private func resolvedAccessorySelectionCount(

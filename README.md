@@ -1079,6 +1079,17 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Added Feature 4 generator tests validating cardio weekly intensity mix and archetype-specific progression behavior with deload step-backs
 - **Commit:** `feat: overhaul cardio endurance program generation`
 
+#### Prompt 7 [Generator Explainability + Whole-Program Validation] — 2026-04-10
+- Added compact explainability reason-code metadata in `ProgramGenerationMetadata.swift` and persisted fields on generated entities: session-level reason (`ProgramSessionTemplate.explainabilityReason`) plus exercise-level purpose and accessory-selection reason (`ProgramSessionExercise.explainabilityPurpose`, `explainabilitySelectionReason`)
+- Wired `ProgramGenerationService` to stamp explainability metadata during generation:
+  - session reason assignment by focus strategy and session archetype (including cardio and deload handling)
+  - exercise purpose assignment for specificity, volume fill, fatigue control, technique, recovery, and cardio quality/base intent
+  - accessory selection reason assignment based on deficit fill, movement coverage, fatigue fit, session identity, and rotation pressure
+- Extended review/debug visibility in `ProgramReviewView` (without UI redesign) by surfacing compact reason labels when `Show Additional Info` is enabled at session and exercise row levels
+- Added backward-compatible initializers for updated model constructors to avoid breaking existing test/build call sites while keeping changes additive
+- Expanded Feature 4 generator validation with new whole-program checks for explainability coverage, strength specificity/heavy exposure constraints, bodybuilding frequency+volume-floor identity, balanced-focus movement coverage, and cardio session-type/intensity explainability behavior
+- **Commit:** `feat: add generator explainability and focus-specific validation`
+
 ---
 
 ## Project Setup

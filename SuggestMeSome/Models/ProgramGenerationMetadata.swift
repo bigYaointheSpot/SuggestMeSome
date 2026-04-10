@@ -39,6 +39,74 @@ enum ProgramTargetEffortType: String, Codable {
     case none
 }
 
+enum ProgramSessionReasonCode: String, Codable {
+    case specificityExposure
+    case hypertrophyVolume
+    case balancedCoverage
+    case enduranceBase
+    case enduranceQuality
+    case enduranceLong
+    case enduranceRecovery
+    case deloadRecovery
+
+    var shortLabel: String {
+        switch self {
+        case .specificityExposure: return "Specificity"
+        case .hypertrophyVolume: return "Hypertrophy Volume"
+        case .balancedCoverage: return "Pattern Coverage"
+        case .enduranceBase: return "Aerobic Base"
+        case .enduranceQuality: return "Quality Work"
+        case .enduranceLong: return "Long Endurance"
+        case .enduranceRecovery: return "Recovery Endurance"
+        case .deloadRecovery: return "Deload Recovery"
+        }
+    }
+}
+
+enum ProgramExercisePurposeCode: String, Codable {
+    case specificity
+    case volumeFill
+    case fatigueControl
+    case technique
+    case recovery
+    case conditioningBase
+    case conditioningQuality
+
+    var shortLabel: String {
+        switch self {
+        case .specificity: return "Specificity"
+        case .volumeFill: return "Volume Fill"
+        case .fatigueControl: return "Fatigue Control"
+        case .technique: return "Technique"
+        case .recovery: return "Recovery"
+        case .conditioningBase: return "Base"
+        case .conditioningQuality: return "Quality"
+        }
+    }
+}
+
+enum ProgramAccessorySelectionReason: String, Codable {
+    case muscleDeficit
+    case movementCoverage
+    case fatigueFit
+    case sessionSpecificity
+    case recoveryBias
+    case noveltyRotation
+    case defaultRule
+
+    var shortLabel: String {
+        switch self {
+        case .muscleDeficit: return "Muscle Deficit"
+        case .movementCoverage: return "Coverage Gap"
+        case .fatigueFit: return "Fatigue Fit"
+        case .sessionSpecificity: return "Session Identity"
+        case .recoveryBias: return "Recovery Bias"
+        case .noveltyRotation: return "Novelty Rotation"
+        case .defaultRule: return "Default Rule"
+        }
+    }
+}
+
 enum ProgramPrimaryAdaptationGoal: String, Codable {
     case maximalStrength
     case strengthHypertrophy

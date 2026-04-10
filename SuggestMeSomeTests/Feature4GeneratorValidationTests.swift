@@ -712,6 +712,191 @@ struct Feature4GeneratorValidationTests {
         #expect(recoveryRPEWeek3 <= 6.0)
     }
 
+    @Test func explainabilityMetadataIsStampedAcrossGeneratedPrograms() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        for focus in ProgramFocus.allCases {
+            let template = FocusTemplateLibrary.template(for: focus)
+            let requestedFrequency = max(3, template.minimumFrequency)
+            let input = makeInput(
+                focus: focus,
+                level: .intermediate,
+                durationWeeks: 8,
+                sessionsPerWeek: requestedFrequency
+            )
+            let program = service.generateProgram(
+                input: input,
+                context: context,
+                shuffleSeed: deterministicSeed(for: focus, offset: 71)
+            )
+
+            guard let weekOne = program.weeks.first(where: { $0.weekNumber == 1 }) else {
+                Issue.record("Missing week 1 for explainability test: \(focus.rawValue)")
+                continue
+            }
+
+            for session in weekOne.sessions {
+                #expect(session.explainabilityReason != nil)
+                let workingRows = session.exercises.filter { !$0.isWarmup }
+                for row in workingRows {
+                    #expect(row.explainabilityPurpose != nil)
+                    if row.explainabilityPurpose == .volumeFill {
+                        #expect(row.explainabilitySelectionReason != nil)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test func strengthFocusMaintainsSpecificityAndHeavyExposureWithReasonCodes() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let program = service.generateProgram(
+            input: makeInput(focus: .powerlifting, level: .advanced, durationWeeks: 8, sessionsPerWeek: 4),
+            context: context,
+            shuffleSeed: 7111
+        )
+
+        guard let firstWorkingWeek = program.weeks.first(where: { !$0.isDeloadWeek }) else {
+            Issue.record("Missing working week for strength explainability test")
+            return
+        }
+
+        for session in firstWorkingWeek.sessions {
+            #expect(session.explainabilityReason == .specificityExposure)
+        }
+
+        let workingRows = firstWorkingWeek.sessions
+            .flatMap(\.exercises)
+            .filter { !$0.isWarmup && $0.targetSets != nil }
+        let specificityRows = workingRows.filter { $0.explainabilityPurpose == .specificity }
+        #expect(specificityRows.count >= firstWorkingWeek.sessions.count)
+
+        let heavyExposureRows = workingRows.filter {
+            $0.workingSetStyle == .topSet ||
+            $0.workingSetStyle == .backoff ||
+            (($0.targetPercentage1RM ?? 0) >= 0.80) ||
+            (($0.targetReps ?? 99) <= 6)
+        }
+        #expect(heavyExposureRows.count >= 3)
+    }
+
+    @Test func bodybuildingMaintainsFrequencyVolumeFloorsAndExplainabilityIdentity() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let program = service.generateProgram(
+            input: makeInput(focus: .bodybuilding, level: .intermediate, durationWeeks: 8, sessionsPerWeek: 5),
+            context: context,
+            shuffleSeed: 7112
+        )
+
+        guard
+            let firstWeek = program.weeks.first(where: { $0.weekNumber == 1 }),
+            let firstSummary = service.weeklySummary(for: program).first
+        else {
+            Issue.record("Missing week 1 for bodybuilding explainability test")
+            return
+        }
+
+        for session in firstWeek.sessions {
+            #expect(session.explainabilityReason == .hypertrophyVolume)
+            let rows = session.exercises.filter { !$0.isWarmup }
+            #expect(rows.contains(where: { $0.explainabilityPurpose == .volumeFill }))
+            for row in rows where row.explainabilityPurpose == .volumeFill {
+                #expect(row.explainabilitySelectionReason != nil)
+            }
+        }
+
+        #expect((firstSummary.totalHardSetsByMuscle[.chest] ?? 0) >= 6.0)
+        #expect((firstSummary.totalHardSetsByMuscle[.upperBackLats] ?? 0) >= 6.0)
+        #expect((firstSummary.totalHardSetsByMuscle[.quads] ?? 0) >= 5.0)
+        #expect((firstSummary.totalHardSetsByMuscle[.hamstrings] ?? 0) >= 5.0)
+    }
+
+    @Test func balancedFocusesSatisfyMovementCoverageAndUseBalancedReasonCode() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let balancedFocuses: [ProgramFocus] = [.generalFitness, .fullBody, .pushPull]
+
+        for focus in balancedFocuses {
+            let input = makeInput(
+                focus: focus,
+                level: .intermediate,
+                durationWeeks: 8,
+                sessionsPerWeek: 5
+            )
+            let program = service.generateProgram(
+                input: input,
+                context: context,
+                shuffleSeed: deterministicSeed(for: focus, offset: 72)
+            )
+
+            guard let weekOne = program.weeks.first(where: { $0.weekNumber == 1 }) else {
+                Issue.record("Missing week 1 for balanced focus explainability test: \(focus.rawValue)")
+                continue
+            }
+
+            for session in weekOne.sessions {
+                #expect(session.explainabilityReason == .balancedCoverage)
+            }
+
+            let exposures = movementPatternExposureCounts(for: weekOne)
+            let targets = ProgramExerciseMetadataService.weeklyMovementPatternTargets(
+                focus: focus,
+                sessionsPerWeek: program.sessionsPerWeek
+            )
+            let targetPatterns = targets.filter { $0.value > 0 }.map(\.key)
+            let covered = targetPatterns.filter { (exposures[$0] ?? 0) > 0 }
+            #expect(Double(covered.count) / Double(max(1, targetPatterns.count)) >= 0.65)
+        }
+    }
+
+    @Test func cardioFocusCarriesSessionTypeIntentAndExplainabilityTags() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let program = service.generateProgram(
+            input: makeInput(focus: .cardioEndurance, level: .intermediate, durationWeeks: 8, sessionsPerWeek: 5),
+            context: context,
+            shuffleSeed: 7113
+        )
+
+        guard let weekOne = program.weeks.first(where: { $0.weekNumber == 1 }) else {
+            Issue.record("Missing week 1 for cardio explainability test")
+            return
+        }
+
+        let cardioRows = weekOne.sessions.compactMap { session in
+            session.exercises.first { !$0.isWarmup && $0.targetSets == nil }
+        }
+        #expect(cardioRows.count == weekOne.sessions.count)
+
+        for session in weekOne.sessions {
+            let lower = (session.sessionName ?? "").lowercased()
+            let row = session.exercises.first { !$0.isWarmup && $0.targetSets == nil }
+            #expect(row != nil)
+
+            if lower.contains("long") {
+                #expect(session.explainabilityReason == .enduranceLong)
+                #expect(row?.explainabilityPurpose == .conditioningBase)
+            } else if lower.contains("interval") || lower.contains("threshold") || lower.contains("tempo") {
+                #expect(session.explainabilityReason == .enduranceQuality)
+                #expect(row?.explainabilityPurpose == .conditioningQuality)
+            } else if lower.contains("recovery") {
+                #expect(session.explainabilityReason == .enduranceRecovery)
+                #expect(row?.explainabilityPurpose == .recovery)
+            } else {
+                #expect(session.explainabilityReason == .enduranceBase)
+                #expect(row?.explainabilityPurpose == .conditioningBase)
+            }
+        }
+
+        let easyRows = cardioRows.filter { ($0.targetRPE ?? 0) <= 6.5 }
+        let hardRows = cardioRows.filter { ($0.targetRPE ?? 0) >= 8.2 }
+        #expect(easyRows.count >= 3)
+        #expect(hardRows.count >= 1)
+    }
+
     @Test func deloadWeeksAppearAtExpectedPositions() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
