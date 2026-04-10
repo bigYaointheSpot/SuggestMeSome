@@ -42,7 +42,7 @@ struct SuggestMeSomeApp: App {
             return try ModelContainer(for: sharedSchema, configurations: [persistentConfiguration])
         } catch {
             // Recovery path for incompatible/corrupted stores after schema updates.
-            clearApplicationSupportDirectory()
+            deleteSwiftDataStoreFiles()
             do {
                 return try ModelContainer(for: sharedSchema, configurations: [persistentConfiguration])
             } catch {
@@ -60,7 +60,7 @@ struct SuggestMeSomeApp: App {
         }
     }()
 
-    private static func clearApplicationSupportDirectory() {
+    private static func deleteSwiftDataStoreFiles() {
         let fileManager = FileManager.default
         guard let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return
@@ -71,7 +71,8 @@ struct SuggestMeSomeApp: App {
         ) else {
             return
         }
-        for url in contents {
+        let sqliteExtensions: Set<String> = ["sqlite", "sqlite-wal", "sqlite-shm"]
+        for url in contents where sqliteExtensions.contains(url.pathExtension) {
             try? fileManager.removeItem(at: url)
         }
     }

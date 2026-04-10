@@ -944,6 +944,13 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Active Program "browse" CTA remains at the bottom when no program is active
 - No new models or files added — all new UI reads from Feature 6 persisted SwiftData models
 
+### [Feature 6.5 — Safety Hardening] — 2026-04-10
+- Scoped store recovery in `SuggestMeSomeApp` to only delete SwiftData SQLite files (`.sqlite`, `.sqlite-wal`, `.sqlite-shm`) instead of wiping the entire Application Support directory
+- Renamed recovery helper to `deleteSwiftDataStoreFiles()` to reflect the narrowed scope
+- Added an explicit `modelContext.save()` in `WorkoutView.saveWorkout()` immediately after all workout/entry/set insertions so the workout is durably persisted before any Feature 6 coaching services run
+- Wrapped `SessionOutcomeInferenceService` and `WeeklyTrainingAnalysisService` calls in individual `do/catch` blocks so a failure in adaptive coaching never prevents a workout from being saved
+- No new models or files added
+
 ---
 
 ## Project Setup
