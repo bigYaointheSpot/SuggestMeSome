@@ -1129,6 +1129,17 @@ A program-first daily coaching system that collects readiness check-ins, surface
 - Existing Home dashboard tab is fully preserved and functional at tag 1
 - **Commit:** `feat: add daily coach first tab shell`
 
+#### Prompt 3 [Daily Coach Readiness Check-In] — 2026-04-10
+- Added `CheckInFormView.swift` at `Views/DailyCoach/CheckInFormView.swift` — a `NavigationStack`-wrapped `Form` sheet for creating and editing a daily readiness check-in
+- Form fields: Sleep Quality, Energy, Soreness, Stress (each 1–5 via tappable `RatingChips`), Available Time (Picker with 30/45/60/75/90/120 min options), Pain/Discomfort toggle, and a conditional free-text pain notes field
+- `RatingChips` is a private `HStack` of five buttons with color-coded selection (green→red) and `.plain` button style to avoid nested-button conflicts in `Form`
+- Save logic: if `existingCheckIn` is non-nil, mutates the existing record and sets `updatedAt`; otherwise inserts a new `DailyCoachCheckIn` with `date` and `dayStart` set to `Calendar.current.startOfDay(for: Date())`; all 1–5 values are clamped before write
+- Numeric fields clamped to 1–5 on save; `painNotes` written as `nil` when pain toggle is off or text is empty
+- Updated `DailyCoachView`: `readinessCard` now shows a filled blue "Check In" button when no same-day check-in exists, and a text "Edit Check-In" link when one does; both trigger a `.sheet` presenting `CheckInFormView(existingCheckIn: todayCheckIn)` — passing the existing record automatically switches the form to edit mode
+- Same-day check-in lookup uses `Calendar.current.startOfDay` on `$0.date` matching today, consistent with the existing `todayCheckIn` computed property
+- No recommendation logic introduced; placeholder Coach Recommendation card unchanged
+- **Commit:** `feat: add daily coach readiness check-in flow`
+
 ---
 
 ## Project Setup

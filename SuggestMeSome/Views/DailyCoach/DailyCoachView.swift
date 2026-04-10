@@ -52,6 +52,10 @@ struct DailyCoachView: View {
         return checkIns.first { Calendar.current.startOfDay(for: $0.date) == today }
     }
 
+    // MARK: Sheet state
+
+    @State private var showingCheckInSheet = false
+
     // MARK: Body
 
     var body: some View {
@@ -72,6 +76,9 @@ struct DailyCoachView: View {
             }
             .navigationTitle("Daily Coach")
             .navigationBarTitleDisplayMode(.large)
+        }
+        .sheet(isPresented: $showingCheckInSheet) {
+            CheckInFormView(existingCheckIn: todayCheckIn)
         }
     }
 
@@ -150,7 +157,7 @@ struct DailyCoachView: View {
         }
     }
 
-    // MARK: - Readiness Card (placeholder)
+    // MARK: - Readiness Card
 
     private var readinessCard: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -161,13 +168,27 @@ struct DailyCoachView: View {
 
             if let checkIn = todayCheckIn {
                 todayCheckInSummary(checkIn: checkIn)
+                Divider()
+                Button("Edit Check-In") {
+                    showingCheckInSheet = true
+                }
+                .font(.subheadline)
             } else {
-                Text("Today's check-in not yet recorded.")
+                Text("No check-in yet for today.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text("Check-in form coming in a future update.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                Button {
+                    showingCheckInSheet = true
+                } label: {
+                    Text("Check In")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color.accentColor)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding()
