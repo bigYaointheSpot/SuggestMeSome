@@ -29,14 +29,6 @@ enum DashboardTimeWindow: String, CaseIterable {
     }
 }
 
-// MARK: - WeekBucket
-
-fileprivate struct WeekBucket: Identifiable {
-    var id: Date { monday }
-    let monday: Date
-    let count: Int
-}
-
 // MARK: - FatigueStatus display helpers
 
 private extension FatigueStatus {
@@ -100,199 +92,7 @@ struct DashboardView: View {
     private var liftTrends: [LiftPerformanceTrend]
     @Query private var allProposals: [AdaptationProposal]
 
-    // MARK: Time window
-    @State private var timeWindow: DashboardTimeWindow = .fourWeeks
-
-    // MARK: Empty workout navigation
-    @State private var navigateToEmptyWorkout = false
-
-    // MARK: Generator flow
-    @State private var showingGeneratorSheet   = false
-    @State private var generatorSheetType: WorkoutGenerationType = .fullBody
-    @State private var pendingGeneratedWorkout: GeneratedWorkout?
-    @State private var showingGeneratedWorkout = false
-
-    // MARK: Program workout flow
-    @State private var showingCompleteProgramSheet = false
-    @State private var pendingProgramWorkout: ProgramWorkoutContext?
-    @State private var showingProgramWorkout = false
-
-    // MARK: Proposal review navigation
-    @State private var showingProposalReview = false
-
-    // MARK: Strength chart
-    @State private var selectedLifts: Set<String> = [
-        CanonicalLift.bench.displayName,
-        CanonicalLift.squat.displayName,
-        CanonicalLift.deadlift.displayName,
-    ]
-
-    private let liftOptions: [(name: String, color: Color)] = [
-        (CanonicalLift.bench.displayName,         .blue),
-        (CanonicalLift.squat.displayName,         .green),
-        (CanonicalLift.deadlift.displayName,      .orange),
-        (CanonicalLift.overheadPress.displayName, .purple),
-    ]
-
-    // MARK: - Computed stats
-
-    var filteredWorkouts: [Workout] {
-        guard let cutoff = timeWindow.startDate else { return allWorkouts }
-        return allWorkouts.filter { $0.date >= cutoff }
-    }
-
-    var workoutCount: Int { filteredWorkouts.count }
-
-    var timeTrainedLabel: String {
-        let total = filteredWorkouts.reduce(0) { $0 + $1.durationSeconds }
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        return "\(h)h \(m)m"
-    }
-
-    var prCount: Int {
-        filteredWorkouts.reduce(0) { count, workout in
-            count + workout.exerciseEntries.reduce(0) { $0 + $1.sets.filter(\.isPR).count }
-        }
-    }
-
-    var streakWeeks: Int {
-        let cal = Calendar.current
-        guard var weekStart = cal.dateInterval(of: .weekOfYear, for: Date())?.start else { return 0 }
-        var streak = 0
-        for _ in 0..<200 {
-            let weekEnd = cal.date(byAdding: .weekOfYear, value: 1, to: weekStart)!
-            let hasWorkout = allWorkouts.contains { $0.date >= weekStart && $0.date < weekEnd }
-            guard hasWorkout else { break }
-            streak += 1
-            weekStart = cal.date(byAdding: .weekOfYear, value: -1, to: weekStart)!
-        }
-        return streak
-    }
-
-    // MARK: - Coaching data
-
-    var recentAnalysis: WeeklyTrainingAnalysis? {
-        weeklyAnalyses.first { $0.isFinalized }
-    }
-
-    var pendingProposals: [AdaptationProposal] {
-        allProposals
-            .filter { $0.proposalStatus == .pendingUserConfirmation }
-            .sorted { $0.priority > $1.priority }
-    }
-
-    var significantLiftTrends: [LiftPerformanceTrend] {
-        liftTrends
-            .filter { $0.trendStatus != .insufficientData && $0.confidenceScore >= 0.25 }
-            .sorted { $0.confidenceScore > $1.confidenceScore }
-            .prefix(5)
-            .map { $0 }
-    }
-
-    var hasCoachingData: Bool {
-        recentAnalysis != nil || !pendingProposals.isEmpty
-    }
-
-    // MARK: - Chart data (strength)
-
-    var strengthChartData: [ChartPoint] {
-        StrengthAnalytics.chartPoints(
-            for: Array(selectedLifts),
-            from: allWorkouts,
-            since: timeWindow.startDate
-        )
-    }
-
-    var activeLiftData: [(lift: (name: String, color: Color), points: [ChartPoint])] {
-        let data = strengthChartData
-        return liftOptions
-            .filter { selectedLifts.contains($0.name) }
-            .map { lift in (lift: lift, points: data.filter { $0.exerciseName == lift.name }) }
-    }
-
-    // MARK: - Frequency chart data
-
-    fileprivate var workoutFrequencyBuckets: [WeekBucket] {
-        let cal = Calendar.current
-        let now = Date()
-
-        let windowStart: Date
-        if let c = timeWindow.startDate {
-            windowStart = c
-        } else if let earliest = allWorkouts.map(\.date).min() {
-            windowStart = earliest
-        } else {
-            return []
-        }
-
-        let firstMonday = mondayOf(windowStart)
-        let thisMonday  = mondayOf(now)
-
-        var buckets: [WeekBucket] = []
-        var weekStart = firstMonday
-        while weekStart <= thisMonday {
-            let weekEnd = cal.date(byAdding: .day, value: 7, to: weekStart)!
-            let count = filteredWorkouts.filter { $0.date >= weekStart && $0.date < weekEnd }.count
-            buckets.append(WeekBucket(monday: weekStart, count: count))
-            weekStart = weekEnd
-        }
-        return buckets
-    }
-
-    var frequencyTarget: Double {
-        let sortedRuns = activeProgramRuns.sorted { $0.startDate > $1.startDate }
-        if let run = sortedRuns.first, let program = run.program {
-            return Double(program.sessionsPerWeek)
-        }
-        let buckets = workoutFrequencyBuckets
-        guard !buckets.isEmpty else { return 3 }
-        let total = buckets.reduce(0) { $0 + $1.count }
-        return Double(total) / Double(buckets.count)
-    }
-
-    // MARK: - Muscle group color map
-
-    private static let muscleGroupColors: [String: Color] = [
-        "Chest":      .blue,
-        "Back":       .green,
-        "Legs":       .orange,
-        "Shoulders":  .purple,
-        "Arms":       .red,
-        "Core":       .teal,
-    ]
-
-    // MARK: - Volume by muscle group
-
-    var volumeByMuscleGroup: [(group: String, sets: Int, color: Color)] {
-        var counts: [String: Int] = [:]
-        for workout in filteredWorkouts {
-            for entry in workout.exerciseEntries {
-                guard !entry.isCardio else { continue }
-                let groupName: String
-                if let exercise = allExercises.first(where: { $0.name == entry.exerciseName }),
-                   let mg = exercise.muscleGroup,
-                   mg.name != "Cardio" {
-                    groupName = mg.name
-                } else if allExercises.first(where: { $0.name == entry.exerciseName }) == nil {
-                    continue
-                } else {
-                    groupName = "Other"
-                }
-                counts[groupName, default: 0] += entry.sets.count
-            }
-        }
-        return counts
-            .sorted { $0.value > $1.value }
-            .map { (group: $0.key, sets: $0.value, color: Self.muscleGroupColors[$0.key] ?? .gray) }
-    }
-
-    private func mondayOf(_ date: Date) -> Date {
-        let cal = Calendar.current
-        let weekday = cal.component(.weekday, from: date)
-        let daysToMonday = (weekday + 5) % 7
-        return cal.startOfDay(for: cal.date(byAdding: .day, value: -daysToMonday, to: date)!)
-    }
+    @State private var viewModel = DashboardViewModel()
 
     // MARK: - Body
 
@@ -301,10 +101,10 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     quickStartSection
-                    if hasCoachingData {
+                    if viewModel.hasCoachingData {
                         coachingInsightsSection
                     }
-                    if !activeProgramRuns.isEmpty {
+                    if !viewModel.activeProgramRuns.isEmpty {
                         activeProgramSection
                     }
                     timeWindowPicker
@@ -313,7 +113,7 @@ struct DashboardView: View {
                     strengthChartSection
                     workoutFrequencySection
                     volumeMuscleGroupSection
-                    if activeProgramRuns.isEmpty {
+                    if viewModel.activeProgramRuns.isEmpty {
                         activeProgramSection
                     }
                 }
@@ -323,47 +123,63 @@ struct DashboardView: View {
             }
             .navigationTitle("Home")
             .navigationBarTitleDisplayMode(.large)
-            .navigationDestination(isPresented: $navigateToEmptyWorkout) {
+            .navigationDestination(isPresented: $viewModel.navigateToEmptyWorkout) {
                 WorkoutView()
             }
-            .navigationDestination(isPresented: $showingGeneratedWorkout) {
-                WorkoutView(generatedWorkout: pendingGeneratedWorkout)
+            .navigationDestination(isPresented: $viewModel.showingGeneratedWorkout) {
+                WorkoutView(generatedWorkout: viewModel.pendingGeneratedWorkout)
             }
-            .navigationDestination(isPresented: $showingProgramWorkout) {
-                if let pw = pendingProgramWorkout {
+            .navigationDestination(isPresented: $viewModel.showingProgramWorkout) {
+                if let pw = viewModel.pendingProgramWorkout {
                     WorkoutView(programWorkout: pw)
                 }
             }
-            .navigationDestination(isPresented: $showingProposalReview) {
-                if let run = activeProgramRuns.sorted(by: { $0.startDate > $1.startDate }).first {
+            .navigationDestination(isPresented: $viewModel.showingProposalReview) {
+                if let run = viewModel.activeProgramRuns.sorted(by: { $0.startDate > $1.startDate }).first {
                     AdaptationProposalReviewView(run: run)
                 }
             }
-            .sheet(isPresented: $showingGeneratorSheet, onDismiss: {
-                if pendingGeneratedWorkout != nil {
+            .sheet(isPresented: $viewModel.showingGeneratorSheet, onDismiss: {
+                if viewModel.pendingGeneratedWorkout != nil {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        showingGeneratedWorkout = true
+                        viewModel.showingGeneratedWorkout = true
                     }
                 }
             }) {
-                GeneratorSheetRootView(type: generatorSheetType) { gw in
-                    pendingGeneratedWorkout = gw
-                    showingGeneratorSheet = false
+                GeneratorSheetRootView(type: viewModel.generatorSheetType) { gw in
+                    viewModel.pendingGeneratedWorkout = gw
+                    viewModel.showingGeneratorSheet = false
                 }
             }
-            .sheet(isPresented: $showingCompleteProgramSheet, onDismiss: {
-                if pendingProgramWorkout != nil {
+            .sheet(isPresented: $viewModel.showingCompleteProgramSheet, onDismiss: {
+                if viewModel.pendingProgramWorkout != nil {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        showingProgramWorkout = true
+                        viewModel.showingProgramWorkout = true
                     }
                 }
             }) {
-                CompleteProgramWorkoutSheet(activeRuns: Array(activeProgramRuns)) { ctx in
-                    pendingProgramWorkout = ctx
-                    showingCompleteProgramSheet = false
+                CompleteProgramWorkoutSheet(activeRuns: Array(viewModel.activeProgramRuns)) { ctx in
+                    viewModel.pendingProgramWorkout = ctx
+                    viewModel.showingCompleteProgramSheet = false
                 }
             }
         }
+        .onAppear {
+            viewModel.workouts = allWorkouts
+            viewModel.activeProgramRuns = activeProgramRuns
+            viewModel.allPRs = allPRs
+            viewModel.exercises = allExercises
+            viewModel.weeklyAnalyses = weeklyAnalyses
+            viewModel.liftTrends = liftTrends
+            viewModel.allProposals = allProposals
+        }
+        .onChange(of: allWorkouts) { viewModel.workouts = allWorkouts }
+        .onChange(of: activeProgramRuns) { viewModel.activeProgramRuns = activeProgramRuns }
+        .onChange(of: allPRs) { viewModel.allPRs = allPRs }
+        .onChange(of: allExercises) { viewModel.exercises = allExercises }
+        .onChange(of: weeklyAnalyses) { viewModel.weeklyAnalyses = weeklyAnalyses }
+        .onChange(of: liftTrends) { viewModel.liftTrends = liftTrends }
+        .onChange(of: allProposals) { viewModel.allProposals = allProposals }
     }
 
     // MARK: - Quick Start Section
@@ -374,22 +190,22 @@ struct DashboardView: View {
                 .font(.title3.weight(.bold))
             HStack(spacing: 10) {
                 quickStartButton(icon: "play.fill", label: "Empty", color: .blue) {
-                    navigateToEmptyWorkout = true
+                    viewModel.navigateToEmptyWorkout = true
                 }
                 quickStartButton(icon: "wand.and.stars", label: "Suggest", color: .purple) {
-                    generatorSheetType = .fullBody
-                    showingGeneratorSheet = true
+                    viewModel.generatorSheetType = .fullBody
+                    viewModel.showingGeneratorSheet = true
                 }
                 quickStartButton(
                     icon: "list.clipboard.fill",
                     label: "Program",
                     color: .orange,
-                    badge: pendingProposals.isEmpty ? nil : "\(pendingProposals.count)"
+                    badge: viewModel.pendingProposals.isEmpty ? nil : "\(viewModel.pendingProposals.count)"
                 ) {
-                    if activeProgramRuns.isEmpty {
+                    if viewModel.activeProgramRuns.isEmpty {
                         selectedTab = 2
                     } else {
-                        showingCompleteProgramSheet = true
+                        viewModel.showingCompleteProgramSheet = true
                     }
                 }
             }
@@ -441,8 +257,8 @@ struct DashboardView: View {
                 Text("AI Coaching")
                     .font(.headline.weight(.bold))
                 Spacer()
-                if !pendingProposals.isEmpty {
-                    Text("\(pendingProposals.count) pending")
+                if !viewModel.pendingProposals.isEmpty {
+                    Text("\(viewModel.pendingProposals.count) pending")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.indigo)
                 }
@@ -450,14 +266,14 @@ struct DashboardView: View {
 
             HStack(spacing: 10) {
                 // Fatigue status tile
-                if let analysis = recentAnalysis {
+                if let analysis = viewModel.recentAnalysis {
                     fatigueStatusTile(analysis)
                 }
 
                 // Proposals tile
-                if !pendingProposals.isEmpty, !activeProgramRuns.isEmpty {
-                    proposalsTile(pendingProposals)
-                } else if let analysis = recentAnalysis {
+                if !viewModel.pendingProposals.isEmpty, !viewModel.activeProgramRuns.isEmpty {
+                    proposalsTile(viewModel.pendingProposals)
+                } else if let analysis = viewModel.recentAnalysis {
                     performanceTile(analysis)
                 }
             }
@@ -529,7 +345,7 @@ struct DashboardView: View {
 
     private func proposalsTile(_ proposals: [AdaptationProposal]) -> some View {
         Button {
-            showingProposalReview = true
+            viewModel.showingProposalReview = true
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Text("RECOMMENDATIONS")
@@ -560,7 +376,7 @@ struct DashboardView: View {
     // MARK: - Time Window Picker
 
     private var timeWindowPicker: some View {
-        Picker("Time Window", selection: $timeWindow) {
+        Picker("Time Window", selection: $viewModel.timeWindow) {
             ForEach(DashboardTimeWindow.allCases, id: \.self) { w in
                 Text(w.rawValue).tag(w)
             }
@@ -575,25 +391,25 @@ struct DashboardView: View {
             StatCard(
                 icon: "figure.strengthtraining.traditional",
                 iconColor: .blue,
-                value: "\(workoutCount)",
+                value: "\(viewModel.workoutCount)",
                 label: "Workouts"
             )
             StatCard(
                 icon: "clock.fill",
                 iconColor: .blue,
-                value: timeTrainedLabel,
+                value: viewModel.timeTrainedLabel,
                 label: "Time Trained"
             )
             StatCard(
                 icon: "star.fill",
                 iconColor: .yellow,
-                value: "\(prCount)",
+                value: "\(viewModel.prCount)",
                 label: "PRs Hit"
             )
             StatCard(
                 icon: "flame.fill",
                 iconColor: .orange,
-                value: "\(streakWeeks)wk",
+                value: "\(viewModel.streakWeeks)wk",
                 label: "Streak"
             )
         }
@@ -615,20 +431,20 @@ struct DashboardView: View {
                 .font(.subheadline)
             }
 
-            if allPRs.isEmpty {
+            if viewModel.allPRs.isEmpty {
                 Text("Complete your first workout to start tracking PRs")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 8)
             } else {
-                ForEach(allPRs.prefix(5)) { pr in
+                ForEach(viewModel.allPRs.prefix(5)) { pr in
                     let delta = StrengthAnalytics.previousBest(
                         exerciseName: pr.exerciseName,
                         repCount: pr.repCount,
                         unit: pr.unit,
                         before: pr.dateAchieved,
-                        workouts: allWorkouts
+                        workouts: viewModel.workouts
                     ).map { pr.weight - $0 }
                     PRFeedRow(pr: pr, delta: delta)
                 }
@@ -639,7 +455,7 @@ struct DashboardView: View {
     // MARK: - Strength Chart Section
 
     private var strengthChartSection: some View {
-        let liftData = activeLiftData
+        let liftData = viewModel.activeLiftData
         let plotData = liftData.filter { $0.points.count >= 2 }
         let sparseNames = liftData.filter { $0.points.count < 2 }.map { $0.lift.name }
 
@@ -652,10 +468,10 @@ struct DashboardView: View {
             }
 
             // Lift trend badges from Feature 6 LiftPerformanceTrend
-            if !significantLiftTrends.isEmpty {
+            if !viewModel.significantLiftTrends.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(significantLiftTrends) { trend in
+                        ForEach(viewModel.significantLiftTrends) { trend in
                             LiftTrendBadge(trend: trend)
                         }
                     }
@@ -666,15 +482,15 @@ struct DashboardView: View {
             // Lift pill selector
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(liftOptions, id: \.name) { lift in
-                        let isActive = selectedLifts.contains(lift.name)
+                    ForEach(viewModel.liftOptions, id: \.name) { lift in
+                        let isActive = viewModel.selectedLifts.contains(lift.name)
                         Button {
                             if isActive {
-                                if selectedLifts.count > 1 {
-                                    selectedLifts.remove(lift.name)
+                                if viewModel.selectedLifts.count > 1 {
+                                    viewModel.selectedLifts.remove(lift.name)
                                 }
-                            } else if selectedLifts.count < 3 {
-                                selectedLifts.insert(lift.name)
+                            } else if viewModel.selectedLifts.count < 3 {
+                                viewModel.selectedLifts.insert(lift.name)
                             }
                         } label: {
                             Text(lift.name)
@@ -737,8 +553,8 @@ struct DashboardView: View {
     // MARK: - Workout Frequency Section
 
     private var workoutFrequencySection: some View {
-        let buckets = workoutFrequencyBuckets
-        let target  = frequencyTarget
+        let buckets = viewModel.workoutFrequencyBuckets
+        let target  = viewModel.frequencyTarget
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
@@ -804,7 +620,7 @@ struct DashboardView: View {
     // MARK: - Volume by Muscle Group Section
 
     private var volumeMuscleGroupSection: some View {
-        let data = volumeByMuscleGroup
+        let data = viewModel.volumeByMuscleGroup
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
@@ -857,7 +673,7 @@ struct DashboardView: View {
     // MARK: - Active Program Section
 
     private var activeProgramSection: some View {
-        let sortedRuns = activeProgramRuns.sorted { $0.startDate > $1.startDate }
+        let sortedRuns = viewModel.activeProgramRuns.sorted { $0.startDate > $1.startDate }
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
@@ -868,16 +684,16 @@ struct DashboardView: View {
             }
 
             if let run = sortedRuns.first, let program = run.program {
-                let latestAnalysis = weeklyAnalyses.first {
+                let latestAnalysis = viewModel.weeklyAnalyses.first {
                     $0.programRun?.id == run.id && $0.isFinalized
                 }
                 ActiveProgramCard(
                     run: run,
                     program: program,
-                    allWorkouts: allWorkouts,
+                    allWorkouts: viewModel.workouts,
                     latestAnalysis: latestAnalysis,
-                    onContinue: { showingCompleteProgramSheet = true },
-                    onReviewProposals: !pendingProposals.isEmpty ? { showingProposalReview = true } : nil
+                    onContinue: { viewModel.showingCompleteProgramSheet = true },
+                    onReviewProposals: !viewModel.pendingProposals.isEmpty ? { viewModel.showingProposalReview = true } : nil
                 )
             } else {
                 HStack {

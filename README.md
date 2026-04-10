@@ -1,15 +1,51 @@
 # SuggestMeSome
 
-A personal iOS workout tracking and AI-powered workout generation app.
-Built with SwiftUI + SwiftData.
+An iOS training companion for lifters who want more than a workout log.
+SuggestMeSome combines workout tracking, AI-guided workout and program
+generation, progress analytics, and adaptive coaching into one streamlined
+on-device app built with SwiftUI + SwiftData.
 
 ---
 
 ## App Overview
 
-SuggestMeSome lets users manually log workouts, auto-generate AI-suggested
-workouts, and track personal records over time. The app is structured around
-a tab-based navigation with a Workouts tab and a Training Programs tab.
+SuggestMeSome is built for lifters who want the flexibility of a workout
+tracker without giving up the structure of real programming. It combines fast
+manual logging, AI-guided workout generation, full multi-week program design,
+performance analytics, and adaptive coaching in one focused iOS app.
+
+The core value is that the app connects the full training loop. Users can go
+from logging a session, to generating the next workout, to running a
+periodized plan, to reviewing performance trends and coaching adjustments,
+without leaving the app or stitching together multiple tools.
+
+Key highlights:
+
+- fast set-by-set workout logging with timers, editable generated sessions,
+  history, filtering, and automatic personal record detection
+- AI workout generation for both strength and cardio sessions, giving users
+  quick, goal-oriented training suggestions they can immediately start and edit
+- a more advanced AI program generation engine that builds structured 6 to
+  12-week plans across multiple training focuses, supports experience-based
+  progression models, prescribed loading, top-set and backoff logic,
+  anchor-relative periodization, weekly volume targets, and fatigue-aware
+  accessory selection
+- a dashboard layer that makes progress visible through PR feeds, estimated
+  1RM strength trends, workout frequency, muscle-group volume, active program
+  progress, and lift-specific trend signals
+- an adaptive coaching system that persists workout outcomes, rolls them into
+  weekly analysis, tracks fatigue and lift performance trends, and generates
+  explainable recommendations for load progression, volume changes,
+  deload/downshift decisions, and exercise variation swaps
+- a non-destructive overlay model for coaching adjustments, so future program
+  changes can be applied transparently without mutating the original plan
+- on-device SwiftData persistence, keeping the experience fast, local, and
+  privacy-friendly
+
+In practical terms, SuggestMeSome is a workout tracker, program builder, and
+lightweight coaching engine in one product. It is designed to help users answer
+three questions clearly: what should I do today, am I progressing, and what
+should change next?
 
 **Tech Stack:** SwiftUI, SwiftData, Xcode
 **Platform:** iOS
@@ -961,6 +997,14 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Added a "Preferences" section at the top of `SettingsView` with a segmented `Picker` bound to `@AppStorage("globalWeightUnit")` — changes take effect immediately for all new entries
 - Replaced all hardcoded `.lbs` fallbacks in `WorkoutView` with `AppPreferences.defaultWeightUnit`: picker-created entries, generated-workout cardio entries, generated-workout strength unit fallback, and program-driven entry unit fallback
 - Prescribed units (from program templates or prior PR lookup) still take priority; preference is only applied when no unit is already specified
+
+### [Feature 6.5 — DashboardViewModel Extraction] — 2026-04-10
+- Created `SuggestMeSome/ViewModels/DashboardViewModel.swift` — `@Observable final class DashboardViewModel` holding all navigation/preference state, input arrays synced from `@Query`, and every computed property previously inline in `DashboardView`
+- Moved `WeekBucket` struct from `DashboardView` (was `fileprivate`) into the ViewModel file as an internal type so it can be returned from `workoutFrequencyBuckets` and iterated in the view
+- `DashboardView` retains all `@Query` properties (SwiftData constraint); a single `@State private var viewModel = DashboardViewModel()` replaces eleven former `@State` properties
+- `@Query` results are pushed into the ViewModel on `.onAppear` and via `.onChange(of:)` observers for each query array
+- All view-body references updated to `viewModel.propertyName`; bindings use `$viewModel.property` via `@Observable`+`@State` Bindable projection (iOS 17+)
+- No visual or behavioral changes — pure logic extraction
 
 ---
 
