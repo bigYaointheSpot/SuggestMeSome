@@ -455,7 +455,7 @@ enum WeeklyTrainingAnalysisService {
     private static func summarizeMainLiftTopSets(
         outcomes: [ExercisePerformanceOutcome]
     ) -> [String: Double] {
-        let mainKeys: Set<String> = ["squat", "bench", "deadlift"]
+        let mainKeys: Set<String> = Set([CanonicalLift.squat, .bench, .deadlift].map(\.rawValue))
         var summary: [String: Double] = [:]
 
         for outcome in outcomes {

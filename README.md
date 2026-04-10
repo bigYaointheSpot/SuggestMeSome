@@ -951,6 +951,11 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Wrapped `SessionOutcomeInferenceService` and `WeeklyTrainingAnalysisService` calls in individual `do/catch` blocks so a failure in adaptive coaching never prevents a workout from being saved
 - No new models or files added
 
+### [Feature 6.5 — CanonicalLift Enum Refactor] — 2026-04-10
+- Created `SuggestMeSome/Models/CanonicalLift.swift` — `CanonicalLift: String, CaseIterable` enum with four cases (`bench`, `squat`, `deadlift`, `overheadPress`), `displayName`, `variationNames`, and a `from(exerciseName:)` factory
+- Replaced all scattered lift key string literals (`"bench"`, `"squat"`, `"deadlift"`, `"overheadPress"`) with `CanonicalLift.<case>.rawValue` or `.displayName` across seven service/view files: `AdaptiveLoadProgressionService`, `AdaptiveFatigueDeloadService`, `LiftTrendTrackingService`, `AdaptiveVariationSwapService`, `AdaptiveVolumeProgressionService`, `SessionOutcomeInferenceService`, `WeeklyTrainingAnalysisService`, `ProgramGenerationService`, and `DashboardView`
+- No behavior changes — purely a string-constant consolidation
+
 ---
 
 ## Project Setup

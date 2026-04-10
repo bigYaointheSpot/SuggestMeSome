@@ -14,7 +14,7 @@ import SwiftData
 /// - Persists recommendations as non-destructive overlays (AdaptationProposal),
 ///   leaving base program templates unchanged.
 enum AdaptiveLoadProgressionService {
-    private static let mainLiftKeys: Set<String> = ["squat", "bench", "deadlift"]
+    private static let mainLiftKeys: Set<String> = Set([CanonicalLift.squat, .bench, .deadlift].map(\.rawValue))
     private static let lookbackDays = 84
 
     static func generateProposals(
@@ -793,26 +793,26 @@ enum AdaptiveLoadProgressionService {
         let mappedSource = FocusTemplateLibrary.loadMapping(for: exerciseName)?.sourceLift
         let normalized = (baseLiftUsed ?? mappedSource ?? exerciseName).lowercased()
 
-        if normalized.contains("squat") { return "squat" }
-        if normalized.contains("bench") { return "bench" }
-        if normalized.contains("deadlift") { return "deadlift" }
+        if normalized.contains(CanonicalLift.squat.rawValue) { return CanonicalLift.squat.rawValue }
+        if normalized.contains(CanonicalLift.bench.rawValue) { return CanonicalLift.bench.rawValue }
+        if normalized.contains(CanonicalLift.deadlift.rawValue) { return CanonicalLift.deadlift.rawValue }
         return nil
     }
 
     private static func competitionExerciseName(for liftKey: String) -> String {
         switch liftKey {
-        case "squat": return "Back Squats"
-        case "bench": return "Bench Press"
-        case "deadlift": return "Deadlift"
+        case CanonicalLift.squat.rawValue:    return CanonicalLift.squat.variationNames[0]
+        case CanonicalLift.bench.rawValue:    return CanonicalLift.bench.variationNames[0]
+        case CanonicalLift.deadlift.rawValue: return CanonicalLift.deadlift.variationNames[0]
         default: return liftKey
         }
     }
 
     private static func liftDisplayName(for key: String) -> String {
         switch key {
-        case "squat": return "Squat"
-        case "bench": return "Bench Press"
-        case "deadlift": return "Deadlift"
+        case CanonicalLift.squat.rawValue:    return CanonicalLift.squat.displayName
+        case CanonicalLift.bench.rawValue:    return CanonicalLift.bench.displayName
+        case CanonicalLift.deadlift.rawValue: return CanonicalLift.deadlift.displayName
         default: return key.capitalized
         }
     }

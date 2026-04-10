@@ -121,13 +121,17 @@ struct DashboardView: View {
     @State private var showingProposalReview = false
 
     // MARK: Strength chart
-    @State private var selectedLifts: Set<String> = ["Bench Press", "Squat", "Deadlift"]
+    @State private var selectedLifts: Set<String> = [
+        CanonicalLift.bench.displayName,
+        CanonicalLift.squat.displayName,
+        CanonicalLift.deadlift.displayName,
+    ]
 
     private let liftOptions: [(name: String, color: Color)] = [
-        ("Bench Press",    .blue),
-        ("Squat",          .green),
-        ("Deadlift",       .orange),
-        ("Overhead Press", .purple),
+        (CanonicalLift.bench.displayName,         .blue),
+        (CanonicalLift.squat.displayName,         .green),
+        (CanonicalLift.deadlift.displayName,      .orange),
+        (CanonicalLift.overheadPress.displayName, .purple),
     ]
 
     // MARK: - Computed stats

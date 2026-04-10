@@ -133,7 +133,7 @@ enum AdaptiveFatigueDeloadService {
         )
         let decliningMainLifts = trends.filter {
             $0.programRun?.id == runID &&
-            ($0.canonicalLiftKey == "squat" || $0.canonicalLiftKey == "bench" || $0.canonicalLiftKey == "deadlift") &&
+            ($0.canonicalLiftKey == CanonicalLift.squat.rawValue || $0.canonicalLiftKey == CanonicalLift.bench.rawValue || $0.canonicalLiftKey == CanonicalLift.deadlift.rawValue) &&
             $0.trendStatus == .declining &&
             $0.confidenceScore >= 0.35
         }.count
