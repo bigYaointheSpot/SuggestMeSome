@@ -132,6 +132,10 @@ struct ProgramGenerationService {
             }
     }
 
+    func programmingProfile(for focus: ProgramFocus) -> ProgramFocusProgrammingProfile {
+        FocusTemplateLibrary.programmingProfile(for: focus)
+    }
+
     private func stampPlannedFatigueSummaries(on program: TrainingProgram) {
         let byWeek = Dictionary(uniqueKeysWithValues: weeklySummary(for: program).map { ($0.weekNumber, $0) })
         for week in program.weeks {
@@ -151,13 +155,15 @@ struct ProgramGenerationService {
         context: ModelContext,
         shuffleSeed: Int
     ) -> TrainingProgram {
+        let focusProfile = programmingProfile(for: input.focus)
+
         // Step 1: Retrieve template
         let template = FocusTemplateLibrary.template(for: input.focus)
 
         // Step 2: Select session definitions for chosen frequency
         let sessionDefs = resolvedSessionDefs(from: template, frequency: input.sessionsPerWeek)
         let resolvedFrequency = max(1, sessionDefs.count)
-        let progressionModel = progressionModel(for: input.level)
+        let progressionModel = progressionModel(for: input.level, focusProfile: focusProfile)
         var usedLiftMapping = false
         var usedTopSetBackoff = false
 
@@ -167,7 +173,7 @@ struct ProgramGenerationService {
             lengthInWeeks: input.durationWeeks,
             sessionsPerWeek: resolvedFrequency,
             source: .aiGenerated,
-            descriptionText: periodizationDescription(for: input.level),
+            descriptionText: periodizationDescription(for: input.level, focusProfile: focusProfile),
             progressionModel: progressionModel,
             usedLiftMapping: false,
             usedVolumeBalancing: true,
@@ -177,13 +183,14 @@ struct ProgramGenerationService {
         context.insert(program)
 
         // Steps 3–4: Build periodized week schedules
-        let schedules = buildWeekSchedules(level: input.level, durationWeeks: input.durationWeeks)
+        let schedules = buildWeekSchedules(level: input.level, durationWeeks: input.durationWeeks, focusProfile: focusProfile)
 
         // Step 6: Build weekly accessory selections using volume and fatigue accounting.
         let weeklyAccessoryPlan = buildAdaptiveAccessoryPlan(
             sessionDefs: sessionDefs,
             schedules: schedules,
             focus: input.focus,
+            focusProfile: focusProfile,
             level: input.level,
             sessionsPerWeek: resolvedFrequency,
             seed: shuffleSeed
@@ -214,7 +221,7 @@ struct ProgramGenerationService {
                 for primary in sessionDef.primaryExercises {
                     orderIdx = populateExercise(
                         primary, isPrimary: true,
-                        focus: input.focus,
+                        focusProfile: focusProfile,
                         schedule: schedule, sessionIdx: sessionIdx,
                         sessionsPerWeek: resolvedFrequency, level: input.level,
                         oneRepMaxes: input.oneRepMaxes,
@@ -227,7 +234,7 @@ struct ProgramGenerationService {
                 for accessory in accessories {
                     orderIdx = populateExercise(
                         accessory, isPrimary: false,
-                        focus: input.focus,
+                        focusProfile: focusProfile,
                         schedule: schedule, sessionIdx: sessionIdx,
                         sessionsPerWeek: resolvedFrequency, level: input.level,
                         oneRepMaxes: input.oneRepMaxes,
@@ -252,7 +259,7 @@ struct ProgramGenerationService {
     private func populateExercise(
         _ templateEx: TemplateExercise,
         isPrimary: Bool,
-        focus: ProgramFocus,
+        focusProfile: ProgramFocusProgrammingProfile,
         schedule: WeekSchedule,
         sessionIdx: Int,
         sessionsPerWeek: Int,
@@ -298,7 +305,7 @@ struct ProgramGenerationService {
         let effectiveWorkingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
         let workingBlocks = buildWorkingSetBlocks(
             exercise: templateEx,
-            focus: focus,
+            focusProfile: focusProfile,
             level: level,
             schedule: schedule,
             params: params,
@@ -461,7 +468,7 @@ struct ProgramGenerationService {
 
     private func buildWorkingSetBlocks(
         exercise: TemplateExercise,
-        focus: ProgramFocus,
+        focusProfile: ProgramFocusProgrammingProfile,
         level: ProgramLevel,
         schedule: WeekSchedule,
         params: ExerciseParams,
@@ -472,7 +479,7 @@ struct ProgramGenerationService {
             return [straightSetBlock(from: params, sets: totalWorkingSets)]
         }
 
-        guard shouldUseTopBackoff(for: exercise, focus: focus, level: level, params: params),
+        guard shouldUseTopBackoff(for: exercise, focusProfile: focusProfile, level: level, params: params),
               let top = exercise.topSetPrescription,
               let backoff = exercise.backoffPrescription,
               let topPct = params.percentage1RM else {
@@ -510,12 +517,13 @@ struct ProgramGenerationService {
 
     private func shouldUseTopBackoff(
         for exercise: TemplateExercise,
-        focus: ProgramFocus,
+        focusProfile: ProgramFocusProgrammingProfile,
         level: ProgramLevel,
         params: ExerciseParams
     ) -> Bool {
-        // Beginner and bodybuilding templates stay predominantly straight-set.
-        if level == .beginner || focus == .bodybuilding { return false }
+        if focusProfile.topSetBackoffPolicy == .disabled { return false }
+        // Beginner templates stay predominantly straight-set.
+        if level == .beginner { return false }
         // High-rep hypertrophy work should stay straight-set.
         if params.reps >= 8 { return false }
         // Only %1RM-based work can support load-dropped backoffs.
@@ -549,7 +557,14 @@ struct ProgramGenerationService {
         return min(15, max(1, baseReps + repDelta))
     }
 
-    private func progressionModel(for level: ProgramLevel) -> ProgramProgressionModel {
+    private func progressionModel(
+        for level: ProgramLevel,
+        focusProfile: ProgramFocusProgrammingProfile
+    ) -> ProgramProgressionModel {
+        // Compatibility scaffold:
+        // keep the established level-based progression model while routing through
+        // focus strategy metadata so future prompts can safely specialize by focus.
+        _ = focusProfile.progressionStrategyFamily
         switch level {
         case .beginner: return .linear
         case .intermediate: return .dup
@@ -931,7 +946,15 @@ struct ProgramGenerationService {
         let phaseLength: Int
     }
 
-    private func buildWeekSchedules(level: ProgramLevel, durationWeeks: Int) -> [WeekSchedule] {
+    private func buildWeekSchedules(
+        level: ProgramLevel,
+        durationWeeks: Int,
+        focusProfile: ProgramFocusProgrammingProfile
+    ) -> [WeekSchedule] {
+        // Compatibility scaffold:
+        // deload style metadata is routed here now; schedule shaping remains unchanged
+        // in Prompt 1 to avoid behavior regressions.
+        _ = focusProfile.defaultDeloadStyle
         switch level {
         case .beginner, .intermediate:
             return buildLinearWeekSchedules(durationWeeks: durationWeeks)
@@ -1023,6 +1046,7 @@ struct ProgramGenerationService {
         sessionDefs: [SessionDefinition],
         schedules: [WeekSchedule],
         focus: ProgramFocus,
+        focusProfile: ProgramFocusProgrammingProfile,
         level: ProgramLevel,
         sessionsPerWeek: Int,
         seed: Int
@@ -1052,7 +1076,7 @@ struct ProgramGenerationService {
                 for primary in sessionDef.primaryExercises {
                     let estimate = estimateLoad(
                         for: primary,
-                        focus: focus,
+                        focusProfile: focusProfile,
                         level: level,
                         schedule: schedule,
                         sessionIdx: sessionIdx,
@@ -1092,7 +1116,7 @@ struct ProgramGenerationService {
                     for candidate in remaining {
                         let estimate = estimateLoad(
                             for: candidate,
-                            focus: focus,
+                            focusProfile: focusProfile,
                             level: level,
                             schedule: schedule,
                             sessionIdx: sessionIdx,
@@ -1251,7 +1275,7 @@ struct ProgramGenerationService {
 
     private func estimateLoad(
         for exercise: TemplateExercise,
-        focus: ProgramFocus,
+        focusProfile: ProgramFocusProgrammingProfile,
         level: ProgramLevel,
         schedule: WeekSchedule,
         sessionIdx: Int,
@@ -1276,7 +1300,7 @@ struct ProgramGenerationService {
         let effectiveWorkingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
         let blocks = buildWorkingSetBlocks(
             exercise: exercise,
-            focus: focus,
+            focusProfile: focusProfile,
             level: level,
             schedule: schedule,
             params: params,
@@ -1431,7 +1455,14 @@ struct ProgramGenerationService {
         isDeload ? 20 : 20 + progressionIndex * 3
     }
 
-    private func periodizationDescription(for level: ProgramLevel) -> String {
+    private func periodizationDescription(
+        for level: ProgramLevel,
+        focusProfile: ProgramFocusProgrammingProfile
+    ) -> String {
+        // Compatibility scaffold:
+        // adaptation goal metadata is routed here; current user-facing text stays
+        // level-based until focus-specific wording is added in later prompts.
+        _ = focusProfile.primaryAdaptationGoal
         switch level {
         case .beginner:
             return "Linear progression around each exercise's template anchor %1RM, with small weekly increases and a deload every 4th week."

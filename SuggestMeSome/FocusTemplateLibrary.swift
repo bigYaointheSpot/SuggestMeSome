@@ -182,6 +182,10 @@ enum FocusTemplateLibrary {
         topBackoffProfiles[exerciseName]
     }
 
+    static func programmingProfile(for focus: ProgramFocus) -> ProgramFocusProgrammingProfile {
+        ProgramFocusProgrammingProfileLibrary.profile(for: focus)
+    }
+
     private static let variationLoadMappings: [String: LoadMapping] = [
         // Squat variations
         "Pause Squat": .init(sourceLift: "Back Squats", multiplier: 0.92),

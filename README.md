@@ -1012,6 +1012,16 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Removed 4 stale `// TODO` comments from `ProgramOutcomeComparisonService.swift` (planned future features that are out of scope for the current build)
 - `print(` statements in `WorkoutView.swift` catch blocks retained as intentional F6 error logging
 
+### [Feature 6.5 — Focus-Specific Program Generation Rigor] — 2026-04-10
+
+#### Prompt 1 [Focus-Specific Programming Metadata Scaffold] — 2026-04-10
+- Added new focus-level programming metadata models in `ProgramGenerationMetadata.swift`, including `ProgramFocusProgrammingProfile` and supporting enums for adaptation goal, progression strategy family, weekly exposure priorities, top-set/backoff policy, deload style, recovery profile, and cardio programming metadata
+- Added `ProgramFocusProgrammingProfileLibrary.profile(for:)` with explicit profile coverage for every `ProgramFocus`
+- Extended the existing template system with centralized retrieval via `FocusTemplateLibrary.programmingProfile(for:)`
+- Wired `ProgramGenerationService` to resolve focus programming profile at generation entry and route it through progression model selection, schedule building, periodization description, accessory load estimation, and top-set/backoff policy checks (compatibility scaffold; behavior intentionally preserved for Prompt 1)
+- Added Feature 4 validation tests for profile resolution across all `ProgramFocus` values and for entry-point wiring via focus-policy-driven top/backoff behavior checks (`bodybuilding` disabled, `powerlifting` template-driven)
+- **Commit:** `feat: add focus-specific programming metadata scaffold`
+
 ---
 
 ## Project Setup

@@ -15,6 +15,21 @@ import Testing
 struct Feature4GeneratorValidationTests {
     private let service = ProgramGenerationService()
 
+    @Test func eachFocusResolvesValidProgrammingProfile() {
+        for focus in ProgramFocus.allCases {
+            let profile = service.programmingProfile(for: focus)
+            #expect(profile.focus == focus)
+            #expect(!profile.weeklyExposurePriorities.isEmpty)
+
+            if focus == .cardioEndurance {
+                #expect(profile.cardioProgrammingProfile != nil)
+                #expect(!(profile.cardioProgrammingProfile?.weeklyDistribution.isEmpty ?? true))
+            } else {
+                #expect(profile.cardioProgrammingProfile == nil)
+            }
+        }
+    }
+
     @Test func eachFocusBuildsExpectedWeeksAndResolvedSessions() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
@@ -135,6 +150,39 @@ struct Feature4GeneratorValidationTests {
         }
 
         #expect(sawTopBackoff)
+    }
+
+    @Test func focusProgrammingProfileIsWiredIntoGenerationTopBackoffPolicy() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let bodybuildingProfile = service.programmingProfile(for: .bodybuilding)
+        #expect(bodybuildingProfile.topSetBackoffPolicy == .disabled)
+
+        let bodybuildingProgram = service.generateProgram(
+            input: makeInput(focus: .bodybuilding, level: .advanced, durationWeeks: 8, sessionsPerWeek: 4),
+            context: context,
+            shuffleSeed: deterministicSeed(for: .bodybuilding, offset: 77)
+        )
+        let bodybuildingStyles = flattenedExercises(from: bodybuildingProgram)
+            .filter { !$0.isWarmup }
+            .map(\.workingSetStyle)
+        #expect(!bodybuildingStyles.contains(.topSet))
+        #expect(!bodybuildingStyles.contains(.backoff))
+
+        let powerliftingProfile = service.programmingProfile(for: .powerlifting)
+        #expect(powerliftingProfile.topSetBackoffPolicy == .templateDriven)
+
+        let powerliftingProgram = service.generateProgram(
+            input: makeInput(focus: .powerlifting, level: .advanced, durationWeeks: 8, sessionsPerWeek: 4),
+            context: context,
+            shuffleSeed: deterministicSeed(for: .powerlifting, offset: 88)
+        )
+        let powerliftingStyles = flattenedExercises(from: powerliftingProgram)
+            .filter { !$0.isWarmup }
+            .map(\.workingSetStyle)
+        #expect(powerliftingStyles.contains(.topSet))
+        #expect(powerliftingStyles.contains(.backoff))
     }
 
     @Test func volumeAndFatigueAccountingStayWithinSafeBounds() throws {
