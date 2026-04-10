@@ -35,6 +35,9 @@ struct DailyCoachView: View {
     @Query(sort: \DailyCoachWeeklyReview.weekStart, order: .reverse)
     private var weeklyReviews: [DailyCoachWeeklyReview]
 
+    @Query(sort: \LiftPerformanceTrend.updatedAt, order: .reverse)
+    private var liftTrends: [LiftPerformanceTrend]
+
     // MARK: Computed helpers
 
     private var focusRun: ProgramRun? { activeRuns.first }
@@ -47,6 +50,16 @@ struct DailyCoachView: View {
 
     private var latestReview: DailyCoachWeeklyReview? { weeklyReviews.first }
 
+    private var todayRecommendation: DailyCoachRecommendation {
+        DailyCoachRecommendationService.generate(
+            checkIn: todayCheckIn,
+            activeRun: focusRun,
+            latestAnalysis: latestAnalysis,
+            pendingProposalCount: pendingProposals.count,
+            recentWorkouts: Array(recentWorkouts.prefix(20))
+        )
+    }
+
     private var todayCheckIn: DailyCoachCheckIn? {
         let today = Calendar.current.startOfDay(for: Date())
         return checkIns.first { Calendar.current.startOfDay(for: $0.date) == today }
@@ -55,6 +68,7 @@ struct DailyCoachView: View {
     // MARK: Sheet state
 
     @State private var showingCheckInSheet = false
+    @State private var recommendationExpanded = false
 
     // MARK: Body
 
@@ -116,10 +130,6 @@ struct DailyCoachView: View {
             if let analysis = latestAnalysis {
                 fatigueStatusLine(analysis: analysis)
             }
-
-            Text("Recommendation coming soon")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -216,26 +226,149 @@ struct DailyCoachView: View {
         }
     }
 
-    // MARK: - Coach Recommendation Card (placeholder)
+    // MARK: - Coach Recommendation Card
 
     private var coachRecommendationCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Coach Recommendation", systemImage: "brain.head.profile")
-                .font(.headline)
+        let rec = todayRecommendation
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Coach Recommendation", systemImage: "brain.head.profile")
+                    .font(.headline)
+                Spacer()
+                if rec.hasPainFlag {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.subheadline)
+                }
+                readinessTierBadge(rec.readinessTier)
+            }
 
             Divider()
 
-            Text("Recommendation engine coming soon.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text("Once built, this card will suggest today's session based on readiness, fatigue, and program state.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            // Compact summary
+            Text(rec.compactSummary)
+                .font(.subheadline.weight(.medium))
                 .fixedSize(horizontal: false, vertical: true)
+
+            // Primary suggestion chip
+            HStack(spacing: 6) {
+                Image(systemName: suggestionIcon(rec.primarySuggestion.type))
+                    .font(.caption)
+                    .foregroundStyle(suggestionColor(rec.primarySuggestion.type))
+                Text(rec.primarySuggestion.compactText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Expand / collapse toggle
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    recommendationExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(recommendationExpanded ? "Less detail" : "More detail")
+                        .font(.caption)
+                    Image(systemName: recommendationExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                }
+                .foregroundStyle(Color.accentColor)
+            }
+            .buttonStyle(.plain)
+
+            // Expanded detail section
+            if recommendationExpanded {
+                Divider()
+
+                Text(rec.expandedDetails)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !rec.primarySuggestion.expandedText.isEmpty {
+                    recommendationDetailRow(rec.primarySuggestion)
+                }
+
+                ForEach(Array(rec.secondarySuggestions.enumerated()), id: \.offset) { _, item in
+                    recommendationDetailRow(item)
+                }
+
+                if let session = rec.nextProgramSession {
+                    Divider()
+                    HStack(spacing: 6) {
+                        Image(systemName: "list.bullet.clipboard")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\(session.programName) · Wk \(session.weekNumber), Sess \(session.sessionNumber)" + (session.sessionName.map { " — \($0)" } ?? ""))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func recommendationDetailRow(_ item: DailyCoachSuggestionItem) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 5) {
+                Image(systemName: suggestionIcon(item.type))
+                    .font(.caption2)
+                    .foregroundStyle(suggestionColor(item.type))
+                Text(item.compactText)
+                    .font(.caption.weight(.medium))
+            }
+            if !item.expandedText.isEmpty {
+                Text(item.expandedText)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 17)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func readinessTierBadge(_ tier: ReadinessTier) -> some View {
+        let (label, color): (String, Color) = switch tier {
+        case .strong:  ("Strong", .green)
+        case .neutral: ("Solid", .blue)
+        case .low:     ("Low", .orange)
+        case .unknown: ("No Check-In", .secondary)
+        }
+        return Text(label)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.15))
+            .foregroundStyle(color)
+            .clipShape(Capsule())
+    }
+
+    private func suggestionIcon(_ type: DailySuggestionType) -> String {
+        switch type {
+        case .runAsPlanned:                  return "checkmark.circle.fill"
+        case .trimAccessories:               return "minus.circle"
+        case .trimOneBackoffSet:             return "arrow.down.circle"
+        case .reduceWorkingLoadsSlightly:    return "scalemass"
+        case .suggestManualVariationSwap:    return "exclamationmark.triangle"
+        case .standaloneRecoverySession:     return "leaf.fill"
+        case .standaloneShortStrengthSession:return "bolt.fill"
+        }
+    }
+
+    private func suggestionColor(_ type: DailySuggestionType) -> Color {
+        switch type {
+        case .runAsPlanned:                  return .green
+        case .trimAccessories:               return .orange
+        case .trimOneBackoffSet:             return .yellow
+        case .reduceWorkingLoadsSlightly:    return .orange
+        case .suggestManualVariationSwap:    return .red
+        case .standaloneRecoverySession:     return .teal
+        case .standaloneShortStrengthSession:return .blue
+        }
     }
 
     // MARK: - Pending Proposals Row

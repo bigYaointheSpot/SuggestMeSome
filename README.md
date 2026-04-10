@@ -1140,6 +1140,18 @@ A program-first daily coaching system that collects readiness check-ins, surface
 - No recommendation logic introduced; placeholder Coach Recommendation card unchanged
 - **Commit:** `feat: add daily coach readiness check-in flow`
 
+#### Prompt 4 [Daily Coach Recommendation Engine] — 2026-04-10
+- Added `DailyCoachRecommendationTypes.swift` at `Models/DailyCoachRecommendationTypes.swift` — non-persisted value types: `DailySuggestionType` enum (7 cases: `runAsPlanned`, `trimAccessories`, `trimOneBackoffSet`, `reduceWorkingLoadsSlightly`, `suggestManualVariationSwap`, `standaloneRecoverySession`, `standaloneShortStrengthSession`), `StandaloneSessionType` enum (fullBody / upper / lower / push / pull / recovery / cardio), `ReadinessTier` enum (strong / neutral / low / unknown), `DailyCoachSuggestionItem` struct, `NextProgramSessionInfo` struct, `DailyCoachRecommendation` struct
+- Added `DailyCoachRecommendationService.swift` at `Services/Adaptive/DailyCoachRecommendationService.swift` — deterministic, purely in-memory service; no SwiftData writes
+- `generate(checkIn:activeRun:latestAnalysis:pendingProposalCount:recentWorkouts:)` routes to program path or standalone fallback; `computeReadinessTier(from:)` derives a composite score from sleep + energy + (6−soreness) + (6−stress)
+- Program path: `detectNextSession` finds the first uncompleted (week, session) pair by scanning logged workouts; looks up `sessionName` from `ProgramWeekTemplate → ProgramSessionTemplate`
+- Five-tier priority rule chain (program and standalone): (1) pain/discomfort — no auto-swap, manual review surfaced; (2) severe time constraint < 30 min — primary lift + top set only; (3) moderate time + elevated fatigue — trim accessories; (4) low readiness — trim one backoff set, optionally trim accessories; (5) neutral / strong readiness — run as planned with pending-proposal note if applicable
+- Standalone fallback: `inferStandaloneSessionType` infers fullBody / upper / lower / recovery from hasPain, fatigueStatus, readinessTier, and recent-workout history; `standaloneSuggestions` generates matching suggestion text
+- Updated `DailyCoachView`: replaced placeholder Coach Recommendation card with an expandable card; shows a readiness-tier badge (Strong / Solid / Low / No Check-In), compact summary, primary suggestion chip with icon and color, and a "More detail / Less detail" toggle revealing full explanation and secondary suggestions; pain flag icon shown when `hasPainOrDiscomfort` is true; `LiftPerformanceTrend` query added for future use
+- Removed "Recommendation coming soon" placeholder text from `activeProgramSummary`
+- All recommendation objects are ephemeral; nothing new is persisted
+- **Commit:** `feat: add daily coach recommendation engine`
+
 ---
 
 ## Project Setup
