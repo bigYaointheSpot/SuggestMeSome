@@ -24,6 +24,8 @@ struct Feature4GeneratorValidationTests {
             if focus == .cardioEndurance {
                 #expect(profile.cardioProgrammingProfile != nil)
                 #expect(!(profile.cardioProgrammingProfile?.weeklyDistribution.isEmpty ?? true))
+                #expect(!(profile.cardioProgrammingProfile?.targetEffortDistribution.isEmpty ?? true))
+                #expect(!(profile.cardioProgrammingProfile?.sessionRules.isEmpty ?? true))
             } else {
                 #expect(profile.cardioProgrammingProfile == nil)
             }
@@ -617,6 +619,99 @@ struct Feature4GeneratorValidationTests {
         #expect((exposures[.squatKneeDominant] ?? 0) + (exposures[.hinge] ?? 0) + (exposures[.singleLeg] ?? 0) >= 2)
     }
 
+    @Test func cardioEnduranceWeeklyIntensityMixIsSensible() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let input = makeInput(
+            focus: .cardioEndurance,
+            level: .intermediate,
+            durationWeeks: 8,
+            sessionsPerWeek: 5
+        )
+        let program = service.generateProgram(
+            input: input,
+            context: context,
+            shuffleSeed: 6101
+        )
+
+        guard let weekOne = program.weeks.first(where: { $0.weekNumber == 1 }) else {
+            Issue.record("Missing week 1 for cardio intensity mix test")
+            return
+        }
+
+        let cardioRows = weekOne.sessions.compactMap { session in
+            session.exercises.first { !$0.isWarmup && $0.targetSets == nil }
+        }
+        #expect(cardioRows.count == 5)
+
+        let easyRows = cardioRows.filter { ($0.targetRPE ?? 0) <= 6.5 }
+        let moderateRows = cardioRows.filter { ($0.targetRPE ?? 0) > 6.5 && ($0.targetRPE ?? 0) < 8.2 }
+        let hardRows = cardioRows.filter { ($0.targetRPE ?? 0) >= 8.2 }
+
+        #expect(easyRows.count >= 3)
+        #expect(moderateRows.count >= 1)
+        #expect(hardRows.count >= 1)
+        #expect(hardRows.count <= 2)
+
+        let longRows = weekOne.sessions
+            .filter { ($0.sessionName ?? "").lowercased().contains("long") }
+            .compactMap { session in session.exercises.first { !$0.isWarmup && $0.targetSets == nil } }
+        #expect((longRows.first?.targetReps ?? 0) >= 40)
+    }
+
+    @Test func cardioEnduranceProgressionIsSessionTypeSpecificWithDeloadStepBack() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let input = makeInput(
+            focus: .cardioEndurance,
+            level: .intermediate,
+            durationWeeks: 8,
+            sessionsPerWeek: 4
+        )
+        let program = service.generateProgram(
+            input: input,
+            context: context,
+            shuffleSeed: 6102
+        )
+
+        guard
+            let week1 = program.weeks.first(where: { $0.weekNumber == 1 }),
+            let week2 = program.weeks.first(where: { $0.weekNumber == 2 }),
+            let week3 = program.weeks.first(where: { $0.weekNumber == 3 })
+        else {
+            Issue.record("Missing required weeks for cardio progression test")
+            return
+        }
+
+        let easyWeek1 = cardioMinutes(in: week1, matching: "easy")
+        let easyWeek2 = cardioMinutes(in: week2, matching: "easy")
+        let easyWeek3 = cardioMinutes(in: week3, matching: "easy")
+
+        let intervalWeek1 = cardioMinutes(in: week1, matching: "interval")
+        let intervalWeek2 = cardioMinutes(in: week2, matching: "interval")
+        let intervalWeek3 = cardioMinutes(in: week3, matching: "interval")
+
+        let longWeek1 = cardioMinutes(in: week1, matching: "long")
+        let longWeek2 = cardioMinutes(in: week2, matching: "long")
+        let longWeek3 = cardioMinutes(in: week3, matching: "long")
+
+        #expect(easyWeek2 > easyWeek1)
+        #expect(intervalWeek2 > intervalWeek1)
+        #expect(longWeek2 > longWeek1)
+        #expect((longWeek2 - longWeek1) >= (intervalWeek2 - intervalWeek1))
+
+        #expect(week3.isDeloadWeek)
+        #expect(easyWeek3 < easyWeek2)
+        #expect(intervalWeek3 < intervalWeek2)
+        #expect(longWeek3 < longWeek2)
+
+        let thresholdRPEWeek2 = cardioRPE(in: week2, matching: "threshold")
+        let intervalRPEWeek2 = cardioRPE(in: week2, matching: "interval")
+        let recoveryRPEWeek3 = cardioRPE(in: week3, matching: "easy")
+        #expect(intervalRPEWeek2 > thresholdRPEWeek2)
+        #expect(recoveryRPEWeek3 <= 6.0)
+    }
+
     @Test func deloadWeeksAppearAtExpectedPositions() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
@@ -800,5 +895,25 @@ struct Feature4GeneratorValidationTests {
         exerciseNames.reduce(into: Set<ProgramMovementPattern>()) { patterns, name in
             patterns.formUnion(ProgramExerciseMetadataService.movementPatterns(for: name))
         }
+    }
+
+    private func cardioMinutes(in week: ProgramWeekTemplate, matching keyword: String) -> Int {
+        let lowerKeyword = keyword.lowercased()
+        let session = week.sessions.first { ($0.sessionName ?? "").lowercased().contains(lowerKeyword) }
+        let minutes = session?
+            .exercises
+            .first(where: { !$0.isWarmup && $0.targetSets == nil })?
+            .targetReps
+        return minutes ?? 0
+    }
+
+    private func cardioRPE(in week: ProgramWeekTemplate, matching keyword: String) -> Double {
+        let lowerKeyword = keyword.lowercased()
+        let session = week.sessions.first { ($0.sessionName ?? "").lowercased().contains(lowerKeyword) }
+        let rpe = session?
+            .exercises
+            .first(where: { !$0.isWarmup && $0.targetSets == nil })?
+            .targetRPE
+        return rpe ?? 0
     }
 }

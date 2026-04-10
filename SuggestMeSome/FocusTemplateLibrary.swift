@@ -1994,13 +1994,14 @@ private extension FocusTemplateLibrary {
 
 // MARK: - Cardio Endurance
 // All sessions draw from the Cardio muscle group.
-// defaultReps represents target duration in minutes.
-// Sessions progress by adding 2–5 minutes per week.
+// defaultReps represents target duration in minutes before progression adjustments.
+// Session names encode cardio archetype so ProgramGenerationService can apply
+// session-type progression rules (easy, threshold, interval, long, recovery).
 
 private extension FocusTemplateLibrary {
     static var cardioEnduranceTemplate: FocusTemplate {
-        let steadyStateDay = SessionDefinition(
-            sessionName: "Steady State",
+        let easyAerobicDay = SessionDefinition(
+            sessionName: "Easy Aerobic / Zone 2",
             primaryExercises: [
                 .init(exerciseName: "Treadmill", role: .cardio, defaultSets: 1, defaultReps: 30, percentage1RM: nil, targetRPE: 6),
             ],
@@ -2011,40 +2012,38 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Rowing Machine",   role: .cardio, defaultSets: 1, defaultReps: 25, percentage1RM: nil, targetRPE: 6),
                 .init(exerciseName: "Stairmaster",      role: .cardio, defaultSets: 1, defaultReps: 25, percentage1RM: nil, targetRPE: 6),
             ],
-            accessoryCount: 1
+            accessoryCount: 0
+        )
+
+        let thresholdDay = SessionDefinition(
+            sessionName: "Threshold / Tempo",
+            primaryExercises: [
+                .init(exerciseName: "Exercise Bike", role: .cardio, defaultSets: 1, defaultReps: 28, percentage1RM: nil, targetRPE: 8),
+            ],
+            accessoryPool: [
+                .init(exerciseName: "Rowing Machine",   role: .cardio, defaultSets: 1, defaultReps: 28, percentage1RM: nil, targetRPE: 8),
+                .init(exerciseName: "Incline Treadmill",role: .cardio, defaultSets: 1, defaultReps: 26, percentage1RM: nil, targetRPE: 8),
+                .init(exerciseName: "Stairmaster",      role: .cardio, defaultSets: 1, defaultReps: 24, percentage1RM: nil, targetRPE: 8),
+            ],
+            accessoryCount: 0
         )
 
         let intervalDay = SessionDefinition(
-            sessionName: "Interval Training",
+            sessionName: "Interval / VO2",
             primaryExercises: [
-                .init(exerciseName: "Exercise Bike", role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 9),
+                .init(exerciseName: "Rowing Machine", role: .cardio, defaultSets: 1, defaultReps: 22, percentage1RM: nil, targetRPE: 9),
             ],
             accessoryPool: [
-                .init(exerciseName: "Jump Rope",     role: .cardio, defaultSets: 1, defaultReps: 15, percentage1RM: nil, targetRPE: 9),
-                .init(exerciseName: "Rowing Machine",role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 8),
-                .init(exerciseName: "Treadmill",     role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 9),
+                .init(exerciseName: "Exercise Bike", role: .cardio, defaultSets: 1, defaultReps: 22, percentage1RM: nil, targetRPE: 9),
+                .init(exerciseName: "Jump Rope",     role: .cardio, defaultSets: 1, defaultReps: 18, percentage1RM: nil, targetRPE: 9),
+                .init(exerciseName: "Treadmill",     role: .cardio, defaultSets: 1, defaultReps: 22, percentage1RM: nil, targetRPE: 9),
                 .init(exerciseName: "Stairmaster",   role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 8),
             ],
-            accessoryCount: 1
-        )
-
-        let mixedModalityDay = SessionDefinition(
-            sessionName: "Mixed Modality",
-            primaryExercises: [
-                .init(exerciseName: "Rowing Machine", role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 7),
-            ],
-            accessoryPool: [
-                .init(exerciseName: "Jump Rope",        role: .cardio, defaultSets: 1, defaultReps: 10, percentage1RM: nil, targetRPE: 8),
-                .init(exerciseName: "Elliptical",       role: .cardio, defaultSets: 1, defaultReps: 15, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Stairmaster",      role: .cardio, defaultSets: 1, defaultReps: 15, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Incline Treadmill",role: .cardio, defaultSets: 1, defaultReps: 15, percentage1RM: nil, targetRPE: 7),
-                .init(exerciseName: "Treadmill",        role: .cardio, defaultSets: 1, defaultReps: 15, percentage1RM: nil, targetRPE: 7),
-            ],
-            accessoryCount: 2
+            accessoryCount: 0
         )
 
         let longSteadyStateDay = SessionDefinition(
-            sessionName: "Long Steady State",
+            sessionName: "Long Steady Session",
             primaryExercises: [
                 .init(exerciseName: "Elliptical", role: .cardio, defaultSets: 1, defaultReps: 45, percentage1RM: nil, targetRPE: 5),
             ],
@@ -2054,25 +2053,11 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Rowing Machine",   role: .cardio, defaultSets: 1, defaultReps: 40, percentage1RM: nil, targetRPE: 5),
                 .init(exerciseName: "Stairmaster",      role: .cardio, defaultSets: 1, defaultReps: 35, percentage1RM: nil, targetRPE: 5),
             ],
-            accessoryCount: 1
-        )
-
-        let hiitDay = SessionDefinition(
-            sessionName: "HIIT",
-            primaryExercises: [
-                .init(exerciseName: "Jump Rope", role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 9),
-            ],
-            accessoryPool: [
-                .init(exerciseName: "Stairmaster",  role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 9),
-                .init(exerciseName: "Exercise Bike",role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 9),
-                .init(exerciseName: "Rowing Machine",role: .cardio,defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 9),
-                .init(exerciseName: "Treadmill",    role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 9),
-            ],
-            accessoryCount: 1
+            accessoryCount: 0
         )
 
         let activeRecoveryDay = SessionDefinition(
-            sessionName: "Active Recovery",
+            sessionName: "Recovery Session",
             primaryExercises: [
                 .init(exerciseName: "Elliptical", role: .cardio, defaultSets: 1, defaultReps: 30, percentage1RM: nil, targetRPE: 4),
             ],
@@ -2081,7 +2066,7 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Treadmill",    role: .cardio, defaultSets: 1, defaultReps: 30, percentage1RM: nil, targetRPE: 4),
                 .init(exerciseName: "Rowing Machine",role: .cardio,defaultSets: 1, defaultReps: 25, percentage1RM: nil, targetRPE: 4),
             ],
-            accessoryCount: 1
+            accessoryCount: 0
         )
 
         return FocusTemplate(
@@ -2089,12 +2074,12 @@ private extension FocusTemplateLibrary {
             displayName: "Cardio Endurance",
             minimumFrequency: 3,
             requiredLifts: [],
-            exercisesPerSession: 2...3,
+            exercisesPerSession: 1...1,
             sessionDefinitions: [
-                3: [steadyStateDay, intervalDay, mixedModalityDay],
-                4: [steadyStateDay, intervalDay, mixedModalityDay, longSteadyStateDay],
-                5: [steadyStateDay, intervalDay, mixedModalityDay, longSteadyStateDay, hiitDay],
-                6: [steadyStateDay, intervalDay, mixedModalityDay, longSteadyStateDay, hiitDay, activeRecoveryDay],
+                3: [easyAerobicDay, thresholdDay, longSteadyStateDay],
+                4: [easyAerobicDay, thresholdDay, intervalDay, longSteadyStateDay],
+                5: [easyAerobicDay, thresholdDay, intervalDay, longSteadyStateDay, easyAerobicDay],
+                6: [easyAerobicDay, thresholdDay, intervalDay, longSteadyStateDay, easyAerobicDay, activeRecoveryDay],
             ]
         )
     }

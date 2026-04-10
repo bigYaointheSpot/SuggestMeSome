@@ -1067,6 +1067,18 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Added Feature 4 validation tests verifying weekly movement-pattern coverage and focus identity for `generalFitness`, `fullBody`, and `pushPull`
 - **Commit:** `feat: strengthen balanced focus program generation logic`
 
+#### Prompt 6 [Cardio Endurance Planner Overhaul] — 2026-04-10
+- Upgraded cardio programming metadata in `ProgramGenerationMetadata.swift` with explicit endurance session rules (`ProgramCardioSessionRule`), effort-distribution targets (`ProgramCardioEffortBucket`), progression methods (`duration`, `intervalCount`, `intervalDensity`, `workBlockDuration`), and optional work/rest progression parameters
+- Reworked cardio templates in `FocusTemplateLibrary` around explicit archetypes: `Easy Aerobic / Zone 2`, `Threshold / Tempo`, `Interval / VO2`, `Long Steady Session`, and `Recovery Session`, with frequency-specific weekly mixes that preserve endurance identity
+- Replaced the prior global cardio minute ramp in `ProgramGenerationService` with session-type-aware prescription resolution that:
+  - progresses easy and long sessions primarily by duration
+  - progresses interval/threshold sessions via work/rest-aware logic and interval progression inputs
+  - applies deload step-back scaling for duration and effort targets
+  - stores cardio effort guidance as `targetRPE` while keeping existing UI-compatible cardio row shape (`targetSets == nil`, `targetReps == minutes`)
+- Unified cardio fatigue estimation around session duration + effort instead of a single flat per-minute multiplier, keeping weekly summary/fatigue accounting coherent for cardio blocks
+- Added Feature 4 generator tests validating cardio weekly intensity mix and archetype-specific progression behavior with deload step-backs
+- **Commit:** `feat: overhaul cardio endurance program generation`
+
 ---
 
 ## Project Setup

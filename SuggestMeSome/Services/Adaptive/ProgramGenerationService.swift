@@ -287,17 +287,22 @@ struct ProgramGenerationService {
         )
         let topBackoffGroupID = UUID()
 
-        // Cardio exercises: encode target duration as targetReps (minutes); no sets.
+        // Cardio exercises: encode duration as targetReps (minutes) and effort as targetRPE.
         if templateEx.role == .cardio {
-            let mins = cardioDurationMinutes(progressionIndex: schedule.progressionIndex, isDeload: schedule.isDeload)
+            let cardioPrescription = resolveCardioPrescription(
+                sessionName: session.sessionName ?? "",
+                focusProfile: focusProfile,
+                schedule: schedule
+            )
             let ex = ProgramSessionExercise(
                 exerciseName: templateEx.exerciseName,
                 orderIndex: idx,
                 targetSets: nil,
-                targetReps: mins,
-                targetEffortType: ProgramTargetEffortType.none,
+                targetReps: cardioPrescription.minutes,
+                targetRPE: cardioPrescription.targetRPE,
+                targetEffortType: ProgramTargetEffortType.rpe,
                 progressionPhase: phase,
-                estimatedFatigueScore: Double(mins) * 0.08
+                estimatedFatigueScore: cardioPrescription.estimatedFatigueScore
             )
             context.insert(ex)
             ex.session = session
@@ -1689,7 +1694,8 @@ struct ProgramGenerationService {
                         level: level,
                         schedule: schedule,
                         sessionIdx: sessionIdx,
-                        sessionsPerWeek: sessionsPerWeek
+                        sessionsPerWeek: sessionsPerWeek,
+                        sessionName: sessionDef.sessionName
                     )
                     addMuscleSets(estimate.hardSetsByMuscle, into: &weeklyMuscleSets)
                     sessionFatigue[sessionIdx] += estimate.fatigueScore
@@ -1745,7 +1751,8 @@ struct ProgramGenerationService {
                             level: level,
                             schedule: schedule,
                             sessionIdx: sessionIdx,
-                            sessionsPerWeek: sessionsPerWeek
+                            sessionsPerWeek: sessionsPerWeek,
+                            sessionName: sessionDef.sessionName
                         )
                         let candidatePatterns = ProgramExerciseMetadataService.movementPatterns(
                             for: candidate.exerciseName
@@ -2172,14 +2179,19 @@ struct ProgramGenerationService {
         level: ProgramLevel,
         schedule: WeekSchedule,
         sessionIdx: Int,
-        sessionsPerWeek: Int
+        sessionsPerWeek: Int,
+        sessionName: String
     ) -> ExerciseLoadEstimate {
         if exercise.role == .cardio {
-            let mins = cardioDurationMinutes(progressionIndex: schedule.progressionIndex, isDeload: schedule.isDeload)
+            let cardioPrescription = resolveCardioPrescription(
+                sessionName: sessionName,
+                focusProfile: focusProfile,
+                schedule: schedule
+            )
             return ExerciseLoadEstimate(
                 hardSetsByMuscle: emptyMuscleTotals(),
-                fatigueScore: Double(mins) * 0.08,
-                highFatigueScore: 0
+                fatigueScore: cardioPrescription.estimatedFatigueScore,
+                highFatigueScore: cardioPrescription.highFatigueScore
             )
         }
 
@@ -2261,10 +2273,12 @@ struct ProgramGenerationService {
     private func estimateLoad(for exercise: ProgramSessionExercise) -> ExerciseLoadEstimate {
         if exercise.targetSets == nil {
             let mins = Double(exercise.targetReps ?? 0)
+            let intensityPerMinute = cardioFatiguePerMinute(targetRPE: exercise.targetRPE)
+            let highFatigueWeight = cardioHighFatiguePerMinute(targetRPE: exercise.targetRPE)
             return ExerciseLoadEstimate(
                 hardSetsByMuscle: emptyMuscleTotals(),
-                fatigueScore: mins * 0.08,
-                highFatigueScore: 0
+                fatigueScore: mins * intensityPerMinute,
+                highFatigueScore: mins * highFatigueWeight
             )
         }
 
@@ -2351,10 +2365,183 @@ struct ProgramGenerationService {
         return template.sessionDefinitions[closest] ?? []
     }
 
-    /// Duration in minutes for cardio exercises.
-    /// Base is 20 min; adds 3 min per completed working week; resets to 20 on deload.
-    private func cardioDurationMinutes(progressionIndex: Int, isDeload: Bool) -> Int {
-        isDeload ? 20 : 20 + progressionIndex * 3
+    private struct CardioPrescription {
+        let minutes: Int
+        let targetRPE: Double
+        let estimatedFatigueScore: Double
+        let highFatigueScore: Double
+    }
+
+    private func resolveCardioPrescription(
+        sessionName: String,
+        focusProfile: ProgramFocusProgrammingProfile,
+        schedule: WeekSchedule
+    ) -> CardioPrescription {
+        let sessionType = resolveCardioSessionType(sessionName: sessionName)
+        let fallbackRule = defaultCardioSessionRule(for: sessionType)
+        let rule = focusProfile.cardioProgrammingProfile?.sessionRules[sessionType] ?? fallbackRule
+
+        let workingIndex = schedule.progressionIndex
+        let baseMinutes = cardioMinutes(for: rule, progressionIndex: workingIndex)
+        let adjustedMinutes: Int
+        if schedule.isDeload {
+            adjustedMinutes = max(15, Int((Double(baseMinutes) * rule.deloadDurationScale).rounded()))
+        } else {
+            adjustedMinutes = baseMinutes
+        }
+
+        let adjustedRPE = schedule.isDeload
+            ? clampedRPE(rule.targetRPE - 0.8)
+            : clampedRPE(rule.targetRPE)
+        let fatiguePerMinute = cardioFatiguePerMinute(targetRPE: adjustedRPE)
+        let highFatiguePerMinute = cardioHighFatiguePerMinute(targetRPE: adjustedRPE)
+
+        return CardioPrescription(
+            minutes: adjustedMinutes,
+            targetRPE: adjustedRPE,
+            estimatedFatigueScore: Double(adjustedMinutes) * fatiguePerMinute,
+            highFatigueScore: Double(adjustedMinutes) * highFatiguePerMinute
+        )
+    }
+
+    private func resolveCardioSessionType(sessionName: String) -> ProgramCardioSessionType {
+        let lower = sessionName.lowercased()
+        if lower.contains("recovery") { return .recovery }
+        if lower.contains("long") { return .longSession }
+        if lower.contains("interval") || lower.contains("vo2") || lower.contains("hiit") {
+            return .interval
+        }
+        if lower.contains("threshold") || lower.contains("tempo") {
+            return .threshold
+        }
+        return .easyAerobic
+    }
+
+    private func cardioMinutes(
+        for rule: ProgramCardioSessionRule,
+        progressionIndex: Int
+    ) -> Int {
+        switch rule.progressionMethod {
+        case .duration:
+            return max(15, rule.baseDurationMinutes + progressionIndex * rule.durationStepPerWorkingWeek)
+        case .intervalCount, .intervalDensity, .workBlockDuration:
+            guard let workRest = rule.workRestProgression else {
+                return max(15, rule.baseDurationMinutes + progressionIndex * rule.durationStepPerWorkingWeek)
+            }
+            let stepEvery = max(1, workRest.stepEveryWorkingWeeks)
+            let progressionSteps = progressionIndex / stepEvery
+
+            let intervalCount = min(
+                workRest.maxIntervals,
+                max(1, workRest.initialIntervals + progressionSteps * workRest.intervalStep)
+            )
+            let workSeconds = max(30, workRest.initialWorkSeconds + progressionSteps * workRest.workSecondsStep)
+            let restSeconds = max(15, workRest.initialRestSeconds + progressionSteps * workRest.restSecondsStep)
+
+            let densityAdjustedRest: Int
+            switch rule.progressionMethod {
+            case .intervalDensity:
+                densityAdjustedRest = max(10, restSeconds - (progressionSteps * 5))
+            default:
+                densityAdjustedRest = restSeconds
+            }
+
+            let totalMinutes = Double(intervalCount * (workSeconds + densityAdjustedRest)) / 60.0
+            return max(15, Int(totalMinutes.rounded()))
+        }
+    }
+
+    private func defaultCardioSessionRule(for sessionType: ProgramCardioSessionType) -> ProgramCardioSessionRule {
+        switch sessionType {
+        case .easyAerobic:
+            return .init(
+                sessionType: .easyAerobic,
+                targetRPE: 6.0,
+                progressionMethod: .duration,
+                baseDurationMinutes: 30,
+                durationStepPerWorkingWeek: 3,
+                deloadDurationScale: 0.72,
+                workRestProgression: nil
+            )
+        case .threshold:
+            return .init(
+                sessionType: .threshold,
+                targetRPE: 7.6,
+                progressionMethod: .workBlockDuration,
+                baseDurationMinutes: 30,
+                durationStepPerWorkingWeek: 2,
+                deloadDurationScale: 0.75,
+                workRestProgression: .init(
+                    initialIntervals: 3,
+                    intervalStep: 0,
+                    stepEveryWorkingWeeks: 2,
+                    maxIntervals: 4,
+                    initialWorkSeconds: 360,
+                    workSecondsStep: 30,
+                    initialRestSeconds: 180,
+                    restSecondsStep: -15
+                )
+            )
+        case .interval:
+            return .init(
+                sessionType: .interval,
+                targetRPE: 8.8,
+                progressionMethod: .intervalCount,
+                baseDurationMinutes: 22,
+                durationStepPerWorkingWeek: 1,
+                deloadDurationScale: 0.70,
+                workRestProgression: .init(
+                    initialIntervals: 5,
+                    intervalStep: 1,
+                    stepEveryWorkingWeeks: 1,
+                    maxIntervals: 9,
+                    initialWorkSeconds: 120,
+                    workSecondsStep: 0,
+                    initialRestSeconds: 120,
+                    restSecondsStep: -10
+                )
+            )
+        case .longSession:
+            return .init(
+                sessionType: .longSession,
+                targetRPE: 6.2,
+                progressionMethod: .duration,
+                baseDurationMinutes: 46,
+                durationStepPerWorkingWeek: 4,
+                deloadDurationScale: 0.74,
+                workRestProgression: nil
+            )
+        case .recovery:
+            return .init(
+                sessionType: .recovery,
+                targetRPE: 4.8,
+                progressionMethod: .duration,
+                baseDurationMinutes: 24,
+                durationStepPerWorkingWeek: 2,
+                deloadDurationScale: 0.68,
+                workRestProgression: nil
+            )
+        }
+    }
+
+    private func cardioFatiguePerMinute(targetRPE: Double?) -> Double {
+        let rpe = targetRPE ?? 6.0
+        switch rpe {
+        case ..<5.5: return 0.065
+        case ..<7.0: return 0.080
+        case ..<8.0: return 0.092
+        case ..<9.0: return 0.112
+        default: return 0.128
+        }
+    }
+
+    private func cardioHighFatiguePerMinute(targetRPE: Double?) -> Double {
+        let rpe = targetRPE ?? 6.0
+        switch rpe {
+        case ..<7.5: return 0.002
+        case ..<8.5: return 0.008
+        default: return 0.016
+        }
     }
 
     private func periodizationDescription(for strategy: ProgressionStrategy) -> String {
@@ -2382,7 +2569,7 @@ struct ProgramGenerationService {
         case .balancedTraining:
             return "Balanced training progression combining moderate DUP-style stress distribution with recovery-preserving deload spacing."
         case .enduranceConditioning:
-            return "Endurance-first progression emphasizing aerobic workload growth with frequent step-back recovery weeks."
+            return "Endurance-first progression with easy/threshold/interval/long session archetypes, separated progression tracks, and frequent step-back recovery weeks."
         }
     }
 

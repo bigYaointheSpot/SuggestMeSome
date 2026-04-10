@@ -97,10 +97,52 @@ enum ProgramCardioSessionType: String, Codable, CaseIterable {
     case recovery
 }
 
+enum ProgramCardioEffortBucket: String, Codable, CaseIterable {
+    case low
+    case moderate
+    case high
+}
+
+enum ProgramCardioProgressionMethod: String, Codable {
+    /// Progress primarily via longer total session duration.
+    case duration
+    /// Progress by adding interval repetitions while work/rest remains mostly stable.
+    case intervalCount
+    /// Progress by reducing rest relative to work.
+    case intervalDensity
+    /// Progress by extending each work repetition duration.
+    case workBlockDuration
+}
+
+struct ProgramCardioWorkRestProgression: Codable {
+    let initialIntervals: Int
+    let intervalStep: Int
+    let stepEveryWorkingWeeks: Int
+    let maxIntervals: Int
+    let initialWorkSeconds: Int
+    let workSecondsStep: Int
+    let initialRestSeconds: Int
+    let restSecondsStep: Int
+}
+
+struct ProgramCardioSessionRule: Codable {
+    let sessionType: ProgramCardioSessionType
+    let targetRPE: Double
+    let progressionMethod: ProgramCardioProgressionMethod
+    let baseDurationMinutes: Int
+    let durationStepPerWorkingWeek: Int
+    let deloadDurationScale: Double
+    /// Used only for interval-oriented sessions.
+    let workRestProgression: ProgramCardioWorkRestProgression?
+}
+
 struct ProgramCardioProgrammingProfile: Codable {
     /// Percent of total weekly endurance work by session type (0...1).
-    /// This is scaffold metadata for future cardio-specific progression logic.
     let weeklyDistribution: [ProgramCardioSessionType: Double]
+    /// Target low/moderate/high effort split (0...1), used to preserve intensity balance.
+    let targetEffortDistribution: [ProgramCardioEffortBucket: Double]
+    /// Session-type specific progression and effort rules.
+    let sessionRules: [ProgramCardioSessionType: ProgramCardioSessionRule]
 }
 
 struct ProgramFocusProgrammingProfile: Codable {
@@ -243,6 +285,76 @@ enum ProgramFocusProgrammingProfileLibrary {
                         .interval: 0.10,
                         .longSession: 0.15,
                         .recovery: 0.05,
+                    ],
+                    targetEffortDistribution: [
+                        .low: 0.80,
+                        .moderate: 0.12,
+                        .high: 0.08,
+                    ],
+                    sessionRules: [
+                        .easyAerobic: .init(
+                            sessionType: .easyAerobic,
+                            targetRPE: 6.0,
+                            progressionMethod: .duration,
+                            baseDurationMinutes: 32,
+                            durationStepPerWorkingWeek: 3,
+                            deloadDurationScale: 0.72,
+                            workRestProgression: nil
+                        ),
+                        .threshold: .init(
+                            sessionType: .threshold,
+                            targetRPE: 7.6,
+                            progressionMethod: .workBlockDuration,
+                            baseDurationMinutes: 30,
+                            durationStepPerWorkingWeek: 2,
+                            deloadDurationScale: 0.75,
+                            workRestProgression: .init(
+                                initialIntervals: 3,
+                                intervalStep: 0,
+                                stepEveryWorkingWeeks: 2,
+                                maxIntervals: 4,
+                                initialWorkSeconds: 360,
+                                workSecondsStep: 30,
+                                initialRestSeconds: 180,
+                                restSecondsStep: -15
+                            )
+                        ),
+                        .interval: .init(
+                            sessionType: .interval,
+                            targetRPE: 8.8,
+                            progressionMethod: .intervalCount,
+                            baseDurationMinutes: 22,
+                            durationStepPerWorkingWeek: 1,
+                            deloadDurationScale: 0.70,
+                            workRestProgression: .init(
+                                initialIntervals: 5,
+                                intervalStep: 1,
+                                stepEveryWorkingWeeks: 1,
+                                maxIntervals: 9,
+                                initialWorkSeconds: 120,
+                                workSecondsStep: 0,
+                                initialRestSeconds: 120,
+                                restSecondsStep: -10
+                            )
+                        ),
+                        .longSession: .init(
+                            sessionType: .longSession,
+                            targetRPE: 6.2,
+                            progressionMethod: .duration,
+                            baseDurationMinutes: 46,
+                            durationStepPerWorkingWeek: 4,
+                            deloadDurationScale: 0.74,
+                            workRestProgression: nil
+                        ),
+                        .recovery: .init(
+                            sessionType: .recovery,
+                            targetRPE: 4.8,
+                            progressionMethod: .duration,
+                            baseDurationMinutes: 24,
+                            durationStepPerWorkingWeek: 2,
+                            deloadDurationScale: 0.68,
+                            workRestProgression: nil
+                        ),
                     ]
                 )
             )
