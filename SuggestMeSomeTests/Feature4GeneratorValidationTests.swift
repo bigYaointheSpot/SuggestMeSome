@@ -30,6 +30,34 @@ struct Feature4GeneratorValidationTests {
         }
     }
 
+    @Test func sameLevelCanResolveDifferentFocusStrategyFamilies() {
+        let level: ProgramLevel = .intermediate
+
+        let strengthFamily = service.progressionStrategyFamily(for: .powerlifting, level: level)
+        let mixedFamily = service.progressionStrategyFamily(for: .powerbuilding, level: level)
+        let hypertrophyFamily = service.progressionStrategyFamily(for: .bodybuilding, level: level)
+        let balancedFamily = service.progressionStrategyFamily(for: .generalFitness, level: level)
+        let enduranceFamily = service.progressionStrategyFamily(for: .cardioEndurance, level: level)
+
+        #expect(strengthFamily == .strengthSkill)
+        #expect(mixedFamily == .mixedStrengthHypertrophy)
+        #expect(hypertrophyFamily == .hypertrophyVolume)
+        #expect(balancedFamily == .balancedTraining)
+        #expect(enduranceFamily == .enduranceConditioning)
+
+        let families = Set([strengthFamily, mixedFamily, hypertrophyFamily, balancedFamily, enduranceFamily])
+        #expect(families.count == 5)
+    }
+
+    @Test func sameLevelCanProduceDifferentProgressionModelsByFocusFamily() {
+        let level: ProgramLevel = .intermediate
+        #expect(service.progressionModel(for: .powerlifting, level: level) == .dup)
+        #expect(service.progressionModel(for: .powerbuilding, level: level) == .dup)
+        #expect(service.progressionModel(for: .bodybuilding, level: level) == .linear)
+        #expect(service.progressionModel(for: .generalFitness, level: level) == .dup)
+        #expect(service.progressionModel(for: .cardioEndurance, level: level) == .linear)
+    }
+
     @Test func eachFocusBuildsExpectedWeeksAndResolvedSessions() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext

@@ -1022,6 +1022,14 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Added Feature 4 validation tests for profile resolution across all `ProgramFocus` values and for entry-point wiring via focus-policy-driven top/backoff behavior checks (`bodybuilding` disabled, `powerlifting` template-driven)
 - **Commit:** `feat: add focus-specific programming metadata scaffold`
 
+#### Prompt 2 [Focus-Specific Progression Strategy Refactor] — 2026-04-10
+- Refactored `ProgramGenerationService` progression flow to resolve strategy in two stages: focus-level `ProgramProgressionStrategyFamily` first, then level-specific tuning inside that family
+- Added explicit family-separated progression paths for maximal strength/specificity, mixed strength+hypertrophy, hypertrophy, balanced training, and cardio/endurance across progression model selection, weekly scheduling, phase labels, and parameter computation
+- Reworked `computeParams` into family-specific helpers (`strengthSkillParams`, `mixedStrengthHypertrophyParams`, `hypertrophyParams`, `balancedTrainingParams`, `enduranceConditioningParams`) to keep branching readable and local
+- Added test coverage validating that the same `ProgramLevel` now resolves different strategy families and progression models depending on focus
+- Preserved generated-program persistence/data model behavior and kept template library/data storage wiring intact
+- **Commit:** `feat: refactor generator to use focus-specific progression strategies`
+
 ---
 
 ## Project Setup

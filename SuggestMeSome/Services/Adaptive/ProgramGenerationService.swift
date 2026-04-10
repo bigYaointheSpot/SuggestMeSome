@@ -156,6 +156,7 @@ struct ProgramGenerationService {
         shuffleSeed: Int
     ) -> TrainingProgram {
         let focusProfile = programmingProfile(for: input.focus)
+        let strategy = resolveProgressionStrategy(focusProfile: focusProfile, level: input.level)
 
         // Step 1: Retrieve template
         let template = FocusTemplateLibrary.template(for: input.focus)
@@ -163,7 +164,7 @@ struct ProgramGenerationService {
         // Step 2: Select session definitions for chosen frequency
         let sessionDefs = resolvedSessionDefs(from: template, frequency: input.sessionsPerWeek)
         let resolvedFrequency = max(1, sessionDefs.count)
-        let progressionModel = progressionModel(for: input.level, focusProfile: focusProfile)
+        let progressionModel = progressionModel(for: strategy)
         var usedLiftMapping = false
         var usedTopSetBackoff = false
 
@@ -173,7 +174,7 @@ struct ProgramGenerationService {
             lengthInWeeks: input.durationWeeks,
             sessionsPerWeek: resolvedFrequency,
             source: .aiGenerated,
-            descriptionText: periodizationDescription(for: input.level, focusProfile: focusProfile),
+            descriptionText: periodizationDescription(for: strategy),
             progressionModel: progressionModel,
             usedLiftMapping: false,
             usedVolumeBalancing: true,
@@ -183,7 +184,7 @@ struct ProgramGenerationService {
         context.insert(program)
 
         // Steps 3–4: Build periodized week schedules
-        let schedules = buildWeekSchedules(level: input.level, durationWeeks: input.durationWeeks, focusProfile: focusProfile)
+        let schedules = buildWeekSchedules(strategy: strategy, durationWeeks: input.durationWeeks, focusProfile: focusProfile)
 
         // Step 6: Build weekly accessory selections using volume and fatigue accounting.
         let weeklyAccessoryPlan = buildAdaptiveAccessoryPlan(
@@ -201,7 +202,7 @@ struct ProgramGenerationService {
             let weekTemplate = ProgramWeekTemplate(
                 weekNumber: schedule.weekNumber,
                 isDeloadWeek: schedule.isDeload,
-                progressionPhase: weekProgressionPhase(for: input.level, schedule: schedule)
+                progressionPhase: weekProgressionPhase(strategy: strategy, schedule: schedule)
             )
             context.insert(weekTemplate)
             weekTemplate.program = program
@@ -221,6 +222,7 @@ struct ProgramGenerationService {
                 for primary in sessionDef.primaryExercises {
                     orderIdx = populateExercise(
                         primary, isPrimary: true,
+                        strategy: strategy,
                         focusProfile: focusProfile,
                         schedule: schedule, sessionIdx: sessionIdx,
                         sessionsPerWeek: resolvedFrequency, level: input.level,
@@ -234,6 +236,7 @@ struct ProgramGenerationService {
                 for accessory in accessories {
                     orderIdx = populateExercise(
                         accessory, isPrimary: false,
+                        strategy: strategy,
                         focusProfile: focusProfile,
                         schedule: schedule, sessionIdx: sessionIdx,
                         sessionsPerWeek: resolvedFrequency, level: input.level,
@@ -259,6 +262,7 @@ struct ProgramGenerationService {
     private func populateExercise(
         _ templateEx: TemplateExercise,
         isPrimary: Bool,
+        strategy: ProgressionStrategy,
         focusProfile: ProgramFocusProgrammingProfile,
         schedule: WeekSchedule,
         sessionIdx: Int,
@@ -273,7 +277,7 @@ struct ProgramGenerationService {
     ) -> Int {
         var idx = orderIdx
         let phase = progressionPhase(
-            for: level,
+            strategy: strategy,
             schedule: schedule,
             sessionIdx: sessionIdx,
             sessionsPerWeek: sessionsPerWeek
@@ -299,7 +303,8 @@ struct ProgramGenerationService {
 
         let params = computeParams(
             exercise: templateEx,
-            level: level, schedule: schedule,
+            strategy: strategy,
+            schedule: schedule,
             sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek
         )
         let effectiveWorkingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
@@ -557,23 +562,108 @@ struct ProgramGenerationService {
         return min(15, max(1, baseReps + repDelta))
     }
 
-    private func progressionModel(
-        for level: ProgramLevel,
-        focusProfile: ProgramFocusProgrammingProfile
-    ) -> ProgramProgressionModel {
-        // Compatibility scaffold:
-        // keep the established level-based progression model while routing through
-        // focus strategy metadata so future prompts can safely specialize by focus.
-        _ = focusProfile.progressionStrategyFamily
-        switch level {
-        case .beginner: return .linear
-        case .intermediate: return .dup
-        case .advanced: return .block
+    private struct ProgressionStrategy {
+        let family: ProgramProgressionStrategyFamily
+        let level: ProgramLevel
+    }
+
+    func progressionStrategyFamily(for focus: ProgramFocus, level: ProgramLevel) -> ProgramProgressionStrategyFamily {
+        let profile = programmingProfile(for: focus)
+        return resolveProgressionStrategy(focusProfile: profile, level: level).family
+    }
+
+    func progressionModel(for focus: ProgramFocus, level: ProgramLevel) -> ProgramProgressionModel {
+        let profile = programmingProfile(for: focus)
+        let strategy = resolveProgressionStrategy(focusProfile: profile, level: level)
+        return progressionModel(for: strategy)
+    }
+
+    private func resolveProgressionStrategy(
+        focusProfile: ProgramFocusProgrammingProfile,
+        level: ProgramLevel
+    ) -> ProgressionStrategy {
+        ProgressionStrategy(
+            family: focusProfile.progressionStrategyFamily,
+            level: level
+        )
+    }
+
+    private func progressionModel(for strategy: ProgressionStrategy) -> ProgramProgressionModel {
+        switch strategy.family {
+        case .strengthSkill:
+            switch strategy.level {
+            case .beginner: return .linear
+            case .intermediate: return .dup
+            case .advanced: return .block
+            }
+        case .mixedStrengthHypertrophy:
+            switch strategy.level {
+            case .beginner: return .linear
+            case .intermediate, .advanced: return .dup
+            }
+        case .hypertrophyVolume:
+            return .linear
+        case .balancedTraining:
+            return strategy.level == .beginner ? .linear : .dup
+        case .enduranceConditioning:
+            return .linear
         }
     }
 
-    private func weekProgressionPhase(for level: ProgramLevel, schedule: WeekSchedule) -> ProgramProgressionPhase {
+    private func weekProgressionPhase(strategy: ProgressionStrategy, schedule: WeekSchedule) -> ProgramProgressionPhase {
         if schedule.isDeload { return .deload }
+
+        switch strategy.family {
+        case .strengthSkill:
+            return strengthSkillWeekPhase(level: strategy.level, schedule: schedule)
+        case .mixedStrengthHypertrophy:
+            return mixedWeekPhase(level: strategy.level, schedule: schedule)
+        case .hypertrophyVolume:
+            return .hypertrophy
+        case .balancedTraining:
+            return strategy.level == .beginner ? .linearWorking : .dupModerate
+        case .enduranceConditioning:
+            return .linearWorking
+        }
+    }
+
+    private func progressionPhase(
+        strategy: ProgressionStrategy,
+        schedule: WeekSchedule,
+        sessionIdx: Int,
+        sessionsPerWeek: Int
+    ) -> ProgramProgressionPhase {
+        if schedule.isDeload { return .deload }
+
+        switch strategy.family {
+        case .strengthSkill:
+            return strengthSkillSessionPhase(
+                level: strategy.level,
+                schedule: schedule,
+                sessionIdx: sessionIdx,
+                sessionsPerWeek: sessionsPerWeek
+            )
+        case .mixedStrengthHypertrophy:
+            return mixedSessionPhase(
+                level: strategy.level,
+                schedule: schedule,
+                sessionIdx: sessionIdx,
+                sessionsPerWeek: sessionsPerWeek
+            )
+        case .hypertrophyVolume:
+            return .hypertrophy
+        case .balancedTraining:
+            return balancedSessionPhase(
+                level: strategy.level,
+                sessionIdx: sessionIdx,
+                sessionsPerWeek: sessionsPerWeek
+            )
+        case .enduranceConditioning:
+            return .linearWorking
+        }
+    }
+
+    private func strengthSkillWeekPhase(level: ProgramLevel, schedule: WeekSchedule) -> ProgramProgressionPhase {
         switch level {
         case .beginner: return .linearWorking
         case .intermediate: return .dupModerate
@@ -587,14 +677,12 @@ struct ProgramGenerationService {
         }
     }
 
-    private func progressionPhase(
-        for level: ProgramLevel,
+    private func strengthSkillSessionPhase(
+        level: ProgramLevel,
         schedule: WeekSchedule,
         sessionIdx: Int,
         sessionsPerWeek: Int
     ) -> ProgramProgressionPhase {
-        if schedule.isDeload { return .deload }
-
         switch level {
         case .beginner:
             return .linearWorking
@@ -611,6 +699,54 @@ struct ProgramGenerationService {
             case .peaking: return .peaking
             case .none: return .hypertrophy
             }
+        }
+    }
+
+    private func mixedWeekPhase(level: ProgramLevel, schedule: WeekSchedule) -> ProgramProgressionPhase {
+        switch level {
+        case .beginner: return .linearWorking
+        case .intermediate: return .dupModerate
+        case .advanced:
+            switch schedule.advancedPhase {
+            case .strength: return .strength
+            default: return .hypertrophy
+            }
+        }
+    }
+
+    private func mixedSessionPhase(
+        level: ProgramLevel,
+        schedule: WeekSchedule,
+        sessionIdx: Int,
+        sessionsPerWeek: Int
+    ) -> ProgramProgressionPhase {
+        switch level {
+        case .beginner:
+            return .linearWorking
+        case .intermediate:
+            switch mixedTier(sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek) {
+            case .heavy: return .dupHeavy
+            case .moderate: return .dupModerate
+            case .light: return .dupLight
+            }
+        case .advanced:
+            switch schedule.advancedPhase {
+            case .strength: return .strength
+            default: return .hypertrophy
+            }
+        }
+    }
+
+    private func balancedSessionPhase(
+        level: ProgramLevel,
+        sessionIdx: Int,
+        sessionsPerWeek: Int
+    ) -> ProgramProgressionPhase {
+        if level == .beginner { return .linearWorking }
+        switch balancedTier(sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek) {
+        case .heavy: return .dupModerate
+        case .moderate: return .dupModerate
+        case .light: return .dupLight
         }
     }
 
@@ -636,21 +772,48 @@ struct ProgramGenerationService {
 
     private func computeParams(
         exercise: TemplateExercise,
-        level: ProgramLevel,
+        strategy: ProgressionStrategy,
         schedule: WeekSchedule,
         sessionIdx: Int,
         sessionsPerWeek: Int
     ) -> ExerciseParams {
-        switch level {
-        case .beginner:
-            return beginnerParams(exercise: exercise, schedule: schedule)
-        case .intermediate:
-            return intermediateParams(
+        switch strategy.family {
+        case .strengthSkill:
+            return strengthSkillParams(
                 exercise: exercise,
-                schedule: schedule, sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek
+                level: strategy.level,
+                schedule: schedule,
+                sessionIdx: sessionIdx,
+                sessionsPerWeek: sessionsPerWeek
             )
-        case .advanced:
-            return advancedParams(exercise: exercise, schedule: schedule)
+        case .mixedStrengthHypertrophy:
+            return mixedStrengthHypertrophyParams(
+                exercise: exercise,
+                level: strategy.level,
+                schedule: schedule,
+                sessionIdx: sessionIdx,
+                sessionsPerWeek: sessionsPerWeek
+            )
+        case .hypertrophyVolume:
+            return hypertrophyParams(
+                exercise: exercise,
+                level: strategy.level,
+                schedule: schedule
+            )
+        case .balancedTraining:
+            return balancedTrainingParams(
+                exercise: exercise,
+                level: strategy.level,
+                schedule: schedule,
+                sessionIdx: sessionIdx,
+                sessionsPerWeek: sessionsPerWeek
+            )
+        case .enduranceConditioning:
+            return enduranceConditioningParams(
+                exercise: exercise,
+                level: strategy.level,
+                schedule: schedule
+            )
         }
     }
 
@@ -720,6 +883,203 @@ struct ProgramGenerationService {
         )
     }
 
+    private func strengthSkillParams(
+        exercise: TemplateExercise,
+        level: ProgramLevel,
+        schedule: WeekSchedule,
+        sessionIdx: Int,
+        sessionsPerWeek: Int
+    ) -> ExerciseParams {
+        switch level {
+        case .beginner:
+            return beginnerParams(exercise: exercise, schedule: schedule)
+        case .intermediate:
+            return intermediateParams(
+                exercise: exercise,
+                schedule: schedule,
+                tier: dupTier(sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek)
+            )
+        case .advanced:
+            return advancedParams(exercise: exercise, schedule: schedule)
+        }
+    }
+
+    private func mixedStrengthHypertrophyParams(
+        exercise: TemplateExercise,
+        level: ProgramLevel,
+        schedule: WeekSchedule,
+        sessionIdx: Int,
+        sessionsPerWeek: Int
+    ) -> ExerciseParams {
+        switch level {
+        case .beginner:
+            return beginnerParams(exercise: exercise, schedule: schedule)
+        case .intermediate:
+            return intermediateParams(
+                exercise: exercise,
+                schedule: schedule,
+                tier: mixedTier(sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek)
+            )
+        case .advanced:
+            return advancedParams(exercise: exercise, schedule: schedule)
+        }
+    }
+
+    private enum HypertrophyTuning {
+        static let deloadPercentageDrop = 0.08
+        static let deloadRPE = 6.5
+        static let maxPositiveOffset = 0.08
+        static let maxNegativeOffset = -0.12
+    }
+
+    private func hypertrophyParams(
+        exercise: TemplateExercise,
+        level: ProgramLevel,
+        schedule: WeekSchedule
+    ) -> ExerciseParams {
+        let targetRepsByLevel: [ProgramLevel: Int] = [
+            .beginner: 12,
+            .intermediate: 10,
+            .advanced: 8,
+        ]
+        let targetReps = max(exercise.defaultReps, targetRepsByLevel[level] ?? exercise.defaultReps)
+
+        if schedule.isDeload {
+            if let anchor = exercise.percentage1RM {
+                let pct = clampedPercentage(
+                    anchor: anchor,
+                    candidate: anchor - HypertrophyTuning.deloadPercentageDrop,
+                    minOffset: HypertrophyTuning.maxNegativeOffset,
+                    maxOffset: HypertrophyTuning.maxPositiveOffset
+                )
+                return ExerciseParams(
+                    sets: max(3, exercise.defaultSets),
+                    reps: targetReps,
+                    percentage1RM: pct,
+                    rpe: nil
+                )
+            }
+            return ExerciseParams(
+                sets: max(3, exercise.defaultSets),
+                reps: targetReps,
+                percentage1RM: nil,
+                rpe: HypertrophyTuning.deloadRPE
+            )
+        }
+
+        if let anchor = exercise.percentage1RM {
+            let pct = clampedPercentage(
+                anchor: anchor,
+                candidate: anchor - 0.04 + (Double(schedule.progressionIndex) * 0.004),
+                minOffset: HypertrophyTuning.maxNegativeOffset,
+                maxOffset: HypertrophyTuning.maxPositiveOffset
+            )
+            return ExerciseParams(
+                sets: max(3, exercise.defaultSets),
+                reps: targetReps,
+                percentage1RM: pct,
+                rpe: nil
+            )
+        }
+
+        let rpeAnchor = exercise.targetRPE ?? 7.5
+        let rpeTuningByLevel: [ProgramLevel: Double] = [
+            .beginner: -0.2,
+            .intermediate: 0.0,
+            .advanced: 0.2,
+        ]
+        return ExerciseParams(
+            sets: max(3, exercise.defaultSets),
+            reps: targetReps,
+            percentage1RM: nil,
+            rpe: clampedRPE(rpeAnchor + (rpeTuningByLevel[level] ?? 0.0))
+        )
+    }
+
+    private func balancedTrainingParams(
+        exercise: TemplateExercise,
+        level: ProgramLevel,
+        schedule: WeekSchedule,
+        sessionIdx: Int,
+        sessionsPerWeek: Int
+    ) -> ExerciseParams {
+        if level == .beginner {
+            return beginnerParams(exercise: exercise, schedule: schedule)
+        }
+        return intermediateParams(
+            exercise: exercise,
+            schedule: schedule,
+            tier: balancedTier(sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek)
+        )
+    }
+
+    private enum EnduranceTuning {
+        static let deloadPercentageDrop = 0.10
+        static let deloadRPE = 6.0
+        static let maxPositiveOffset = 0.05
+        static let maxNegativeOffset = -0.14
+    }
+
+    private func enduranceConditioningParams(
+        exercise: TemplateExercise,
+        level: ProgramLevel,
+        schedule: WeekSchedule
+    ) -> ExerciseParams {
+        let repBonusByLevel: [ProgramLevel: Int] = [
+            .beginner: 2,
+            .intermediate: 3,
+            .advanced: 4,
+        ]
+        let reps = max(8, exercise.defaultReps + (repBonusByLevel[level] ?? 2))
+        let sets = max(2, min(4, exercise.defaultSets))
+
+        if schedule.isDeload {
+            if let anchor = exercise.percentage1RM {
+                let pct = clampedPercentage(
+                    anchor: anchor,
+                    candidate: anchor - EnduranceTuning.deloadPercentageDrop,
+                    minOffset: EnduranceTuning.maxNegativeOffset,
+                    maxOffset: EnduranceTuning.maxPositiveOffset
+                )
+                return ExerciseParams(
+                    sets: sets,
+                    reps: reps,
+                    percentage1RM: pct,
+                    rpe: nil
+                )
+            }
+            return ExerciseParams(
+                sets: sets,
+                reps: reps,
+                percentage1RM: nil,
+                rpe: EnduranceTuning.deloadRPE
+            )
+        }
+
+        if let anchor = exercise.percentage1RM {
+            let pct = clampedPercentage(
+                anchor: anchor,
+                candidate: anchor - 0.05 + (Double(schedule.progressionIndex) * 0.003),
+                minOffset: EnduranceTuning.maxNegativeOffset,
+                maxOffset: EnduranceTuning.maxPositiveOffset
+            )
+            return ExerciseParams(
+                sets: sets,
+                reps: reps,
+                percentage1RM: pct,
+                rpe: nil
+            )
+        }
+
+        let rpeAnchor = exercise.targetRPE ?? 7.0
+        return ExerciseParams(
+            sets: sets,
+            reps: reps,
+            percentage1RM: nil,
+            rpe: clampedRPE(rpeAnchor - 0.3)
+        )
+    }
+
     // MARK: Intermediate — Daily Undulating Periodization
 
     private enum DUPTier {
@@ -768,14 +1128,35 @@ struct ProgramGenerationService {
         return pattern[sessionIdx % pattern.count]
     }
 
+    private func mixedTier(sessionIdx: Int, sessionsPerWeek: Int) -> DUPTier {
+        let patterns: [Int: [DUPTier]] = [
+            2: [.heavy, .moderate],
+            3: [.heavy, .moderate, .light],
+            4: [.heavy, .moderate, .light, .moderate],
+            5: [.heavy, .moderate, .light, .moderate, .moderate],
+            6: [.heavy, .moderate, .light, .heavy, .moderate, .moderate],
+        ]
+        let pattern = patterns[sessionsPerWeek, default: [.heavy, .moderate, .light]]
+        return pattern[sessionIdx % pattern.count]
+    }
+
+    private func balancedTier(sessionIdx: Int, sessionsPerWeek: Int) -> DUPTier {
+        let patterns: [Int: [DUPTier]] = [
+            2: [.moderate, .light],
+            3: [.moderate, .light, .moderate],
+            4: [.moderate, .light, .moderate, .light],
+            5: [.moderate, .light, .moderate, .light, .moderate],
+            6: [.moderate, .light, .moderate, .light, .moderate, .light],
+        ]
+        let pattern = patterns[sessionsPerWeek, default: [.moderate, .light]]
+        return pattern[sessionIdx % pattern.count]
+    }
+
     private func intermediateParams(
         exercise: TemplateExercise,
         schedule: WeekSchedule,
-        sessionIdx: Int,
-        sessionsPerWeek: Int
+        tier: DUPTier
     ) -> ExerciseParams {
-        let tier = dupTier(sessionIdx: sessionIdx, sessionsPerWeek: sessionsPerWeek)
-
         // Deload: explicit, readable reductions from each exercise anchor.
         if schedule.isDeload {
             let baseSets = DUPTier.light.defaultSets  // populateExercise will halve to 2
@@ -947,30 +1328,47 @@ struct ProgramGenerationService {
     }
 
     private func buildWeekSchedules(
-        level: ProgramLevel,
+        strategy: ProgressionStrategy,
         durationWeeks: Int,
         focusProfile: ProgramFocusProgrammingProfile
     ) -> [WeekSchedule] {
-        // Compatibility scaffold:
-        // deload style metadata is routed here now; schedule shaping remains unchanged
-        // in Prompt 1 to avoid behavior regressions.
-        _ = focusProfile.defaultDeloadStyle
-        switch level {
-        case .beginner, .intermediate:
-            return buildLinearWeekSchedules(durationWeeks: durationWeeks)
-        case .advanced:
-            return buildAdvancedWeekSchedules(durationWeeks: durationWeeks)
+        switch strategy.family {
+        case .strengthSkill:
+            switch strategy.level {
+            case .advanced:
+                return buildAdvancedWeekSchedules(durationWeeks: durationWeeks)
+            case .beginner, .intermediate:
+                return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: 4)
+            }
+        case .mixedStrengthHypertrophy:
+            switch strategy.level {
+            case .advanced:
+                return buildMixedAdvancedWeekSchedules(durationWeeks: durationWeeks)
+            case .beginner, .intermediate:
+                return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: 4)
+            }
+        case .hypertrophyVolume:
+            return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: 5)
+        case .balancedTraining:
+            let deloadInterval = strategy.level == .advanced ? 5 : 4
+            return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: deloadInterval)
+        case .enduranceConditioning:
+            if focusProfile.defaultDeloadStyle == .enduranceStepBack {
+                return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: 3)
+            }
+            return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: 4)
         }
     }
 
-    /// Beginner / Intermediate: deload every 4th week, linear progression index.
-    private func buildLinearWeekSchedules(durationWeeks: Int) -> [WeekSchedule] {
+    /// Linear schedule with configurable deload interval and progression index.
+    private func buildLinearWeekSchedules(durationWeeks: Int, deloadEvery: Int) -> [WeekSchedule] {
         var result: [WeekSchedule] = []
         var workingIdx = 0
         var lastWorkingIdx = 0
+        let interval = max(2, deloadEvery)
 
         for week in 1...durationWeeks {
-            let isDeload = week % 4 == 0
+            let isDeload = week % interval == 0
             result.append(WeekSchedule(
                 weekNumber: week,
                 isDeload: isDeload,
@@ -1025,6 +1423,46 @@ struct ProgramGenerationService {
         case 10: return [(.hypertrophy, 3), (nil, 1), (.strength, 3), (nil, 1), (.peaking, 2)]
         case 12: return [(.hypertrophy, 4), (nil, 1), (.strength, 3), (nil, 1), (.peaking, 2), (nil, 1)]
         default: return [(.hypertrophy, 4), (nil, 1), (.strength, 3), (nil, 1), (.peaking, 2), (nil, 1)]
+        }
+    }
+
+    /// Mixed strategy keeps long hypertrophy exposure and short strength exposure.
+    private func buildMixedAdvancedWeekSchedules(durationWeeks: Int) -> [WeekSchedule] {
+        let sequence = mixedAdvancedPhaseSequence(durationWeeks: durationWeeks)
+        var result: [WeekSchedule] = []
+        var weekNumber = 1
+        var progressionIdx = 0
+        var lastPhase: AdvancedPhaseType = .hypertrophy
+
+        for (phaseOpt, count) in sequence {
+            let isDeload = phaseOpt == nil
+            let phase = phaseOpt ?? lastPhase
+
+            for weekInPhase in 0..<count {
+                result.append(WeekSchedule(
+                    weekNumber: weekNumber,
+                    isDeload: isDeload,
+                    progressionIndex: progressionIdx,
+                    advancedPhase: phase,
+                    phaseWeekIndex: weekInPhase,
+                    phaseLength: count
+                ))
+                weekNumber += 1
+                if !isDeload { progressionIdx += 1 }
+            }
+
+            if let p = phaseOpt { lastPhase = p }
+        }
+        return result
+    }
+
+    private func mixedAdvancedPhaseSequence(durationWeeks: Int) -> [(AdvancedPhaseType?, Int)] {
+        switch durationWeeks {
+        case 6:  return [(.hypertrophy, 3), (nil, 1), (.strength, 2)]
+        case 8:  return [(.hypertrophy, 4), (nil, 1), (.strength, 2), (nil, 1)]
+        case 10: return [(.hypertrophy, 5), (nil, 1), (.strength, 3), (nil, 1)]
+        case 12: return [(.hypertrophy, 6), (nil, 1), (.strength, 4), (nil, 1)]
+        default: return [(.hypertrophy, 6), (nil, 1), (.strength, 4), (nil, 1)]
         }
     }
 
@@ -1290,9 +1728,10 @@ struct ProgramGenerationService {
             )
         }
 
+        let strategy = resolveProgressionStrategy(focusProfile: focusProfile, level: level)
         let params = computeParams(
             exercise: exercise,
-            level: level,
+            strategy: strategy,
             schedule: schedule,
             sessionIdx: sessionIdx,
             sessionsPerWeek: sessionsPerWeek
@@ -1455,21 +1894,32 @@ struct ProgramGenerationService {
         isDeload ? 20 : 20 + progressionIndex * 3
     }
 
-    private func periodizationDescription(
-        for level: ProgramLevel,
-        focusProfile: ProgramFocusProgrammingProfile
-    ) -> String {
-        // Compatibility scaffold:
-        // adaptation goal metadata is routed here; current user-facing text stays
-        // level-based until focus-specific wording is added in later prompts.
-        _ = focusProfile.primaryAdaptationGoal
-        switch level {
-        case .beginner:
-            return "Linear progression around each exercise's template anchor %1RM, with small weekly increases and a deload every 4th week."
-        case .intermediate:
-            return "Daily undulating periodization (DUP): heavy/moderate/light sessions adjust each exercise relative to its template anchor, with weekly progression and deloads every 4th week."
-        case .advanced:
-            return "Block periodization: hypertrophy, strength, and peaking phases apply anchor-relative intensity shifts, with explicit deload weeks between blocks."
+    private func periodizationDescription(for strategy: ProgressionStrategy) -> String {
+        switch strategy.family {
+        case .strengthSkill:
+            switch strategy.level {
+            case .beginner:
+                return "Maximal-strength linear progression around each lift's anchor %1RM with scheduled deloads every 4th week."
+            case .intermediate:
+                return "Strength-specific DUP with heavy/moderate/light exposures that progress from each lift's anchor %1RM and deload every 4th week."
+            case .advanced:
+                return "Strength block periodization with hypertrophy, strength, and peaking phases plus explicit deload transitions."
+            }
+        case .mixedStrengthHypertrophy:
+            switch strategy.level {
+            case .beginner:
+                return "Mixed strength and hypertrophy linear progression, preserving anchor-relative loading while building base volume."
+            case .intermediate:
+                return "Mixed DUP progression balancing heavy strength exposures with moderate hypertrophy sessions and 4-week deload rhythm."
+            case .advanced:
+                return "Mixed advanced blocks with extended hypertrophy accumulation and dedicated strength realization phases."
+            }
+        case .hypertrophyVolume:
+            return "Hypertrophy-focused progression emphasizing higher-rep volume progression with periodic step-back deload weeks."
+        case .balancedTraining:
+            return "Balanced training progression combining moderate DUP-style stress distribution with recovery-preserving deload spacing."
+        case .enduranceConditioning:
+            return "Endurance-first progression emphasizing aerobic workload growth with frequent step-back recovery weeks."
         }
     }
 
