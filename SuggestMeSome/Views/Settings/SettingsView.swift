@@ -36,6 +36,9 @@ struct SettingsView: View {
     // Delete exercise
     @State private var exerciseToDelete: Exercise?
 
+    // Preferences
+    @AppStorage("globalWeightUnit") private var globalWeightUnit: String = WeightUnit.lbs.rawValue
+
     // Data management
     @State private var showingDeleteAllConfirm = false
     @State private var showingDeleteRangeSheet = false
@@ -75,6 +78,20 @@ struct SettingsView: View {
 
     var body: some View {
         List {
+            Section {
+                Picker("Default Weight Unit", selection: Binding(
+                    get: { WeightUnit(rawValue: globalWeightUnit) ?? .lbs },
+                    set: { globalWeightUnit = $0.rawValue }
+                )) {
+                    ForEach(WeightUnit.allCases, id: \.self) {
+                        Text($0.rawValue).tag($0)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Preferences")
+            }
+
             Section {
                 NavigationLink {
                     PersonalRecordsView()

@@ -147,7 +147,7 @@ struct WorkoutView: View {
                 let sets: [DraftSet] = isCardio ? [] : (1...max(1, setCount)).map { DraftSet(setNumber: $0) }
                 let entry = DraftExerciseEntry(
                     exerciseName: name,
-                    unit: .lbs,
+                    unit: AppPreferences.defaultWeightUnit,
                     orderIndex: exerciseEntries.count,
                     sets: sets,
                     isCardio: isCardio
@@ -171,7 +171,7 @@ struct WorkoutView: View {
                         let secs = totalSeconds % 60
                         return DraftExerciseEntry(
                             exerciseName: genExercise.exercise.name,
-                            unit: .lbs,
+                            unit: AppPreferences.defaultWeightUnit,
                             orderIndex: index,
                             sets: [],
                             isCardio: true,
@@ -179,7 +179,7 @@ struct WorkoutView: View {
                             cardioSecondsText: secs > 0 ? "\(secs)" : ""
                         )
                     }
-                    let unit = genExercise.sets.first?.unit ?? .lbs
+                    let unit = genExercise.sets.first?.unit ?? AppPreferences.defaultWeightUnit
                     let draftSets = genExercise.sets.map { genSet in
                         DraftSet(
                             setNumber: genSet.setNumber,
@@ -343,7 +343,7 @@ struct WorkoutView: View {
         return grouped.enumerated().map { index, rows in
             let anchor = rows.first(where: { !$0.isWarmup }) ?? rows[0]
             let unit = allPersonalRecords
-                .first(where: { $0.exerciseName == anchor.exerciseName })?.unit ?? .lbs
+                .first(where: { $0.exerciseName == anchor.exerciseName })?.unit ?? AppPreferences.defaultWeightUnit
 
             // Cardio rows carry duration in targetReps (minutes) and no set structure.
             if anchor.targetSets == nil && anchor.targetPercentage1RM == nil && anchor.targetRPE != nil {

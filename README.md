@@ -956,6 +956,12 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 - Replaced all scattered lift key string literals (`"bench"`, `"squat"`, `"deadlift"`, `"overheadPress"`) with `CanonicalLift.<case>.rawValue` or `.displayName` across seven service/view files: `AdaptiveLoadProgressionService`, `AdaptiveFatigueDeloadService`, `LiftTrendTrackingService`, `AdaptiveVariationSwapService`, `AdaptiveVolumeProgressionService`, `SessionOutcomeInferenceService`, `WeeklyTrainingAnalysisService`, `ProgramGenerationService`, and `DashboardView`
 - No behavior changes — purely a string-constant consolidation
 
+### [Feature 6.5 — Global Weight Unit Preference] — 2026-04-10
+- Created `SuggestMeSome/Models/AppPreferences.swift` — `AppPreferences` enum with a single `static var defaultWeightUnit: WeightUnit` backed by UserDefaults key `"globalWeightUnit"`, defaulting to `.lbs`
+- Added a "Preferences" section at the top of `SettingsView` with a segmented `Picker` bound to `@AppStorage("globalWeightUnit")` — changes take effect immediately for all new entries
+- Replaced all hardcoded `.lbs` fallbacks in `WorkoutView` with `AppPreferences.defaultWeightUnit`: picker-created entries, generated-workout cardio entries, generated-workout strength unit fallback, and program-driven entry unit fallback
+- Prescribed units (from program templates or prior PR lookup) still take priority; preference is only applied when no unit is already specified
+
 ---
 
 ## Project Setup
