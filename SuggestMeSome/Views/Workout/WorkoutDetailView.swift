@@ -15,6 +15,7 @@ struct WorkoutDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 headerCard
+                sourceMetadataCard
                 if workout.isHealthKitImported {
                     importedSummaryCard
                 }
@@ -70,6 +71,48 @@ struct WorkoutDetailView: View {
     }
 
     // MARK: - Exercise sections
+
+    private var sourceMetadataCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Source")
+                Spacer()
+                Text(workout.sourceLabel)
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline)
+
+            if workout.sourceType == .loggedInApp {
+                HStack {
+                    Text("HealthKit Writeback")
+                    Spacer()
+                    if let exportedAt = workout.healthKitExportedAt {
+                        Text(exportedAt, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Not exported")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.subheadline)
+
+                if let writebackID = workout.healthKitWritebackIdentifier, !writebackID.isEmpty {
+                    HStack {
+                        Text("HealthKit ID")
+                        Spacer()
+                        Text(writebackID)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
 
     @ViewBuilder
     private var exerciseSections: some View {

@@ -111,4 +111,17 @@ final class Workout {
         }
         return nil
     }
+
+    var sourceLabel: String {
+        switch sourceType {
+        case .loggedInApp:
+            return "Logged in SuggestMeSome"
+        case .healthKitImported:
+            return "Imported from HealthKit"
+        }
+    }
+
+    var hasHealthKitWriteback: Bool {
+        healthKitExportedAt != nil || healthKitWritebackIdentifier?.isEmpty == false
+    }
 }

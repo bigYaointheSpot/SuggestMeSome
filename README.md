@@ -1323,6 +1323,30 @@ Foundation work for HealthKit-powered recovery data import, workout import/expor
   - sync timestamp updated on successful workout import
   - writeback remains explicitly not implemented
 
+#### Prompt 6 [HealthKit Workout Writeback] — 2026-04-10
+- Added `HealthKitWorkoutWriteService` (`Services/HealthKit/HealthKitWorkoutWriteService.swift`) as an isolated writeback service for limited `HKWorkout` summary export
+- Implemented strict writeback eligibility gates:
+  - workout must be app-native (`sourceType == .loggedInApp`)
+  - `healthkit.enabled` and `healthkit.writeWorkouts` must both be enabled
+  - local workout must not already have `healthKitExportedAt` / `healthKitWritebackIdentifier`
+  - HealthKit workout write authorization must be `.sharingAuthorized`
+- Mapped writeback workout activity types conservatively:
+  - cardio-only workouts map to a best-effort cardio `HKWorkoutActivityType` via exercise-name keyword matching
+  - all other workouts default to `Traditional Strength Training`
+- Limited exported payload to this prompt’s scope:
+  - workout type
+  - start/end timing and duration
+  - optional active energy (`caloriesBurned`) when present
+  - no set-by-set export and no rich strength metadata export
+- Wired writeback into `WorkoutView.saveWorkout()` as non-fatal asynchronous post-save behavior:
+  - local workout save still happens first and remains durable even if writeback fails
+  - writeback failures are logged and do not interrupt dismiss/normal save flow
+  - successful writeback stores `healthKitWritebackIdentifier` and `healthKitExportedAt` on the local `Workout`
+- Added lightweight source/writeback UI metadata in `WorkoutDetailView`:
+  - source row (`Logged in SuggestMeSome` vs imported source)
+  - app-native writeback status (`Not exported` or exported timestamp) and HealthKit ID when available
+- Updated `HealthDataSettingsView` workout sync note to reflect that limited workout writeback is now active in this version
+
 ---
 
 ## Project Setup

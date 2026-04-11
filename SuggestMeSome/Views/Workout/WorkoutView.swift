@@ -23,6 +23,10 @@ struct WorkoutView: View {
 
     @Query(sort: \MuscleGroup.name) private var muscleGroups: [MuscleGroup]
     @Query private var allPersonalRecords: [PersonalRecord]
+    @AppStorage("healthkit.enabled") private var healthKitEnabled = false
+    @AppStorage("healthkit.writeWorkouts") private var writeAppWorkoutsToHealthKit = false
+
+    private let healthKitWorkoutWriteService = HealthKitWorkoutWriteService()
 
     // Timer
     @State private var isActive = false
@@ -429,6 +433,8 @@ struct WorkoutView: View {
         // never prevents the workout from being saved.
         try? modelContext.save()
 
+        triggerHealthKitWritebackIfNeeded(for: workout)
+
         // Feature 6: infer and persist per-exercise outcome signals for adaptive coaching.
         do {
             SessionOutcomeInferenceService.persistOutcomes(for: workout, context: modelContext)
@@ -449,6 +455,26 @@ struct WorkoutView: View {
         }
 
         dismiss()
+    }
+
+    private func triggerHealthKitWritebackIfNeeded(for workout: Workout) {
+        let shouldWrite = healthKitWorkoutWriteService.shouldAttemptWriteback(
+            for: workout,
+            healthKitEnabled: healthKitEnabled,
+            writebackEnabled: writeAppWorkoutsToHealthKit
+        )
+        guard shouldWrite else { return }
+
+        Task { @MainActor in
+            do {
+                let result = try await healthKitWorkoutWriteService.writeWorkoutSummary(workout)
+                workout.healthKitWritebackIdentifier = result.writebackIdentifier
+                workout.healthKitExportedAt = result.exportedAt
+                try? modelContext.save()
+            } catch {
+                print("[F8] HealthKitWorkoutWriteService failed for workout \(workout.id): \(error)")
+            }
+        }
     }
 
     private func checkProgramCompletion(run: ProgramRun) {

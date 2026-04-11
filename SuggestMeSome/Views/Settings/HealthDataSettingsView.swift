@@ -266,7 +266,7 @@ struct HealthDataSettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Text("Workout writeback is not active yet in this version.")
+            Text("Workout writeback is limited to workout type, timing, duration, and optional active energy.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
