@@ -1422,6 +1422,24 @@ Incremental internal refactor to remove duplicate program-session-to-draft conve
   - Feature 6 and Feature 8 side paths remain non-fatal to local save flow
   - program completion behavior remains intact
 
+#### Prompt 3 [SuggestMeSome Generator Service Split] — 2026-04-10
+- Refactored daily workout generation into composable generator-domain services under `Services/Adaptive`:
+  - `SuggestMeSomeGenerationService` façade (request-driven orchestration)
+  - `SuggestMeSomeExercisePoolBuilder` (custom/full-body pool assembly)
+  - `SuggestMeSomeExerciseSelectionService` (time-budgeted strength/full-body selection)
+  - `SuggestMeSomeTimeBudgetService` (intensity time-factor and effective exercise time)
+  - `SuggestMeSomeWorkoutPrescriptionService` (rep/set/weight prescription)
+  - `SuggestMeSomePersonalRecordLookupService` (PR lookup path)
+  - `SuggestMeSomeEquipmentCompatibilityService` scaffold (pass-through filter for now)
+- Added formal daily-generation request/config type `SuggestMeSomeGenerationRequest` with current fields (mode, duration, intensity, selected muscle groups/exercises) plus future-ready goal and equipment slots
+- Kept existing visible generator behavior intact:
+  - custom and full-body generation flows
+  - existing rep/intensity and set prescription behavior
+  - current PR-based suggested weight path
+  - cardio remainder-time handling
+- Updated `GeneratorViews` to call the new request-based façade directly with minimal UI-surface changes
+- Reduced `WorkoutGeneratorService` to a thin compatibility adapter to preserve existing external call compatibility while removing the oversized single-file implementation
+
 ---
 
 ## Project Setup

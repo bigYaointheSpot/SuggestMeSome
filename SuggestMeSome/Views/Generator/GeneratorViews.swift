@@ -161,13 +161,14 @@ struct CustomWorkoutInputView: View {
         Button {
             savedGroups    = encodeSet(selectedGroupNames)
             savedExercises = encodeSet(selectedExerciseNames)
-            let service = WorkoutGeneratorService(context: modelContext)
-            generatedWorkout = service.generateCustomWorkout(
-                muscleGroups: selectedGroupObjects,
-                selectedExercises: selectedExerciseObjects,
+            let request = SuggestMeSomeGenerationRequest(
+                generationType: .custom,
                 durationMinutes: Double(duration),
-                intensity: intensity
+                intensity: intensity,
+                selectedMuscleGroups: selectedGroupObjects,
+                selectedExercises: selectedExerciseObjects
             )
+            generatedWorkout = SuggestMeSomeGenerationService(context: modelContext).generateWorkout(request: request)
             showPreview = true
         } label: {
             Label("Generate Workout", systemImage: "wand.and.stars")
@@ -257,11 +258,12 @@ struct FullBodyWorkoutInputView: View {
 
     private var generateButton: some View {
         Button {
-            let service = WorkoutGeneratorService(context: modelContext)
-            generatedWorkout = service.generateFullBodyWorkout(
+            let request = SuggestMeSomeGenerationRequest(
+                generationType: .fullBody,
                 durationMinutes: Double(duration),
                 intensity: intensity
             )
+            generatedWorkout = SuggestMeSomeGenerationService(context: modelContext).generateWorkout(request: request)
             showPreview = true
         } label: {
             Label("Generate Workout", systemImage: "wand.and.stars")
@@ -675,21 +677,14 @@ struct GeneratedWorkoutPreviewView: View {
     // MARK: Shuffle
 
     private func shuffle() {
-        let service = WorkoutGeneratorService(context: modelContext)
-        switch inputs.type {
-        case .custom:
-            currentWorkout = service.generateCustomWorkout(
-                muscleGroups: inputs.muscleGroups,
-                selectedExercises: inputs.exercises,
-                durationMinutes: Double(inputs.durationMinutes),
-                intensity: inputs.intensity
-            )
-        case .fullBody:
-            currentWorkout = service.generateFullBodyWorkout(
-                durationMinutes: Double(inputs.durationMinutes),
-                intensity: inputs.intensity
-            )
-        }
+        let request = SuggestMeSomeGenerationRequest(
+            generationType: inputs.type,
+            durationMinutes: Double(inputs.durationMinutes),
+            intensity: inputs.intensity,
+            selectedMuscleGroups: inputs.muscleGroups,
+            selectedExercises: inputs.exercises
+        )
+        currentWorkout = SuggestMeSomeGenerationService(context: modelContext).generateWorkout(request: request)
     }
 
     private func formatWeight(_ w: Double) -> String {
