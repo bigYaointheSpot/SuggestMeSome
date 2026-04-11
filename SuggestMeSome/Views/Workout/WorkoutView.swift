@@ -22,11 +22,8 @@ struct WorkoutView: View {
     @Environment(\.dismiss) private var dismiss
 
     @Query(sort: \MuscleGroup.name) private var muscleGroups: [MuscleGroup]
-    @Query private var allPersonalRecords: [PersonalRecord]
     @AppStorage("healthkit.enabled") private var healthKitEnabled = false
     @AppStorage("healthkit.writeWorkouts") private var writeAppWorkoutsToHealthKit = false
-
-    private let writebackCoordinator = WorkoutSaveHealthKitWritebackCoordinator()
 
     // Timer
     @State private var isActive = false
@@ -123,10 +120,12 @@ struct WorkoutView: View {
                 startTime = Date.now
                 isActive = true
             } else if let pw = programWorkout {
+                let allPersonalRecords = TrainingContextQueryService.fetchPersonalRecords(context: modelContext)
                 exerciseEntries = ProgramWorkoutDraftBuilder.buildEntries(from: pw.exercises) { anchor in
-                    allPersonalRecords
-                        .first(where: { $0.exerciseName == anchor.exerciseName })?.unit
-                        ?? AppPreferences.defaultWeightUnit
+                    TrainingContextQueryService.preferredUnit(
+                        for: anchor.exerciseName,
+                        in: allPersonalRecords
+                    )
                 }
                 startTime = Date.now
                 isActive = true
@@ -276,143 +275,26 @@ struct WorkoutView: View {
 
     private func saveWorkout() {
         guard isActive, let start = startTime else { return }
-        let now = Date.now
-
-        let workout = Workout(
-            date: now,
+        let coordinator = WorkoutSaveCoordinator(modelContext: modelContext)
+        let request = WorkoutSaveRequest(
             startTime: start,
-            durationSeconds: Int(now.timeIntervalSince(start)),
-            caloriesBurned: Int(caloriesText),
-            comments: comments.isEmpty ? nil : comments,
-            programRun: programWorkout?.programRun,
-            programWeekNumber: programWorkout?.weekNumber,
-            programSessionNumber: programWorkout?.sessionNumber
-        )
-        modelContext.insert(workout)
-
-        for draftEntry in exerciseEntries {
-            let entry = ExerciseEntry(
-                exerciseName: draftEntry.exerciseName,
-                unit: draftEntry.unit,
-                orderIndex: draftEntry.orderIndex,
-                isCardio: draftEntry.isCardio,
-                cardioDurationSeconds: draftEntry.isCardio ? draftEntry.cardioDurationSeconds : nil,
-                sourceProgramSessionExerciseID: draftEntry.sourceProgramSessionExerciseID,
-                prescribedTargetSets: draftEntry.prescribedTargetSets,
-                prescribedTargetReps: draftEntry.prescribedTargetReps,
-                prescribedTargetPercentage1RM: draftEntry.prescribedTargetPercentage1RM,
-                prescribedTargetRPE: draftEntry.prescribedTargetRPE,
-                prescribedTargetRIR: draftEntry.prescribedTargetRIR,
-                prescribedWeight: draftEntry.prescribedWeight,
-                prescribedWeightUnit: draftEntry.prescribedWeightUnit,
-                prescribedWorkingSetStyle: draftEntry.prescribedWorkingSetStyle,
-                prescribedTargetEffortType: draftEntry.prescribedTargetEffortType
-            )
-            entry.effortFeedback = draftEntry.isCardio ? nil : draftEntry.effortFeedback
-            entry.topSetRPE = draftEntry.isCardio ? nil : draftEntry.topSetRPE
-            entry.workout = workout
-            modelContext.insert(entry)
-
-            guard !draftEntry.isCardio else { continue }
-
-            for draftSet in draftEntry.sets {
-                let reps = Int(draftSet.repsText) ?? 0
-                let weight = Double(draftSet.weightText) ?? 0.0
-                let setEntry = SetEntry(setNumber: draftSet.setNumber, reps: reps, weight: weight)
-                setEntry.exerciseEntry = entry
-                modelContext.insert(setEntry)
-
-                guard reps > 0, weight > 0 else { continue }
-                evaluatePR(
-                    exerciseName: draftEntry.exerciseName,
-                    unit: draftEntry.unit,
-                    setEntry: setEntry,
-                    date: now
+            endTime: Date.now,
+            caloriesText: caloriesText,
+            comments: comments,
+            exerciseEntries: exerciseEntries,
+            programContext: programWorkout.map {
+                WorkoutSaveProgramContext(
+                    run: $0.programRun,
+                    weekNumber: $0.weekNumber,
+                    sessionNumber: $0.sessionNumber
                 )
-            }
-        }
-
-        // Durably write the workout before any Feature 6 service calls so a coaching failure
-        // never prevents the workout from being saved.
-        try? modelContext.save()
-
-        triggerHealthKitWritebackIfNeeded(for: workout)
-
-        // Feature 6: infer and persist per-exercise outcome signals for adaptive coaching.
-        do {
-            SessionOutcomeInferenceService.persistOutcomes(for: workout, context: modelContext)
-        } catch {
-            print("[F6] SessionOutcomeInferenceService failed: \(error)")
-        }
-        // Feature 6: finalize completed training-week rollups for adaptive decisions.
-        do {
-            WeeklyTrainingAnalysisService.analyzeCompletedWeeks(triggeredBy: workout, context: modelContext)
-        } catch {
-            print("[F6] WeeklyTrainingAnalysisService failed: \(error)")
-        }
-
-        try? modelContext.save()
-
-        if let pw = programWorkout {
-            checkProgramCompletion(run: pw.programRun)
-        }
+            },
+            healthKitEnabled: healthKitEnabled,
+            healthKitWritebackEnabled: writeAppWorkoutsToHealthKit
+        )
+        _ = coordinator.saveWorkout(using: request)
 
         dismiss()
-    }
-
-    private func triggerHealthKitWritebackIfNeeded(for workout: Workout) {
-        Task { @MainActor in
-            await writebackCoordinator.performNonFatalWritebackIfEligible(
-                for: workout,
-                healthKitEnabled: healthKitEnabled,
-                writebackEnabled: writeAppWorkoutsToHealthKit
-            ) {
-                try modelContext.save()
-            }
-        }
-    }
-
-    private func checkProgramCompletion(run: ProgramRun) {
-        guard let program = run.program else { return }
-        let expected = program.lengthInWeeks * program.sessionsPerWeek
-        let descriptor = FetchDescriptor<Workout>()
-        guard let all = try? modelContext.fetch(descriptor) else { return }
-        let count = all.filter { $0.programRun?.id == run.id }.count
-        if count >= expected {
-            run.isCompleted = true
-            run.endDate = Date.now
-            try? modelContext.save()
-        }
-    }
-
-    /// Checks whether `setEntry` is a new personal record and updates the store accordingly.
-    /// Weights are always compared in lbs to handle mixed-unit entries (1 kg = 2.20462 lbs).
-    private func evaluatePR(exerciseName: String, unit: WeightUnit, setEntry: SetEntry, date: Date) {
-        let newWeightLbs = inLbs(setEntry.weight, unit: unit)
-
-        if let existing = allPersonalRecords.first(where: {
-            $0.exerciseName == exerciseName && $0.repCount == setEntry.reps
-        }) {
-            guard newWeightLbs > inLbs(existing.weight, unit: existing.unit) else { return }
-            existing.weight = setEntry.weight
-            existing.unit = unit
-            existing.dateAchieved = date
-            setEntry.isPR = true
-        } else {
-            let pr = PersonalRecord(
-                exerciseName: exerciseName,
-                repCount: setEntry.reps,
-                weight: setEntry.weight,
-                unit: unit,
-                dateAchieved: date
-            )
-            modelContext.insert(pr)
-            setEntry.isPR = true
-        }
-    }
-
-    private func inLbs(_ weight: Double, unit: WeightUnit) -> Double {
-        unit == .kg ? weight * 2.20462 : weight
     }
 }
 

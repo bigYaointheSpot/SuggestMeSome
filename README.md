@@ -1396,6 +1396,32 @@ Incremental internal refactor to remove duplicate program-session-to-draft conve
 - Refactored `DailyCoachWorkoutPreparationService` to use the same shared builder for all prepared-draft generation paths and to use `ProgramSessionRowGroupingService` for accessory/backoff trim grouping decisions
 - No intended behavior changes: prepared Daily Coach drafts, program workout prefill, cardio handling, and warmup/top/backoff grouping behavior remain aligned with prior logic
 
+#### Prompt 2 [Workout Save Coordinator + Shared Query Layer] — 2026-04-10
+- Added `WorkoutSaveCoordinator` (`SuggestMeSome/Services/WorkoutSaveCoordinator.swift`) to own the non-UI workout save pipeline end-to-end:
+  - build persisted `Workout` / `ExerciseEntry` / `SetEntry` records from `DraftExerciseEntry`
+  - evaluate and persist PR updates
+  - perform durable initial save before non-fatal side effects
+  - trigger non-fatal HealthKit writeback
+  - trigger Feature 6 session outcome inference and weekly analysis
+  - perform final save
+  - run program completion check and close the run when expected workout count is reached
+- Added `TrainingContextQueryService` (`SuggestMeSome/Services/TrainingContextQueryService.swift`) as a shared training-context query layer for reusable filters/lookups:
+  - recent workouts
+  - active program runs
+  - run-scoped workout counts
+  - program session completion checks
+  - PR lookup and preferred unit resolution
+  - pending user proposal filtering and adaptation event counts
+- Refactored `WorkoutView` to delegate save orchestration to `WorkoutSaveCoordinator`, keeping the view focused on UI state and draft editing
+- Migrated repeated in-memory query/filter logic in touched surfaces to the shared query layer:
+  - `TrainingProgramsTab` / `ProgramRunRow` / `ProgramRunExpandableRow`
+  - `ProgramWorkoutViews`
+  - `DailyCoachView`
+- Preserved existing behavior guarantees:
+  - workout persistence remains durable even if HealthKit/adaptive paths fail
+  - Feature 6 and Feature 8 side paths remain non-fatal to local save flow
+  - program completion behavior remains intact
+
 ---
 
 ## Project Setup

@@ -16,9 +16,7 @@ struct TrainingProgramsTab: View {
     @State private var showingAIGenerator = false
 
     var sortedRuns: [ProgramRun] {
-        let active = programRuns
-            .filter { !$0.isCompleted }
-            .sorted { $0.startDate > $1.startDate }
+        let active = TrainingContextQueryService.activeProgramRuns(from: programRuns)
         let completed = programRuns
             .filter { $0.isCompleted }
             .sorted { ($0.endDate ?? $0.startDate) > ($1.endDate ?? $1.startDate) }
@@ -107,7 +105,7 @@ struct ProgramRunRow: View {
     let allWorkouts: [Workout]
 
     var completedWorkouts: Int {
-        allWorkouts.filter { $0.programRun?.id == run.id }.count
+        TrainingContextQueryService.completedWorkoutCount(for: run, in: allWorkouts)
     }
 
     var totalWorkouts: Int {
@@ -157,7 +155,7 @@ struct ProgramRunExpandableRow: View {
     @State private var showingEndConfirmation = false
 
     private var runWorkouts: [Workout] {
-        allWorkouts.filter { $0.programRun?.id == run.id }
+        TrainingContextQueryService.runScopedWorkouts(for: run, in: allWorkouts)
     }
 
     private var completedCount: Int { runWorkouts.count }
@@ -168,13 +166,11 @@ struct ProgramRunExpandableRow: View {
     }
 
     private var pendingProposalCount: Int {
-        AdaptationProposalConfirmationService
-            .pendingUserProposals(for: run, proposals: allProposals)
-            .count
+        TrainingContextQueryService.pendingUserProposals(for: run, proposals: allProposals).count
     }
 
     private var adaptationEventCount: Int {
-        allEvents.filter { $0.programRun?.id == run.id }.count
+        TrainingContextQueryService.adaptationEventCount(for: run, events: allEvents)
     }
 
     private var sourceLabel: String {

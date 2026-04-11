@@ -48,10 +48,12 @@ struct DailyCoachView: View {
 
     // MARK: Computed helpers
 
-    private var focusRun: ProgramRun? { activeRuns.first }
+    private var focusRun: ProgramRun? {
+        TrainingContextQueryService.activeProgramRuns(from: activeRuns).first
+    }
 
     private var pendingProposals: [AdaptationProposal] {
-        allProposals.filter { $0.proposalStatus == .pendingUserConfirmation }
+        TrainingContextQueryService.pendingUserProposals(proposals: allProposals)
     }
 
     private var latestAnalysis: WeeklyTrainingAnalysis? { weeklyAnalyses.first }
@@ -64,7 +66,7 @@ struct DailyCoachView: View {
             activeRun: focusRun,
             latestAnalysis: latestAnalysis,
             pendingProposalCount: pendingProposals.count,
-            recentWorkouts: Array(recentWorkouts.prefix(20)),
+            recentWorkouts: TrainingContextQueryService.recentWorkouts(from: recentWorkouts, limit: 20),
             objectiveRecoveryInsight: objectiveRecoveryInsight
         )
     }

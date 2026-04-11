@@ -111,7 +111,7 @@ struct ProgramRunDetailView: View {
     @State private var showingEndConfirmation = false
 
     var completedCount: Int {
-        allWorkouts.filter { $0.programRun?.id == run.id }.count
+        TrainingContextQueryService.completedWorkoutCount(for: run, in: allWorkouts)
     }
 
     var totalSessions: Int {
@@ -331,11 +331,12 @@ struct CompleteProgramWorkoutSheet: View {
         guard let program = run.program else { return }
         for wk in 1...program.lengthInWeeks {
             for sess in 1...program.sessionsPerWeek {
-                let done = allWorkouts.contains {
-                    $0.programRun?.id == run.id &&
-                    $0.programWeekNumber == wk &&
-                    $0.programSessionNumber == sess
-                }
+                let done = TrainingContextQueryService.isProgramSessionCompleted(
+                    run: run,
+                    weekNumber: wk,
+                    sessionNumber: sess,
+                    in: allWorkouts
+                )
                 if !done {
                     weekNumber = wk
                     sessionNumber = sess
