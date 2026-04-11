@@ -1228,6 +1228,26 @@ Foundation work for HealthKit-powered recovery data import, workout import/expor
 - Registered `HealthKitDailySummary` in the shared SwiftData schema (`SuggestMeSomeApp`)
 - No HealthKit query/sync logic, UI, settings screen, or watch bridge logic was added in this prompt
 
+#### Prompt 2 [Health Data Settings and Permissions] — 2026-04-10
+- Added `HealthKitAuthorizationService` (`Services/HealthKit/HealthKitAuthorizationService.swift`) with explicit HealthKit permission flow methods:
+  - checks HealthKit availability (`HKHealthStore.isHealthDataAvailable()`)
+  - requests authorization for Feature 8 read/write scopes from `HealthKitTypeCatalog`
+  - refreshes current authorization/request status for user-facing connection state
+- Added new `HealthDataSettingsView` (`Views/Settings/HealthDataSettingsView.swift`) with required user-facing sections:
+  - `Connection Status`, `Daily Coach Usage`, `Workout Sync`, `Data Read`, `Data Write`, `Privacy Notes`
+  - explicit `Unavailable`, `Denied`, `Disconnected`, and `Connected` state messaging
+  - connect/request button and manual refresh button for authorization status
+  - last sync row backed by `@AppStorage("healthkit.lastSyncTimestamp")` (shows `No sync yet` when unset)
+- Added app-level HealthKit toggles backed by `@AppStorage`:
+  - `healthkit.enabled`
+  - `healthkit.dailyCoachEnabled`
+  - `healthkit.importWorkouts`
+  - `healthkit.writeWorkouts`
+  - plus request tracking key `healthkit.permissionsRequested`
+- Added a new `Health Data` navigation entry in `SettingsView` so users can open the screen from the existing settings area
+- Included explicit privacy-forward copy that the app remains fully usable without HealthKit and that data access is optional/user-controlled
+- No HealthKit data sync/import/export execution was implemented in this prompt
+
 ---
 
 ## Project Setup

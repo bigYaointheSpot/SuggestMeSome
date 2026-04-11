@@ -97,12 +97,8 @@ struct SettingsView: View {
             }
 
             Section {
-                NavigationLink {
-                    PersonalRecordsView()
-                } label: {
-                    Label("Personal Records", systemImage: "trophy.fill")
-                        .foregroundStyle(.yellow)
-                }
+                personalRecordsLink
+                healthDataLink
             }
 
             ForEach(muscleGroups) { group in
@@ -230,6 +226,24 @@ struct SettingsView: View {
     }
 
     // MARK: - Muscle group section
+
+    private var personalRecordsLink: some View {
+        NavigationLink {
+            PersonalRecordsView()
+        } label: {
+            Label("Personal Records", systemImage: "trophy.fill")
+                .foregroundStyle(.yellow)
+        }
+    }
+
+    private var healthDataLink: some View {
+        NavigationLink {
+            HealthDataSettingsView()
+        } label: {
+            Label("Health Data", systemImage: "heart.text.square.fill")
+                .foregroundStyle(.red)
+        }
+    }
 
     private func sortedExercises(in group: MuscleGroup) -> [Exercise] {
         group.exercises.sorted { $0.name < $1.name }
