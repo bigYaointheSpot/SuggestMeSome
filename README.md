@@ -1204,7 +1204,7 @@ A program-first daily coaching system that collects readiness check-ins, surface
 
 ### Feature 8 — HealthKit Integration + Watch Foundation
 
-**Status:** In Progress
+**Status:** Complete
 
 Foundation work for HealthKit-powered recovery data import, workout import/export support, and watch-related expansion in later prompts.
 
