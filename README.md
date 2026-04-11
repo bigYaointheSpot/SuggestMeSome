@@ -1248,6 +1248,28 @@ Foundation work for HealthKit-powered recovery data import, workout import/expor
 - Included explicit privacy-forward copy that the app remains fully usable without HealthKit and that data access is optional/user-controlled
 - No HealthKit data sync/import/export execution was implemented in this prompt
 
+#### Prompt 3 [HealthKit Recovery Sync and 90-Day Daily Summaries] — 2026-04-10
+- Added `HealthKitRecoverySyncService` (`Services/HealthKit/HealthKitRecoverySyncService.swift`) to import and persist objective recovery data into `HealthKitDailySummary` for the last 90 local calendar days
+- Implemented deterministic daily-window sync keyed by `dayStart` with explicit upsert behavior:
+  - fetches existing summaries for the 90-day range
+  - updates matching day rows in place
+  - inserts missing day rows
+  - stores unavailable metrics as `nil` instead of creating placeholders/duplicates
+- Implemented per-metric HealthKit queries with simple unit conversions and daily aggregation rules:
+  - sleep analysis category samples aggregated into `sleepDurationSeconds` and `timeInBedSeconds` (seconds), including cross-midnight overlap splitting by local day
+  - resting heart rate stored as BPM (`count/min`)
+  - HRV (SDNN) stored as milliseconds
+  - active energy stored as kilocalories
+  - step count stored as `Double` count
+  - body mass stored as kilograms
+- Added partial-permission resilience in the sync service:
+  - unavailable/denied metric types are skipped without aborting full sync
+  - the app remains usable when HealthKit is unavailable or incomplete
+- Wired manual recovery sync into `HealthDataSettingsView` via `HealthDataSettingsViewModel.syncRecoverySummaries(context:)`:
+  - added a `Sync Recovery Data (Last 90 Days)` button
+  - added simple sync state UI (`syncing`, `success`, `failed`) with inline status text
+  - updates `@AppStorage("healthkit.lastSyncTimestamp")` only when sync succeeds so "Last Sync" reflects successful imports
+
 ---
 
 ## Project Setup

@@ -8,6 +8,14 @@
 import SwiftUI
 import HealthKit
 import Combine
+import SwiftData
+
+enum HealthDataSyncStatus: Equatable {
+    case idle
+    case syncing
+    case success(Date)
+    case failed(String)
+}
 
 @MainActor
 final class HealthDataSettingsViewModel: ObservableObject {
@@ -19,8 +27,10 @@ final class HealthDataSettingsViewModel: ObservableObject {
         hasRequestedAuthorization: false
     )
     @Published private(set) var isLoading = false
+    @Published private(set) var syncStatus: HealthDataSyncStatus = .idle
 
     private let authorizationService = HealthKitAuthorizationService()
+    private let recoverySyncService = HealthKitRecoverySyncService()
 
     func refreshStatus(hasRequestedAuthorization: Bool) async {
         isLoading = true
@@ -37,9 +47,29 @@ final class HealthDataSettingsViewModel: ObservableObject {
         )
         isLoading = false
     }
+
+    func syncRecoverySummaries(context: ModelContext) async -> Bool {
+        syncStatus = .syncing
+        do {
+            try await recoverySyncService.syncLast90Days(context: context)
+            let now = Date()
+            syncStatus = .success(now)
+            return true
+        } catch let error as HealthKitRecoverySyncError {
+            switch error {
+            case .healthDataUnavailable:
+                syncStatus = .failed("Health data is unavailable on this device.")
+            }
+            return false
+        } catch {
+            syncStatus = .failed("Recovery sync failed. Check Health permissions and try again.")
+            return false
+        }
+    }
 }
 
 struct HealthDataSettingsView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var viewModel = HealthDataSettingsViewModel()
 
     @AppStorage("healthkit.enabled") private var healthKitEnabled = false
@@ -64,6 +94,13 @@ struct HealthDataSettingsView: View {
 
     private var isDenied: Bool {
         viewModel.snapshot.isDenied
+    }
+
+    private var isSyncing: Bool {
+        if case .syncing = viewModel.syncStatus {
+            return true
+        }
+        return false
     }
 
     var body: some View {
@@ -135,6 +172,18 @@ struct HealthDataSettingsView: View {
                 }
             }
             .disabled(isUnavailable || viewModel.isLoading)
+
+            Button("Sync Recovery Data (Last 90 Days)") {
+                Task {
+                    let didSync = await viewModel.syncRecoverySummaries(context: modelContext)
+                    if didSync {
+                        healthKitLastSyncTimestamp = Date().timeIntervalSince1970
+                    }
+                }
+            }
+            .disabled(!healthKitEnabled || isUnavailable || viewModel.isLoading || isSyncing)
+
+            syncStatusMessage
         }
     }
 
@@ -225,5 +274,23 @@ struct HealthDataSettingsView: View {
         if isDenied { return "Request Access Again" }
         if isConnected { return "Review Permissions" }
         return "Connect HealthKit"
+    }
+
+    @ViewBuilder
+    private var syncStatusMessage: some View {
+        switch viewModel.syncStatus {
+        case .idle:
+            EmptyView()
+        case .syncing:
+            ProgressView("Syncing recovery data…")
+        case .success(let date):
+            Text("Recovery sync completed \(date, format: .dateTime.hour().minute().second()).")
+                .font(.footnote)
+                .foregroundStyle(.green)
+        case .failed(let message):
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.red)
+        }
     }
 }
