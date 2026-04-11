@@ -1202,6 +1202,32 @@ A program-first daily coaching system that collects readiness check-ins, surface
 - `DailyCoachWeeklyReview` schema was introduced in Prompt 1; no new migrations required
 - **Commit:** `feat: complete daily coach weekly review and hardening`
 
+### Feature 8 — HealthKit Integration + Watch Foundation
+
+**Status:** In Progress
+
+Foundation work for HealthKit-powered recovery data import, workout import/export support, and watch-related expansion in later prompts.
+
+---
+
+#### Prompt 1 [HealthKit Foundation and Workout Source Metadata] — 2026-04-10
+- Added HealthKit app capability wiring in project settings by assigning `SuggestMeSome/SuggestMeSome.entitlements` to the app target (`CODE_SIGN_ENTITLEMENTS`) and adding `com.apple.developer.healthkit = true`
+- Added generated Info.plist usage descriptions for HealthKit read/write prompts:
+  - `NSHealthShareUsageDescription`: reads Health data to improve recovery/coaching
+  - `NSHealthUpdateUsageDescription`: writes simple workout summaries back to Health
+- Added `HealthKitTypeCatalog` (`Services/HealthKit/HealthKitTypeCatalog.swift`) to centralize HealthKit object/sample types needed later:
+  - read scope includes sleep analysis, resting heart rate, HRV (SDNN), active energy, step count, body mass, and workouts
+  - write scope includes limited workout writeback (`HKWorkoutType`)
+- Added new persisted SwiftData model `HealthKitDailySummary` with daily recovery fields:
+  - `id`, `dayStart`, `sleepDurationSeconds`, `timeInBedSeconds`, `restingHeartRateBPM`, `heartRateVariabilityMS`, `activeEnergyKilocalories`, `stepCount`, `bodyMassKilograms`, `sourceUpdatedAt`, `createdAt`, `updatedAt`
+- Added `WorkoutSourceType` enum with `loggedInApp` and `healthKitImported`
+- Added additive `Workout` source/import/export metadata fields:
+  - `sourceType` (default `.loggedInApp` for backward compatibility)
+  - `sourceExternalIdentifier`, `sourceDisplayName`, `sourceImportedAt`
+  - `healthKitExportedAt`, `healthKitWritebackIdentifier`
+- Registered `HealthKitDailySummary` in the shared SwiftData schema (`SuggestMeSomeApp`)
+- No HealthKit query/sync logic, UI, settings screen, or watch bridge logic was added in this prompt
+
 ---
 
 ## Project Setup

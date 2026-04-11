@@ -34,6 +34,8 @@ struct SuggestMeSomeApp: App {
             // Feature 7 — Daily Coach
             DailyCoachCheckIn.self,
             DailyCoachWeeklyReview.self,
+            // Feature 8 — HealthKit foundation
+            HealthKitDailySummary.self,
         ])
 
     var sharedModelContainer: ModelContainer = {

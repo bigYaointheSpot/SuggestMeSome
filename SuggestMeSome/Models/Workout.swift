@@ -28,6 +28,20 @@ final class Workout {
     /// The session number within the program week; nil for standalone workouts.
     var programSessionNumber: Int?
 
+    // MARK: Feature 8 — Workout source metadata
+    /// Where this workout originated (logged directly vs imported).
+    var sourceType: WorkoutSourceType
+    /// External source identifier (for example, HealthKit UUID string).
+    var sourceExternalIdentifier: String?
+    /// Human-readable source app/device label shown in future UI.
+    var sourceDisplayName: String?
+    /// Timestamp when this workout was imported from an external source.
+    var sourceImportedAt: Date?
+    /// Timestamp when this workout was exported/written to HealthKit.
+    var healthKitExportedAt: Date?
+    /// Future writeback tracking identifier returned by HealthKit.
+    var healthKitWritebackIdentifier: String?
+
     init(
         id: UUID = UUID(),
         date: Date,
@@ -37,7 +51,13 @@ final class Workout {
         comments: String? = nil,
         programRun: ProgramRun? = nil,
         programWeekNumber: Int? = nil,
-        programSessionNumber: Int? = nil
+        programSessionNumber: Int? = nil,
+        sourceType: WorkoutSourceType = .loggedInApp,
+        sourceExternalIdentifier: String? = nil,
+        sourceDisplayName: String? = nil,
+        sourceImportedAt: Date? = nil,
+        healthKitExportedAt: Date? = nil,
+        healthKitWritebackIdentifier: String? = nil
     ) {
         self.id = id
         self.date = date
@@ -48,6 +68,12 @@ final class Workout {
         self.programRun = programRun
         self.programWeekNumber = programWeekNumber
         self.programSessionNumber = programSessionNumber
+        self.sourceType = sourceType
+        self.sourceExternalIdentifier = sourceExternalIdentifier
+        self.sourceDisplayName = sourceDisplayName
+        self.sourceImportedAt = sourceImportedAt
+        self.healthKitExportedAt = healthKitExportedAt
+        self.healthKitWritebackIdentifier = healthKitWritebackIdentifier
     }
 
     /// Returns duration formatted as hh:mm:ss.
