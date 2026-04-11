@@ -18,7 +18,7 @@ final class SuggestMeSomeGeneratorFlowViewModel {
         static let intensity = "generator.flow.intensity"
     }
 
-    private let recommendationService = SuggestMeSomeSessionRecommendationService()
+    private let recommendationService: SuggestMeSomeRecommendationService
     private let generationService: SuggestMeSomeGenerationService
 
     var step: Step = .configure
@@ -27,6 +27,7 @@ final class SuggestMeSomeGeneratorFlowViewModel {
     var generatedWorkout: GeneratedWorkout?
 
     init(context: ModelContext) {
+        self.recommendationService = SuggestMeSomeRecommendationService(context: context)
         self.generationService = SuggestMeSomeGenerationService(context: context)
         self.configuration = SuggestMeSomeGeneratorFlowViewModel.loadLastConfiguration()
     }

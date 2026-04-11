@@ -128,6 +128,13 @@ struct SuggestMeSomeSessionConfiguration {
 
 struct SuggestMeSomeSessionRecommendation {
     let title: String
+    let summary: String
     let rationale: String
-    let request: SuggestMeSomeGenerationRequest
+    let mode: SuggestMeSomeSessionMode
+    let goal: SuggestMeSomeGenerationGoal
+    let recommendedMovementPriorities: [String]
+    let candidateExerciseFamilies: [String]
+    let candidateAnchorLifts: [String]
+    let isBuildableIntoWorkout: Bool
+    let request: SuggestMeSomeGenerationRequest?
 }

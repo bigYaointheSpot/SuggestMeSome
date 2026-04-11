@@ -1462,6 +1462,29 @@ Incremental internal refactor to remove duplicate program-session-to-draft conve
   - build preview screen (`GeneratorBuildStepView`)
 - Updated home/workout and dashboard launch points to open the new staged generator flow directly (removing the old type-selection dialog entry path)
 
+#### Prompt 5 [Conflict-Aware SuggestMeSome Recommendation Engine] — 2026-04-10
+- Replaced the simple recommendation seam with a new dedicated `SuggestMeSomeRecommendationService` that computes deterministic, structured recommendation objects before workout building
+- Expanded recommendation output to include:
+  - title + summary + rationale
+  - resolved mode and goal
+  - recommended movement priorities
+  - candidate exercise families
+  - candidate anchor lifts
+  - buildability flag + optional concrete generation request
+- Implemented lightweight conflict-awareness using recent training context:
+  - blocks recently hard-exposed canonical lift families (bench/squat/deadlift/OHP) from immediate heavy re-selection windows
+  - detects near-term muscle overlap from recent sessions and biases recommendation mode/goal toward recovery/conditioning when overlap is obvious
+  - optionally checks active-program next-session context only to avoid redundant overlap, without driving standalone SuggestMeSome programming
+- Kept the architecture lightweight and reusable:
+  - no adaptive proposal/overlay mechanics reused
+  - no week/block periodization introduced
+  - recommendation stage remains a deterministic pre-build filter, not a second full program generator
+- Updated generator recommendation UI to surface intentional explainability:
+  - concise recommendation summary + rationale
+  - visible movement priorities, candidate families, and anchor lifts
+  - build button gating when recommendation is marked non-buildable
+- Added focused validation in `Feature9RecommendationEngineValidationTests` covering deterministic surprise-mode resolution, heavy-lift conflict avoidance, program-overlap recovery biasing, and non-buildable short-duration behavior
+
 ---
 
 ## Project Setup

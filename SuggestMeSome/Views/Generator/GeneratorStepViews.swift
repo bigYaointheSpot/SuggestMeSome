@@ -129,6 +129,7 @@ struct SuggestMeSomeRecommendationStepView: View {
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .disabled(!(viewModel.recommendation?.isBuildableIntoWorkout ?? false))
             }
             .padding()
         }
@@ -142,10 +143,28 @@ struct SuggestMeSomeRecommendationStepView: View {
                     .font(.headline)
                 Text(recommendation.title)
                     .font(.title3.weight(.semibold))
+                Text(recommendation.summary)
+                    .font(.subheadline.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(recommendation.rationale)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+
+                recommendationListSection(
+                    title: "Movement Priorities",
+                    values: recommendation.recommendedMovementPriorities
+                )
+                recommendationListSection(
+                    title: "Exercise Families",
+                    values: recommendation.candidateExerciseFamilies
+                )
+                recommendationListSection(
+                    title: "Anchor Lifts",
+                    values: recommendation.candidateAnchorLifts
+                )
             }
             .padding()
             .background(Color(.secondarySystemBackground))
@@ -185,6 +204,31 @@ struct SuggestMeSomeRecommendationStepView: View {
             Spacer()
             Text(value)
                 .font(.subheadline.weight(.semibold))
+        }
+    }
+
+    private func recommendationListSection(title: String, values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            if values.isEmpty {
+                Text("No specific targets.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ForEach(values, id: \.self) { value in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("•")
+                            .foregroundStyle(.secondary)
+                        Text(value)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
         }
     }
 }
