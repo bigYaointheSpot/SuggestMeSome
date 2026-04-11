@@ -48,6 +48,34 @@ enum ReadinessTier {
     case unknown
 }
 
+// MARK: - ObjectiveRecoveryStatus
+
+/// Coarse objective recovery signal derived from HealthKit daily summaries.
+enum ObjectiveRecoveryStatus {
+    case good
+    case neutral
+    case caution
+}
+
+// MARK: - DailyCoachRecommendationSource
+
+/// Visible attribution source used by the recommendation card.
+enum DailyCoachRecommendationSource: String {
+    case manualCheckIn = "Manual Check-In"
+    case healthData = "Health Data"
+    case trainingHistory = "Training History"
+}
+
+// MARK: - ObjectiveRecoveryInsight
+
+/// Explainable objective signal summary from recent HealthKit metrics.
+struct ObjectiveRecoveryInsight {
+    let status: ObjectiveRecoveryStatus
+    let compactSummary: String
+    let detailSummary: String
+    let evaluatedMetricsCount: Int
+}
+
 // MARK: - DailyCoachSuggestionItem
 
 /// One actionable suggestion with a compact label and optional expanded detail.
@@ -92,4 +120,10 @@ struct DailyCoachRecommendation {
     let standaloneSessionType: StandaloneSessionType?
     /// Count of pending adaptation proposals surfaced for context.
     let pendingProposalCount: Int
+    /// Optional objective signal from HealthKit recovery data.
+    let objectiveRecoveryInsight: ObjectiveRecoveryInsight?
+    /// Human-readable source attribution labels.
+    let recommendationSources: [DailyCoachRecommendationSource]
+    /// Explainability text describing source influence.
+    let sourceAttributionDetails: String
 }

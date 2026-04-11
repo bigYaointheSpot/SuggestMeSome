@@ -72,7 +72,8 @@ struct Feature7ValidationTests {
             activeRun: run,
             latestAnalysis: nil,
             pendingProposalCount: 0,
-            recentWorkouts: []
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
         )
 
         #expect(rec.readinessTier == .neutral)
@@ -90,7 +91,8 @@ struct Feature7ValidationTests {
             activeRun: run,
             latestAnalysis: nil,
             pendingProposalCount: 0,
-            recentWorkouts: []
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
         )
 
         #expect(rec.readinessTier == .low)
@@ -113,7 +115,8 @@ struct Feature7ValidationTests {
             activeRun: run,
             latestAnalysis: nil,
             pendingProposalCount: 0,
-            recentWorkouts: []
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
         )
 
         #expect(rec.primarySuggestion.type == .trimAccessories)
@@ -132,7 +135,8 @@ struct Feature7ValidationTests {
             activeRun: run,
             latestAnalysis: nil,
             pendingProposalCount: 0,
-            recentWorkouts: []
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
         )
 
         #expect(rec.primarySuggestion.type == .suggestManualVariationSwap)
@@ -147,7 +151,8 @@ struct Feature7ValidationTests {
             activeRun: nil,
             latestAnalysis: nil,
             pendingProposalCount: 0,
-            recentWorkouts: []
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
         )
 
         #expect(rec.nextProgramSession == nil)

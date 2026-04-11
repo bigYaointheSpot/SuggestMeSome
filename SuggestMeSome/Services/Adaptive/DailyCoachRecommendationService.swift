@@ -23,7 +23,8 @@ struct DailyCoachRecommendationService {
         activeRun: ProgramRun?,
         latestAnalysis: WeeklyTrainingAnalysis?,
         pendingProposalCount: Int,
-        recentWorkouts: [Workout]
+        recentWorkouts: [Workout],
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
     ) -> DailyCoachRecommendation {
 
         let hasPain           = checkIn?.hasPainOrDiscomfort ?? false
@@ -40,7 +41,8 @@ struct DailyCoachRecommendationService {
                 readinessTier: readinessTier,
                 fatigueStatus: fatigueStatus,
                 pendingProposalCount: pendingProposalCount,
-                recentWorkouts: recentWorkouts
+                recentWorkouts: recentWorkouts,
+                objectiveRecoveryInsight: objectiveRecoveryInsight
             )
         }
 
@@ -50,7 +52,8 @@ struct DailyCoachRecommendationService {
             readinessTier: readinessTier,
             fatigueStatus: fatigueStatus,
             pendingProposalCount: pendingProposalCount,
-            recentWorkouts: recentWorkouts
+            recentWorkouts: recentWorkouts,
+            objectiveRecoveryInsight: objectiveRecoveryInsight
         )
     }
 
@@ -81,7 +84,8 @@ struct DailyCoachRecommendationService {
         readinessTier: ReadinessTier,
         fatigueStatus: FatigueStatus,
         pendingProposalCount: Int,
-        recentWorkouts: [Workout]
+        recentWorkouts: [Workout],
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
     ) -> DailyCoachRecommendation {
 
         let nextSession  = detectNextSession(run: run, program: program, workouts: recentWorkouts)
@@ -93,7 +97,13 @@ struct DailyCoachRecommendationService {
             availableMinutes: availableMinutes,
             readinessTier: readinessTier,
             fatigueStatus: fatigueStatus,
-            pendingProposalCount: pendingProposalCount
+            pendingProposalCount: pendingProposalCount,
+            objectiveRecoveryInsight: objectiveRecoveryInsight
+        )
+
+        let sources = buildSources(
+            readinessTier: readinessTier,
+            objectiveRecoveryInsight: objectiveRecoveryInsight
         )
 
         return DailyCoachRecommendation(
@@ -105,7 +115,14 @@ struct DailyCoachRecommendationService {
             hasPainFlag: hasPain,
             nextProgramSession: nextSession,
             standaloneSessionType: nil,
-            pendingProposalCount: pendingProposalCount
+            pendingProposalCount: pendingProposalCount,
+            objectiveRecoveryInsight: objectiveRecoveryInsight,
+            recommendationSources: sources,
+            sourceAttributionDetails: sourceAttributionText(
+                hasPain: hasPain,
+                readinessTier: readinessTier,
+                objectiveRecoveryInsight: objectiveRecoveryInsight
+            )
         )
     }
 
@@ -163,7 +180,8 @@ struct DailyCoachRecommendationService {
         availableMinutes: Int,
         readinessTier: ReadinessTier,
         fatigueStatus: FatigueStatus,
-        pendingProposalCount: Int
+        pendingProposalCount: Int,
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
     ) -> (DailyCoachSuggestionItem, [DailyCoachSuggestionItem], String, String) {
 
         // ── Priority 1: Pain / discomfort ───────────────────────────────────
@@ -219,6 +237,7 @@ struct DailyCoachRecommendationService {
         // ── Priority 3: Low readiness ────────────────────────────────────────
         if readinessTier == .low {
             let isHighFatigue = fatigueStatus == .high || fatigueStatus == .critical
+            let hasObjectiveCaution = objectiveRecoveryInsight?.status == .caution
             let primary: DailyCoachSuggestionItem
             if isHighFatigue {
                 primary = DailyCoachSuggestionItem(
@@ -238,11 +257,14 @@ struct DailyCoachRecommendationService {
                 compactText: "If energy stays low, trim lowest-priority accessories mid-session.",
                 expandedText: "If you reach the accessories and still feel off, drop the lowest-priority one. Your top 1–2 accessories are still worth completing."
             )]
+            let expanded = hasObjectiveCaution
+                ? "Your manual readiness is low, and objective recovery also shows caution. Run the session conservatively — full primary lift, top set, and trimmed backoff. Keep effort controlled and avoid forcing progression."
+                : "Your composite readiness is low. The plan is to run the session conservatively — full primary lift, top set, and trimmed backoff. This keeps you training without digging a deeper fatigue hole."
             return (
                 primary,
                 secondary,
                 "Low readiness. Conservative session for \(sessionLabel) suggested.",
-                "Your composite readiness is low. The plan is to run the session conservatively — full primary lift, top set, and trimmed backoff. This keeps you training without digging a deeper fatigue hole."
+                expanded
             )
         }
 
@@ -258,6 +280,20 @@ struct DailyCoachRecommendationService {
         }
 
         if readinessTier == .strong {
+            if objectiveRecoveryInsight?.status == .caution {
+                let primary = DailyCoachSuggestionItem(
+                    type: .trimOneBackoffSet,
+                    compactText: "Strong check-in, but objective recovery is cautious — trim one backoff set.",
+                    expandedText: "Your manual check-in looks strong, but objective recovery is slightly below baseline today. Keep the main lift and top set, then trim one backoff set to stay productive without overreaching."
+                )
+                return (
+                    primary,
+                    secondary,
+                    "Strong manual readiness with objective caution. Slightly conservative session for \(sessionLabel).",
+                    "Manual readiness is strong, but objective recovery is mildly poor versus baseline. Rather than a hard change, take a small conservative adjustment today by trimming one backoff set."
+                )
+            }
+
             let primary = DailyCoachSuggestionItem(
                 type: .runAsPlanned,
                 compactText: "Strong readiness. Push hard on \(sessionLabel).",
@@ -272,16 +308,25 @@ struct DailyCoachRecommendationService {
         }
 
         // Neutral (or unknown — treated same as neutral)
+        let hasObjectiveCaution = objectiveRecoveryInsight?.status == .caution
         let primary = DailyCoachSuggestionItem(
             type: .runAsPlanned,
-            compactText: "Solid readiness. Run \(sessionLabel) as planned.",
-            expandedText: "Readiness is in a normal range. Proceed with the full session as programmed. Stay attentive to how working sets feel — if a set feels off, it is fine to stop a rep or two short."
+            compactText: hasObjectiveCaution
+                ? "Solid readiness with mild objective caution. Run \(sessionLabel) with controlled effort."
+                : "Solid readiness. Run \(sessionLabel) as planned.",
+            expandedText: hasObjectiveCaution
+                ? "Manual readiness is solid, but objective recovery is slightly below baseline. Keep the session as planned and leave a small effort buffer on hard sets."
+                : "Readiness is in a normal range. Proceed with the full session as programmed. Stay attentive to how working sets feel — if a set feels off, it is fine to stop a rep or two short."
         )
         return (
             primary,
             secondary,
-            "Solid readiness. Run \(sessionLabel) as planned.",
-            "Readiness is neutral-to-good. Run the full session. Adjust effort based on how early working sets feel rather than making pre-session changes."
+            hasObjectiveCaution
+                ? "Solid readiness with objective caution. Run \(sessionLabel) with slightly conservative pacing."
+                : "Solid readiness. Run \(sessionLabel) as planned.",
+            hasObjectiveCaution
+                ? "Manual readiness is neutral-to-good while objective recovery is mildly poor. Keep the full session, but avoid forcing top-end effort if sets feel heavier than usual."
+                : "Readiness is neutral-to-good. Run the full session. Adjust effort based on how early working sets feel rather than making pre-session changes."
         )
     }
 
@@ -293,7 +338,8 @@ struct DailyCoachRecommendationService {
         readinessTier: ReadinessTier,
         fatigueStatus: FatigueStatus,
         pendingProposalCount: Int,
-        recentWorkouts: [Workout]
+        recentWorkouts: [Workout],
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
     ) -> DailyCoachRecommendation {
 
         let sessionType = inferStandaloneSessionType(
@@ -309,7 +355,13 @@ struct DailyCoachRecommendationService {
             hasPain: hasPain,
             availableMinutes: availableMinutes,
             readinessTier: readinessTier,
-            fatigueStatus: fatigueStatus
+            fatigueStatus: fatigueStatus,
+            objectiveRecoveryInsight: objectiveRecoveryInsight
+        )
+
+        let sources = buildSources(
+            readinessTier: readinessTier,
+            objectiveRecoveryInsight: objectiveRecoveryInsight
         )
 
         return DailyCoachRecommendation(
@@ -321,7 +373,14 @@ struct DailyCoachRecommendationService {
             hasPainFlag: hasPain,
             nextProgramSession: nil,
             standaloneSessionType: sessionType,
-            pendingProposalCount: pendingProposalCount
+            pendingProposalCount: pendingProposalCount,
+            objectiveRecoveryInsight: objectiveRecoveryInsight,
+            recommendationSources: sources,
+            sourceAttributionDetails: sourceAttributionText(
+                hasPain: hasPain,
+                readinessTier: readinessTier,
+                objectiveRecoveryInsight: objectiveRecoveryInsight
+            )
         )
     }
 
@@ -369,7 +428,8 @@ struct DailyCoachRecommendationService {
         hasPain: Bool,
         availableMinutes: Int,
         readinessTier: ReadinessTier,
-        fatigueStatus: FatigueStatus
+        fatigueStatus: FatigueStatus,
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
     ) -> (DailyCoachSuggestionItem, [DailyCoachSuggestionItem], String, String) {
 
         // Pain override
@@ -421,16 +481,72 @@ struct DailyCoachRecommendationService {
         let isLowReadiness = readinessTier == .low
         let toneNote = isLowReadiness ? " Take it a notch easier today — readiness is low." : ""
 
+        let hasObjectiveCaution = objectiveRecoveryInsight?.status == .caution
         let primary = DailyCoachSuggestionItem(
             type: .standaloneShortStrengthSession,
             compactText: "\(name) session recommended today.",
-            expandedText: "Based on your recent training and today's readiness, a \(name.lowercased()) session fits well. Aim for 3–5 compound movements with 3–4 working sets each.\(toneNote)"
+            expandedText: hasObjectiveCaution
+                ? "Based on your recent training and today's readiness, a \(name.lowercased()) session fits well. Keep it slightly conservative: use 2–4 key movements and stop hard sets a little short today.\(toneNote)"
+                : "Based on your recent training and today's readiness, a \(name.lowercased()) session fits well. Aim for 3–5 compound movements with 3–4 working sets each.\(toneNote)"
         )
         return (
             primary,
             [],
-            "\(name) session recommended today.",
-            "Your readiness and recent training history suggest a \(name.lowercased()) session. Choose 3–5 exercises and keep intensity aligned with how you feel during warm-up sets.\(toneNote)"
+            hasObjectiveCaution
+                ? "\(name) session recommended with a slightly conservative pace today."
+                : "\(name) session recommended today.",
+            hasObjectiveCaution
+                ? "Manual readiness supports training today, but objective recovery is mildly poor versus baseline. Keep the \(name.lowercased()) session, reduce session ambition slightly, and prioritize clean reps.\(toneNote)"
+                : "Your readiness and recent training history suggest a \(name.lowercased()) session. Choose 3–5 exercises and keep intensity aligned with how you feel during warm-up sets.\(toneNote)"
         )
+    }
+
+    // MARK: - Source Attribution
+
+    private static func buildSources(
+        readinessTier: ReadinessTier,
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
+    ) -> [DailyCoachRecommendationSource] {
+        var sources: [DailyCoachRecommendationSource] = [.trainingHistory]
+        if readinessTier != .unknown {
+            sources.insert(.manualCheckIn, at: 0)
+        }
+        if objectiveRecoveryInsight != nil {
+            sources.append(.healthData)
+        }
+        return sources
+    }
+
+    private static func sourceAttributionText(
+        hasPain: Bool,
+        readinessTier: ReadinessTier,
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
+    ) -> String {
+        let manualText: String
+        if hasPain {
+            manualText = "Manual check-in flagged pain, which overrides all automatic changes."
+        } else if readinessTier == .unknown {
+            manualText = "No manual check-in was submitted today."
+        } else {
+            manualText = "Manual check-in was used for readiness and time-available context."
+        }
+
+        let trainingText = "Training history provided recent session and fatigue context."
+
+        let healthText: String
+        if let objectiveRecoveryInsight {
+            switch objectiveRecoveryInsight.status {
+            case .caution:
+                healthText = "Health data signaled mild caution and nudged the recommendation slightly more conservative."
+            case .good:
+                healthText = "Health data was favorable and supported the existing recommendation."
+            case .neutral:
+                healthText = "Health data was near baseline and did not materially change the recommendation."
+            }
+        } else {
+            healthText = "Health data was unavailable or not enabled, so Daily Coach behavior stayed in baseline mode."
+        }
+
+        return "\(manualText) \(trainingText) \(healthText)"
     }
 }

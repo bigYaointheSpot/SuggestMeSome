@@ -1270,6 +1270,30 @@ Foundation work for HealthKit-powered recovery data import, workout import/expor
   - added simple sync state UI (`syncing`, `success`, `failed`) with inline status text
   - updates `@AppStorage("healthkit.lastSyncTimestamp")` only when sync succeeds so "Last Sync" reflects successful imports
 
+#### Prompt 4 [Daily Coach HealthKit Recovery Blend and Attribution] — 2026-04-10
+- Added `HealthKitRecoveryInsightService` (`Services/HealthKit/HealthKitRecoveryInsightService.swift`) to compute a deterministic objective recovery insight from `HealthKitDailySummary` rows using a 21-day rolling baseline (minimum 10 prior samples per metric)
+- Implemented explicit caution/good/neutral signal rules for:
+  - sleep duration below baseline
+  - HRV below baseline
+  - resting heart rate above baseline
+  - active energy above baseline
+- Added non-persisted Daily Coach value types in `DailyCoachRecommendationTypes.swift`:
+  - `ObjectiveRecoveryStatus` (`good` / `neutral` / `caution`)
+  - `ObjectiveRecoveryInsight` (compact + detailed explainability text)
+  - `DailyCoachRecommendationSource` (`Manual Check-In`, `Health Data`, `Training History`)
+- Updated `DailyCoachRecommendationService` to accept optional `objectiveRecoveryInsight` and blend it lightly:
+  - manual pain/discomfort remains absolute priority and override
+  - when manual readiness is strong but objective recovery is caution, recommendation shifts only slightly conservative (trim one backoff set) instead of a hard rewrite
+  - when readiness is neutral and objective recovery is caution, session stays as planned with conservative pacing guidance
+  - when HealthKit is unavailable/disabled/missing baseline data, objective insight is `nil` and recommendation behavior follows prior logic
+  - recommendation now includes explicit source attribution and explainability text describing manual, training-history, and Health data influence
+- Updated `DailyCoachView`:
+  - reads HealthKit Daily Coach flags (`healthkit.enabled`, `healthkit.dailyCoachEnabled`)
+  - computes optional objective insight from local summaries and passes it into recommendation generation
+  - renders an `Objective Recovery` compact row (status badge + summary) when insight is available
+  - renders visible recommendation source attribution pills and expanded source-influence detail text
+- Updated `Feature7ValidationTests` call sites for the additive `DailyCoachRecommendationService.generate(... objectiveRecoveryInsight:)` parameter
+
 ---
 
 ## Project Setup

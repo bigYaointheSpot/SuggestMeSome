@@ -40,6 +40,12 @@ struct DailyCoachView: View {
     @Query(sort: \LiftPerformanceTrend.updatedAt, order: .reverse)
     private var liftTrends: [LiftPerformanceTrend]
 
+    @Query(sort: \HealthKitDailySummary.dayStart, order: .reverse)
+    private var healthKitDailySummaries: [HealthKitDailySummary]
+
+    @AppStorage("healthkit.enabled") private var healthKitEnabled = false
+    @AppStorage("healthkit.dailyCoachEnabled") private var useHealthKitInDailyCoach = false
+
     // MARK: Computed helpers
 
     private var focusRun: ProgramRun? { activeRuns.first }
@@ -58,7 +64,15 @@ struct DailyCoachView: View {
             activeRun: focusRun,
             latestAnalysis: latestAnalysis,
             pendingProposalCount: pendingProposals.count,
-            recentWorkouts: Array(recentWorkouts.prefix(20))
+            recentWorkouts: Array(recentWorkouts.prefix(20)),
+            objectiveRecoveryInsight: objectiveRecoveryInsight
+        )
+    }
+
+    private var objectiveRecoveryInsight: ObjectiveRecoveryInsight? {
+        guard healthKitEnabled, useHealthKitInDailyCoach else { return nil }
+        return HealthKitRecoveryInsightService.computeInsight(
+            from: Array(healthKitDailySummaries.prefix(90))
         )
     }
 
@@ -278,6 +292,12 @@ struct DailyCoachView: View {
 
             Divider()
 
+            if let insight = rec.objectiveRecoveryInsight {
+                objectiveRecoveryRow(insight)
+            }
+
+            recommendationSourcesRow(rec.recommendationSources)
+
             // Compact summary
             Text(rec.compactSummary)
                 .font(.subheadline.weight(.medium))
@@ -318,6 +338,18 @@ struct DailyCoachView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Text(rec.sourceAttributionDetails)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let insight = rec.objectiveRecoveryInsight {
+                    Text(insight.detailSummary)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 if !rec.primarySuggestion.expandedText.isEmpty {
                     recommendationDetailRow(rec.primarySuggestion)
@@ -368,6 +400,59 @@ struct DailyCoachView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private func objectiveRecoveryRow(_ insight: ObjectiveRecoveryInsight) -> some View {
+        HStack(spacing: 8) {
+            Text("Objective Recovery")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            objectiveRecoveryBadge(insight.status)
+            Text(insight.compactSummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer()
+        }
+    }
+
+    private func objectiveRecoveryBadge(_ status: ObjectiveRecoveryStatus) -> some View {
+        let (label, color): (String, Color) = switch status {
+        case .good: ("Good", .green)
+        case .neutral: ("Neutral", .blue)
+        case .caution: ("Caution", .orange)
+        }
+
+        return Text(label)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.15))
+            .foregroundStyle(color)
+            .clipShape(Capsule())
+    }
+
+    private func recommendationSourcesRow(_ sources: [DailyCoachRecommendationSource]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Recommendation Sources")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                ForEach(sources, id: \.rawValue) { source in
+                    sourcePill(source.rawValue)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func sourcePill(_ label: String) -> some View {
+        Text(label)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color(.tertiarySystemBackground))
+            .clipShape(Capsule())
     }
 
     private func readinessTierBadge(_ tier: ReadinessTier) -> some View {
