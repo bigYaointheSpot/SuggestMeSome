@@ -91,6 +91,7 @@ struct DailyCoachView: View {
                     if !pendingProposals.isEmpty {
                         pendingProposalsRow
                     }
+                    latestSessionSummaryCard
                     latestWeeklyReviewCard
                 }
                 .padding(.horizontal)
@@ -426,6 +427,77 @@ struct DailyCoachView: View {
         .padding(.vertical, 10)
         .background(Color.orange.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Latest Session Summary Card
+
+    private var latestSummary: SessionSummary? {
+        DailyCoachSessionSummaryService.latestSummary(
+            recentWorkouts: Array(recentWorkouts.prefix(1)),
+            latestCheckIn: checkIns.first
+        )
+    }
+
+    private var latestSessionSummaryCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Last Session", systemImage: "checkmark.seal")
+                .font(.headline)
+
+            Divider()
+
+            if let summary = latestSummary {
+                sessionSummaryContent(summary: summary)
+            } else {
+                Text("No sessions logged yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func sessionSummaryContent(summary: SessionSummary) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(summary.workoutDate, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if summary.hasEffortData {
+                    effortDistributionBadges(summary: summary)
+                }
+            }
+
+            Text(summary.summaryText)
+                .font(.subheadline.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func effortDistributionBadges(summary: SessionSummary) -> some View {
+        HStack(spacing: 5) {
+            if summary.tooEasyCount > 0 {
+                effortBadge(count: summary.tooEasyCount, color: .blue)
+            }
+            if summary.onTargetCount > 0 {
+                effortBadge(count: summary.onTargetCount, color: .green)
+            }
+            if summary.tooHardCount > 0 {
+                effortBadge(count: summary.tooHardCount, color: .orange)
+            }
+        }
+    }
+
+    private func effortBadge(count: Int, color: Color) -> some View {
+        Text("\(count)")
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.15))
+            .foregroundStyle(color)
+            .clipShape(Capsule())
     }
 
     // MARK: - Latest Weekly Review Card

@@ -12,7 +12,7 @@ import SwiftData
 // MARK: - WorkoutEffortFeedback
 
 /// Per-exercise effort rating captured during or after a session.
-enum WorkoutEffortFeedback: String, Codable {
+enum WorkoutEffortFeedback: String, Codable, Hashable {
     case tooEasy
     case onTarget
     case tooHard

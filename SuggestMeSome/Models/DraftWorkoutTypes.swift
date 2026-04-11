@@ -52,6 +52,11 @@ struct DraftExerciseEntry: Identifiable {
     var prescribedWorkingSetStyle: ProgramWorkingSetStyle?
     var prescribedTargetEffortType: ProgramTargetEffortType?
 
+    // Feature 7 — effort capture (non-cardio only)
+    var effortFeedback: WorkoutEffortFeedback?
+    /// Top-set RPE entered by the user; nil unless they chose to add it.
+    var topSetRPE: Double?
+
     var cardioDurationSeconds: Int {
         (Int(cardioMinutesText) ?? 0) * 60 + (Int(cardioSecondsText) ?? 0)
     }

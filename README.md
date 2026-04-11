@@ -1152,6 +1152,25 @@ A program-first daily coaching system that collects readiness check-ins, surface
 - All recommendation objects are ephemeral; nothing new is persisted
 - **Commit:** `feat: add daily coach recommendation engine`
 
+#### Prompt 6 [Effort Capture and Latest Session Summary] — 2026-04-10
+- Added `effortFeedback: WorkoutEffortFeedback?` and `topSetRPE: Double?` fields to `DraftExerciseEntry` in `DraftWorkoutTypes.swift` so effort state is held in the draft before being saved
+- Added `Hashable` conformance to `WorkoutEffortFeedback` enum to support SwiftUI `ForEach(id: \.self)` usage
+- Added effort capture section to `ExerciseEntryCard` in `WorkoutView.swift`:
+  - Three-button `Too Easy / On Target / Too Hard` row using a custom segmented button group (tappable to deselect); only shown when a strength entry has at least one non-warmup set
+  - Secondary "Top-set RPE" toggle row that reveals a `+/-` stepper for 1–10 RPE in 0.5 increments; hidden by default with state cleared on collapse
+  - New `RPEStepperField` private subview and `WorkoutEffortFeedback` UI extensions (`.label`, `.tintColor`) added to the file
+- Updated `WorkoutView.saveWorkout` to copy `effortFeedback` and `topSetRPE` from each draft entry to the persisted `ExerciseEntry`; both fields stay `nil` for cardio entries
+- Added `DailyCoachSessionSummaryService.swift` at `Services/Adaptive/DailyCoachSessionSummaryService.swift`:
+  - Pure in-memory service; no SwiftData writes
+  - `latestSummary(recentWorkouts:latestCheckIn:)` returns a `SessionSummary` value type with `summaryText`, `workoutDate`, `hasEffortData`, and per-band counts (`tooEasyCount`, `onTargetCount`, `tooHardCount`)
+  - Summary text is deterministic from the effort distribution, with a special-case message when the session-day check-in flagged low readiness and effort still came out on target
+  - Example outputs: "Last session was on target overall." · "Primary work skewed too hard." · "Session matched the readiness-based trim well."
+- Added "Last Session" card to `DailyCoachView`:
+  - Always rendered; shows workout date, summary sentence, and colored count badges per effort band
+  - Falls back to "No sessions logged yet" when no workouts exist
+  - No new models; reads from existing `@Query` workout data
+- No new SwiftData schema changes; `effortFeedback` and `topSetRPE` were already added as additive fields in Prompt 1
+
 #### Prompt 5 [Daily Coach Prepared Workout Drafts] — 2026-04-10
 - Extracted `DraftSet` and `DraftExerciseEntry` from `WorkoutView.swift` into a new shared file `Models/DraftWorkoutTypes.swift` so they can be referenced outside the view layer
 - Added `PreparedWorkoutDraft` struct (ephemeral: `entries: [DraftExerciseEntry]`, `changeDescriptions: [String]`, `adjustmentType: DailySuggestionType`) in `Services/Adaptive/DailyCoachWorkoutPreparationService.swift`

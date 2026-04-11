@@ -401,6 +401,8 @@ struct WorkoutView: View {
                 prescribedWorkingSetStyle: draftEntry.prescribedWorkingSetStyle,
                 prescribedTargetEffortType: draftEntry.prescribedTargetEffortType
             )
+            entry.effortFeedback = draftEntry.isCardio ? nil : draftEntry.effortFeedback
+            entry.topSetRPE = draftEntry.isCardio ? nil : draftEntry.topSetRPE
             entry.workout = workout
             modelContext.insert(entry)
 
@@ -500,6 +502,7 @@ struct ExerciseEntryCard: View {
     let onDelete: () -> Void
 
     @State private var isExpanded: Bool = true
+    @State private var showRPEField: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -598,6 +601,13 @@ struct ExerciseEntryCard: View {
                             Divider().padding(.leading, 12)
                         }
                     }
+
+                    // Effort capture — only show when there are actual working sets.
+                    let hasWorkingSets = entry.sets.contains { !$0.isWarmup }
+                    if hasWorkingSets {
+                        Divider()
+                        effortCaptureSection
+                    }
                 }
             }
         }
@@ -606,6 +616,128 @@ struct ExerciseEntryCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color(.separator), lineWidth: 0.5)
         )
+    }
+
+    // MARK: - Effort Capture
+
+    @ViewBuilder
+    private var effortCaptureSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Segmented effort picker
+            HStack(spacing: 0) {
+                ForEach([WorkoutEffortFeedback.tooEasy, .onTarget, .tooHard], id: \.self) { option in
+                    let isSelected = entry.effortFeedback == option
+                    Button {
+                        // Tapping the active option deselects it.
+                        entry.effortFeedback = isSelected ? nil : option
+                    } label: {
+                        Text(option.label)
+                            .font(.caption.weight(isSelected ? .semibold : .regular))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .background(isSelected ? option.tintColor.opacity(0.2) : Color.clear)
+                            .foregroundStyle(isSelected ? option.tintColor : Color(.secondaryLabel))
+                    }
+                    .buttonStyle(.plain)
+                    if option != .tooHard {
+                        Divider().frame(height: 24)
+                    }
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color(.separator), lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            // RPE toggle row
+            HStack(spacing: 6) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showRPEField.toggle()
+                        if !showRPEField { entry.topSetRPE = nil }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: showRPEField ? "minus.circle" : "plus.circle")
+                            .font(.caption)
+                        Text("Top-set RPE")
+                            .font(.caption)
+                    }
+                    .foregroundStyle(Color(.secondaryLabel))
+                }
+                .buttonStyle(.plain)
+
+                if showRPEField {
+                    Spacer()
+                    RPEStepperField(rpe: Binding(
+                        get: { entry.topSetRPE },
+                        set: { entry.topSetRPE = $0 }
+                    ))
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(.systemBackground))
+    }
+}
+
+// MARK: - RPEStepperField
+
+private struct RPEStepperField: View {
+    @Binding var rpe: Double?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                let current = rpe ?? 7.0
+                rpe = max(1.0, current - 0.5)
+            } label: {
+                Image(systemName: "minus")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 28, height: 28)
+                    .background(Color(.tertiarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+
+            Text(rpe.map { String(format: $0.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f", $0) } ?? "—")
+                .font(.subheadline.weight(.semibold))
+                .frame(width: 36, alignment: .center)
+
+            Button {
+                let current = rpe ?? 6.5
+                rpe = min(10.0, current + 0.5)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 28, height: 28)
+                    .background(Color(.tertiarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - WorkoutEffortFeedback UI extensions
+
+private extension WorkoutEffortFeedback {
+    var label: String {
+        switch self {
+        case .tooEasy:  return "Too Easy"
+        case .onTarget: return "On Target"
+        case .tooHard:  return "Too Hard"
+        }
+    }
+
+    var tintColor: Color {
+        switch self {
+        case .tooEasy:  return .blue
+        case .onTarget: return .green
+        case .tooHard:  return .orange
+        }
     }
 }
 
