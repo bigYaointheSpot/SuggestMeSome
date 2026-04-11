@@ -19,6 +19,16 @@ struct HealthKitWorkoutWriteResult {
     let exportedAt: Date
 }
 
+@MainActor
+protocol HealthKitWorkoutWriting {
+    func shouldAttemptWriteback(
+        for workout: Workout,
+        healthKitEnabled: Bool,
+        writebackEnabled: Bool
+    ) -> Bool
+    func writeWorkoutSummary(_ workout: Workout) async throws -> HealthKitWorkoutWriteResult
+}
+
 final class HealthKitWorkoutWriteService {
     private let healthStore: HKHealthStore
 
@@ -131,5 +141,40 @@ final class HealthKitWorkoutWriteService {
             return .highIntensityIntervalTraining
         }
         return .mixedCardio
+    }
+}
+
+extension HealthKitWorkoutWriteService: HealthKitWorkoutWriting {}
+
+@MainActor
+struct WorkoutSaveHealthKitWritebackCoordinator {
+    let writer: HealthKitWorkoutWriting
+
+    init(writer: HealthKitWorkoutWriting? = nil) {
+        self.writer = writer ?? HealthKitWorkoutWriteService()
+    }
+
+    func performNonFatalWritebackIfEligible(
+        for workout: Workout,
+        healthKitEnabled: Bool,
+        writebackEnabled: Bool,
+        persistChanges: @MainActor () throws -> Void
+    ) async {
+        guard writer.shouldAttemptWriteback(
+            for: workout,
+            healthKitEnabled: healthKitEnabled,
+            writebackEnabled: writebackEnabled
+        ) else {
+            return
+        }
+
+        do {
+            let result = try await writer.writeWorkoutSummary(workout)
+            workout.healthKitWritebackIdentifier = result.writebackIdentifier
+            workout.healthKitExportedAt = result.exportedAt
+            try? persistChanges()
+        } catch {
+            print("[F8] HealthKitWorkoutWriteService failed for workout \(workout.id): \(error)")
+        }
     }
 }

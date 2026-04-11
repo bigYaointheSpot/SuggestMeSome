@@ -36,10 +36,16 @@ final class HealthDataSettingsViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var syncStatus: HealthDataSyncStatus = .idle
     @Published private(set) var workoutImportStatus: HealthWorkoutImportStatus = .idle
+    @Published private(set) var watchStatus: WatchCompanionStatus = .unsupported()
 
     private let authorizationService = HealthKitAuthorizationService()
     private let recoverySyncService = HealthKitRecoverySyncService()
     private let workoutImportService = HealthKitWorkoutImportService()
+    private let watchBridge: WatchCompanionBridge
+
+    init(watchBridge: WatchCompanionBridge? = nil) {
+        self.watchBridge = watchBridge ?? DefaultWatchCompanionBridge()
+    }
 
     func refreshStatus(hasRequestedAuthorization: Bool) async {
         isLoading = true
@@ -47,6 +53,10 @@ final class HealthDataSettingsViewModel: ObservableObject {
             hasRequestedAuthorization: hasRequestedAuthorization
         )
         isLoading = false
+    }
+
+    func refreshWatchStatus() async {
+        watchStatus = await watchBridge.refreshStatus()
     }
 
     func requestAuthorization(hasRequestedAuthorization: Bool) async {
@@ -142,6 +152,7 @@ struct HealthDataSettingsView: View {
     var body: some View {
         List {
             connectionStatusSection
+            appleWatchSection
             dailyCoachUsageSection
             workoutSyncSection
             dataReadSection
@@ -153,6 +164,7 @@ struct HealthDataSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.refreshStatus(hasRequestedAuthorization: healthKitPermissionsRequested)
+            await viewModel.refreshWatchStatus()
         }
     }
 
@@ -231,6 +243,44 @@ struct HealthDataSettingsView: View {
             Text("The app reads objective recovery data to lightly assist Daily Coach readiness decisions.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var appleWatchSection: some View {
+        Section("Apple Watch") {
+            HStack {
+                Text("Status")
+                Spacer()
+                Text(watchStatusTitle)
+                    .foregroundStyle(watchStatusColor)
+            }
+
+            Text(viewModel.watchStatus.message)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Text("Watch companion coming soon. This release only adds connection groundwork and shared payload seams.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            if viewModel.watchStatus.checkedAt.timeIntervalSince1970 > 0 {
+                HStack {
+                    Text("Last Checked")
+                    Spacer()
+                    Text(
+                        viewModel.watchStatus.checkedAt,
+                        format: .dateTime.month(.abbreviated).day().year().hour().minute()
+                    )
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            Button("Refresh Watch Status") {
+                Task {
+                    await viewModel.refreshWatchStatus()
+                }
+            }
+            .disabled(viewModel.isLoading)
         }
     }
 
@@ -332,6 +382,34 @@ struct HealthDataSettingsView: View {
         if isDenied { return "Request Access Again" }
         if isConnected { return "Review Permissions" }
         return "Connect HealthKit"
+    }
+
+    private var watchStatusTitle: String {
+        switch viewModel.watchStatus.availability {
+        case .unsupported:
+            return "Unavailable"
+        case .notPaired:
+            return "Not Paired"
+        case .pairedNoCompanionApp:
+            return "Paired"
+        case .companionInstalled:
+            return "Companion Installed"
+        case .reachable:
+            return "Reachable"
+        }
+    }
+
+    private var watchStatusColor: Color {
+        switch viewModel.watchStatus.availability {
+        case .unsupported:
+            return .secondary
+        case .notPaired, .pairedNoCompanionApp:
+            return .orange
+        case .companionInstalled:
+            return .green
+        case .reachable:
+            return .green
+        }
     }
 
     @ViewBuilder

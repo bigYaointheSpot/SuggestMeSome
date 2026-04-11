@@ -13,6 +13,22 @@ enum HealthKitRecoverySyncError: Error {
     case healthDataUnavailable
 }
 
+struct HealthKitDailySummarySnapshot {
+    let dayStart: Date
+    let sleepDurationSeconds: Int?
+    let timeInBedSeconds: Int?
+    let restingHeartRateBPM: Double?
+    let heartRateVariabilityMS: Double?
+    let activeEnergyKilocalories: Double?
+    let stepCount: Double?
+    let bodyMassKilograms: Double?
+}
+
+struct HealthKitDailySummaryUpsertResult {
+    let inserted: Int
+    let updated: Int
+}
+
 final class HealthKitRecoverySyncService {
     private let healthStore: HKHealthStore
     private let calendar: Calendar
@@ -68,52 +84,99 @@ final class HealthKitRecoverySyncService {
             end: window.end
         )
 
-        let descriptor = FetchDescriptor<HealthKitDailySummary>(
-            predicate: #Predicate { summary in
-                summary.dayStart >= windowStart && summary.dayStart <= windowEnd
-            }
+        let snapshots = days.map { dayStart in
+            let sleepTotals = sleepByDay[dayStart]
+            return HealthKitDailySummarySnapshot(
+                dayStart: dayStart,
+                sleepDurationSeconds: sleepTotals.map { Int($0.sleepDurationSeconds.rounded()) },
+                timeInBedSeconds: sleepTotals.map { Int($0.timeInBedSeconds.rounded()) },
+                restingHeartRateBPM: restingHeartRateByDay[dayStart],
+                heartRateVariabilityMS: hrvByDay[dayStart],
+                activeEnergyKilocalories: activeEnergyByDay[dayStart],
+                stepCount: stepsByDay[dayStart],
+                bodyMassKilograms: bodyMassByDay[dayStart]
+            )
+        }
+
+        _ = try upsertDailySummaries(
+            context: context,
+            snapshots: snapshots,
+            rangeStart: windowStart,
+            rangeEnd: windowEnd
         )
+    }
+
+    @MainActor
+    @discardableResult
+    func upsertDailySummaries(
+        context: ModelContext,
+        snapshots: [HealthKitDailySummarySnapshot],
+        rangeStart: Date? = nil,
+        rangeEnd: Date? = nil,
+        sourceUpdatedAt: Date = Date()
+    ) throws -> HealthKitDailySummaryUpsertResult {
+        let targetDays = Set(snapshots.map { calendar.startOfDay(for: $0.dayStart) })
+
+        let descriptor: FetchDescriptor<HealthKitDailySummary>
+        if let rangeStart, let rangeEnd {
+            descriptor = FetchDescriptor<HealthKitDailySummary>(
+                predicate: #Predicate { summary in
+                    summary.dayStart >= rangeStart && summary.dayStart <= rangeEnd
+                }
+            )
+        } else if let minDay = targetDays.min(), let maxDay = targetDays.max() {
+            descriptor = FetchDescriptor<HealthKitDailySummary>(
+                predicate: #Predicate { summary in
+                    summary.dayStart >= minDay && summary.dayStart <= maxDay
+                }
+            )
+        } else {
+            descriptor = FetchDescriptor<HealthKitDailySummary>()
+        }
+
         let existingRows = (try? context.fetch(descriptor)) ?? []
         var existingByDayStart: [Date: HealthKitDailySummary] = [:]
         for row in existingRows {
             existingByDayStart[calendar.startOfDay(for: row.dayStart)] = row
         }
 
-        let now = Date()
-        for dayStart in days {
-            let sleepTotals = sleepByDay[dayStart]
-            let sleepSeconds = sleepTotals.map { Int($0.sleepDurationSeconds.rounded()) }
-            let bedSeconds = sleepTotals.map { Int($0.timeInBedSeconds.rounded()) }
-
+        var inserted = 0
+        var updated = 0
+        for snapshot in snapshots {
+            let dayStart = calendar.startOfDay(for: snapshot.dayStart)
             if let row = existingByDayStart[dayStart] {
-                row.sleepDurationSeconds = sleepSeconds
-                row.timeInBedSeconds = bedSeconds
-                row.restingHeartRateBPM = restingHeartRateByDay[dayStart]
-                row.heartRateVariabilityMS = hrvByDay[dayStart]
-                row.activeEnergyKilocalories = activeEnergyByDay[dayStart]
-                row.stepCount = stepsByDay[dayStart]
-                row.bodyMassKilograms = bodyMassByDay[dayStart]
-                row.sourceUpdatedAt = now
-                row.updatedAt = now
+                row.sleepDurationSeconds = snapshot.sleepDurationSeconds
+                row.timeInBedSeconds = snapshot.timeInBedSeconds
+                row.restingHeartRateBPM = snapshot.restingHeartRateBPM
+                row.heartRateVariabilityMS = snapshot.heartRateVariabilityMS
+                row.activeEnergyKilocalories = snapshot.activeEnergyKilocalories
+                row.stepCount = snapshot.stepCount
+                row.bodyMassKilograms = snapshot.bodyMassKilograms
+                row.sourceUpdatedAt = sourceUpdatedAt
+                row.updatedAt = sourceUpdatedAt
+                updated += 1
             } else {
-                let row = HealthKitDailySummary(
-                    dayStart: dayStart,
-                    sleepDurationSeconds: sleepSeconds,
-                    timeInBedSeconds: bedSeconds,
-                    restingHeartRateBPM: restingHeartRateByDay[dayStart],
-                    heartRateVariabilityMS: hrvByDay[dayStart],
-                    activeEnergyKilocalories: activeEnergyByDay[dayStart],
-                    stepCount: stepsByDay[dayStart],
-                    bodyMassKilograms: bodyMassByDay[dayStart],
-                    sourceUpdatedAt: now,
-                    createdAt: now,
-                    updatedAt: now
+                context.insert(
+                    HealthKitDailySummary(
+                        dayStart: dayStart,
+                        sleepDurationSeconds: snapshot.sleepDurationSeconds,
+                        timeInBedSeconds: snapshot.timeInBedSeconds,
+                        restingHeartRateBPM: snapshot.restingHeartRateBPM,
+                        heartRateVariabilityMS: snapshot.heartRateVariabilityMS,
+                        activeEnergyKilocalories: snapshot.activeEnergyKilocalories,
+                        stepCount: snapshot.stepCount,
+                        bodyMassKilograms: snapshot.bodyMassKilograms,
+                        sourceUpdatedAt: sourceUpdatedAt,
+                        createdAt: sourceUpdatedAt,
+                        updatedAt: sourceUpdatedAt
+                    )
                 )
-                context.insert(row)
+                inserted += 1
             }
         }
 
         try context.save()
+        return HealthKitDailySummaryUpsertResult(inserted: inserted, updated: updated)
     }
 
     private func makeWindow(referenceDate: Date) -> (start: Date, end: Date) {

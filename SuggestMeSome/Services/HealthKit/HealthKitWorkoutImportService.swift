@@ -24,6 +24,16 @@ struct HealthKitWorkoutImportResult {
     }
 }
 
+struct HealthKitImportedWorkoutSnapshot {
+    let externalIdentifier: String
+    let startDate: Date
+    let durationSeconds: Int
+    let caloriesBurned: Int?
+    let sourceDisplayName: String
+    let activityTypeIdentifier: String
+    let activityTypeDisplayName: String
+}
+
 final class HealthKitWorkoutImportService {
     private let healthStore: HKHealthStore
     private let calendar: Calendar
@@ -49,6 +59,36 @@ final class HealthKitWorkoutImportService {
         let samples = await fetchWorkouts(start: window.start, end: window.end)
         let importableWorkouts = samples.filter { isSupportedForImport(activityType: $0.workoutActivityType) }
 
+        let snapshots = importableWorkouts.map { sample in
+            HealthKitImportedWorkoutSnapshot(
+                externalIdentifier: sample.uuid.uuidString,
+                startDate: sample.startDate,
+                durationSeconds: max(0, Int(sample.duration.rounded())),
+                caloriesBurned: caloriesBurned(from: sample),
+                sourceDisplayName: sourceDisplayLabel(for: sample),
+                activityTypeIdentifier: String(sample.workoutActivityType.rawValue),
+                activityTypeDisplayName: activityDisplayLabel(for: sample.workoutActivityType)
+            )
+        }
+
+        let upsert = try upsertImportedWorkouts(
+            context: context,
+            snapshots: snapshots
+        )
+        return HealthKitWorkoutImportResult(
+            scanned: importableWorkouts.count,
+            inserted: upsert.inserted,
+            updated: upsert.updated
+        )
+    }
+
+    @MainActor
+    @discardableResult
+    func upsertImportedWorkouts(
+        context: ModelContext,
+        snapshots: [HealthKitImportedWorkoutSnapshot],
+        importedAt: Date = Date()
+    ) throws -> (inserted: Int, updated: Int) {
         let existingWorkouts = (try? context.fetch(FetchDescriptor<Workout>())) ?? []
         var existingByExternalIdentifier: [String: Workout] = [:]
         for workout in existingWorkouts {
@@ -56,51 +96,42 @@ final class HealthKitWorkoutImportService {
             existingByExternalIdentifier[id] = workout
         }
 
-        let now = Date()
         var insertedCount = 0
         var updatedCount = 0
-        for sample in importableWorkouts {
-            let externalID = sample.uuid.uuidString
-            let sourceLabel = sourceDisplayLabel(for: sample)
-            let activityLabel = activityDisplayLabel(for: sample.workoutActivityType)
-
-            if let existing = existingByExternalIdentifier[externalID] {
+        for snapshot in snapshots {
+            if let existing = existingByExternalIdentifier[snapshot.externalIdentifier] {
                 existing.sourceType = .healthKitImported
-                existing.sourceExternalIdentifier = externalID
-                existing.sourceDisplayName = sourceLabel
-                existing.sourceWorkoutTypeIdentifier = String(sample.workoutActivityType.rawValue)
-                existing.sourceWorkoutTypeDisplayName = activityLabel
+                existing.sourceExternalIdentifier = snapshot.externalIdentifier
+                existing.sourceDisplayName = snapshot.sourceDisplayName
+                existing.sourceWorkoutTypeIdentifier = snapshot.activityTypeIdentifier
+                existing.sourceWorkoutTypeDisplayName = snapshot.activityTypeDisplayName
                 if existing.sourceImportedAt == nil {
-                    existing.sourceImportedAt = now
+                    existing.sourceImportedAt = importedAt
                 }
                 updatedCount += 1
                 continue
             }
 
             let workout = Workout(
-                date: sample.startDate,
-                startTime: sample.startDate,
-                durationSeconds: max(0, Int(sample.duration.rounded())),
-                caloriesBurned: caloriesBurned(from: sample),
+                date: snapshot.startDate,
+                startTime: snapshot.startDate,
+                durationSeconds: snapshot.durationSeconds,
+                caloriesBurned: snapshot.caloriesBurned,
                 comments: nil,
                 sourceType: .healthKitImported,
-                sourceExternalIdentifier: externalID,
-                sourceDisplayName: sourceLabel,
-                sourceWorkoutTypeIdentifier: String(sample.workoutActivityType.rawValue),
-                sourceWorkoutTypeDisplayName: activityLabel,
-                sourceImportedAt: now
+                sourceExternalIdentifier: snapshot.externalIdentifier,
+                sourceDisplayName: snapshot.sourceDisplayName,
+                sourceWorkoutTypeIdentifier: snapshot.activityTypeIdentifier,
+                sourceWorkoutTypeDisplayName: snapshot.activityTypeDisplayName,
+                sourceImportedAt: importedAt
             )
             context.insert(workout)
-            existingByExternalIdentifier[externalID] = workout
+            existingByExternalIdentifier[snapshot.externalIdentifier] = workout
             insertedCount += 1
         }
 
         try context.save()
-        return HealthKitWorkoutImportResult(
-            scanned: importableWorkouts.count,
-            inserted: insertedCount,
-            updated: updatedCount
-        )
+        return (inserted: insertedCount, updated: updatedCount)
     }
 
     private func makeWindow(referenceDate: Date) -> (start: Date, end: Date) {

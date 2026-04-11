@@ -96,6 +96,10 @@ final class Workout {
         sourceType == .healthKitImported
     }
 
+    var allowsFullStructureEditing: Bool {
+        !isHealthKitImported
+    }
+
     var sourceBadgeLabel: String? {
         guard isHealthKitImported else { return nil }
         let trimmed = sourceDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -1347,6 +1347,35 @@ Foundation work for HealthKit-powered recovery data import, workout import/expor
   - app-native writeback status (`Not exported` or exported timestamp) and HealthKit ID when available
 - Updated `HealthDataSettingsView` workout sync note to reflect that limited workout writeback is now active in this version
 
+#### Prompt 7 [Watch Groundwork and Feature 8 Hardening] — 2026-04-10
+- Added non-persisted shared watch foundation types in `Models/WatchCompanionTypes.swift`:
+  - `WatchWorkoutLaunchPayload`
+  - `WatchWorkoutProgressSnapshot`
+  - `WatchCompanionStatus` (+ `WatchCompanionAvailability`)
+- Added additive watch bridge seam in `Services/Watch/WatchCompanionBridge.swift`:
+  - `WatchCompanionBridge` protocol for future launch/progress payload transport
+  - `DefaultWatchCompanionBridge` iOS implementation that safely availability-guards `WatchConnectivity`, supports no-watch/no-companion states, and refreshes status without requiring a watch target
+- Updated `HealthDataSettingsView` with a new `Apple Watch` section:
+  - optional status surfacing (`Unavailable`, `Not Paired`, `Paired`, `Companion Installed`, `Reachable`)
+  - status message + last-checked timestamp + manual refresh action
+  - explicit future-facing copy: "Watch companion coming soon" (groundwork only, no shipped watch app)
+- Hardened Feature 8 service seams for deterministic behavior and testability:
+  - extracted daily-summary upsert seam in `HealthKitRecoverySyncService.upsertDailySummaries(...)` and routed sync through it
+  - extracted imported-workout upsert seam in `HealthKitWorkoutImportService.upsertImportedWorkouts(...)` and routed import through it
+  - added `WorkoutSaveHealthKitWritebackCoordinator` + `HealthKitWorkoutWriting` seam so writeback remains non-fatal and isolated from local workout persistence
+  - added `Workout.allowsFullStructureEditing` and wired `WorkoutEditView` to this guard for imported-workout limited edit behavior
+- Added `Feature8ValidationTests` (`SuggestMeSomeTests/Feature8ValidationTests.swift`) covering:
+  - `HealthKitDailySummary` day-keyed upsert behavior
+  - Daily Coach recommendation fallback when objective HealthKit insight is unavailable
+  - Daily Coach recommendation blending path when objective HealthKit insight exists
+  - imported workout dedupe/upsert by `sourceExternalIdentifier`
+  - imported workout limited-edit guard behavior
+  - writeback guard that imported workouts are not rewritten
+  - regression guard that workout persistence remains intact when writeback fails/unavailable
+- Verification run for this prompt:
+  - `/compile` not available in shell; used `xcodebuild ... build` equivalent and fixed prompt-introduced compile issues
+  - ran `xcodebuild ... test -only-testing:SuggestMeSomeTests/Feature8ValidationTests` successfully
+
 ---
 
 ## Project Setup

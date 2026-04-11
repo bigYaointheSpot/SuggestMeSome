@@ -26,7 +26,7 @@ struct WorkoutView: View {
     @AppStorage("healthkit.enabled") private var healthKitEnabled = false
     @AppStorage("healthkit.writeWorkouts") private var writeAppWorkoutsToHealthKit = false
 
-    private let healthKitWorkoutWriteService = HealthKitWorkoutWriteService()
+    private let writebackCoordinator = WorkoutSaveHealthKitWritebackCoordinator()
 
     // Timer
     @State private var isActive = false
@@ -458,21 +458,13 @@ struct WorkoutView: View {
     }
 
     private func triggerHealthKitWritebackIfNeeded(for workout: Workout) {
-        let shouldWrite = healthKitWorkoutWriteService.shouldAttemptWriteback(
-            for: workout,
-            healthKitEnabled: healthKitEnabled,
-            writebackEnabled: writeAppWorkoutsToHealthKit
-        )
-        guard shouldWrite else { return }
-
         Task { @MainActor in
-            do {
-                let result = try await healthKitWorkoutWriteService.writeWorkoutSummary(workout)
-                workout.healthKitWritebackIdentifier = result.writebackIdentifier
-                workout.healthKitExportedAt = result.exportedAt
-                try? modelContext.save()
-            } catch {
-                print("[F8] HealthKitWorkoutWriteService failed for workout \(workout.id): \(error)")
+            await writebackCoordinator.performNonFatalWritebackIfEligible(
+                for: workout,
+                healthKitEnabled: healthKitEnabled,
+                writebackEnabled: writeAppWorkoutsToHealthKit
+            ) {
+                try modelContext.save()
             }
         }
     }

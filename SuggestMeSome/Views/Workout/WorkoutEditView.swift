@@ -25,7 +25,7 @@ struct WorkoutEditView: View {
     @State private var showingSaveConfirmation = false
 
     private var isImportedWorkout: Bool {
-        workout.isHealthKitImported
+        !workout.allowsFullStructureEditing
     }
 
     init(workout: Workout) {
