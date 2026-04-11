@@ -524,6 +524,11 @@ struct DailyCoachView: View {
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .onAppear {
+            if let review = latestReview, !review.hasBeenSeen {
+                review.hasBeenSeen = true
+            }
+        }
     }
 
     private func weeklyReviewSummary(review: DailyCoachWeeklyReview) -> some View {

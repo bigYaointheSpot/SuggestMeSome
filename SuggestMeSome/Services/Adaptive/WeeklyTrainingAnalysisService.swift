@@ -156,6 +156,8 @@ enum WeeklyTrainingAnalysisService {
         AdaptiveFatigueDeloadService.generateProposals(from: analysis, context: context)
         // Feature 6: auto-apply conservative variation swaps via non-destructive overlays.
         AdaptiveVariationSwapService.generateAndApply(from: analysis, context: context)
+        // Feature 7: generate or update the Daily Coach weekly review for this program week.
+        DailyCoachWeeklyReviewService.generateOrUpdate(from: analysis, context: context)
 
         return analysis
     }
@@ -266,6 +268,8 @@ enum WeeklyTrainingAnalysisService {
             skippedProgramDuplicateWorkouts: 0,
             context: context
         )
+        // Feature 7: generate or update the Daily Coach weekly review for this standalone week.
+        DailyCoachWeeklyReviewService.generateOrUpdate(from: analysis, context: context)
 
         return analysis
     }

@@ -1183,6 +1183,25 @@ A program-first daily coaching system that collects readiness check-ins, surface
 - Base `TrainingProgram` data is never written to; standalone users see no action buttons (no prepared-draft logic applies to non-program sessions)
 - **Commit:** `feat: add daily coach prepared workout drafts`
 
+#### Prompt 7 [Weekly Coach Review and Feature 7 Hardening] — 2026-04-10
+- Added `DailyCoachWeeklyReviewService.swift` at `Services/Adaptive/DailyCoachWeeklyReviewService.swift`:
+  - `generateOrUpdate(from:context:)` upserts one `DailyCoachWeeklyReview` per `WeeklyTrainingAnalysis` (keyed on `sourceWeeklyAnalysisIDText = analysis.id.uuidString`); re-runs update text fields but never reset `hasBeenSeen`
+  - Program-week reviews derive: headline from fatigue/adherence tier, win from improving lift trend or best top-set outcome, watchout from critical/high fatigue or declining trend, next action from pending proposals count or trend status
+  - Standalone-week reviews use session count and fatigue for all four text fields, with deliberately simpler and lower-confidence tone
+  - All text assembly is deterministic string interpolation — no randomised or model-generated output
+- Integrated `DailyCoachWeeklyReviewService.generateOrUpdate` at the end of both `analyzeProgramWeek` and `analyzeStandaloneWeek` in `WeeklyTrainingAnalysisService`; runs after all Feature 6 proposal services so trend snapshots and proposals are available for text generation
+- Updated `DailyCoachView` Latest Weekly Review card: `.onAppear` marks `hasBeenSeen = true` on the latest review the first time the card is displayed, clearing the "New" badge without any explicit user action
+- Added `Feature7ValidationTests.swift` (`SuggestMeSomeTests/Feature7ValidationTests.swift`):
+  - Check-in create-vs-update: same-day mutation keeps one record; different-day creates two
+  - Recommendation engine: neutral readiness → `.runAsPlanned`; low readiness → `.trimOneBackoffSet`/`.reduceWorkingLoadsSlightly`; <30 min available → `.trimAccessories`; pain flagged → `.suggestManualVariationSwap`; no active program → standalone session type returned
+  - Readiness tier computation: strong composite → `.strong`; nil check-in → `.unknown`
+  - Draft-only guard: `DailyCoachWorkoutPreparationService.prepare` returns an in-memory `PreparedWorkoutDraft`; no `ProgramSessionExercise` rows written to the store; base exercise objects are not mutated
+  - Effort feedback: all three `WorkoutEffortFeedback` variants and `topSetRPE` persist correctly on `ExerciseEntry`
+  - Weekly review upsert: two calls on the same analysis produce one record with stable text; `hasBeenSeen` survives a re-generate; two distinct analyses produce two independent reviews
+  - Workout-save regression guard (two variants): workout saves cleanly when `DailyCoachCheckIn` and `DailyCoachWeeklyReview` data exist; full pipeline (outcome inference + weekly analysis + review generation) saves cleanly and preserves effort feedback on entries
+- `DailyCoachWeeklyReview` schema was introduced in Prompt 1; no new migrations required
+- **Commit:** `feat: complete daily coach weekly review and hardening`
+
 ---
 
 ## Project Setup
