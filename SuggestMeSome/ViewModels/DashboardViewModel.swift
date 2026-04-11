@@ -24,7 +24,6 @@ struct WeekBucket: Identifiable {
     var timeWindow: DashboardTimeWindow = .fourWeeks
     var navigateToEmptyWorkout: Bool = false
     var showingGeneratorSheet: Bool = false
-    var generatorSheetType: WorkoutGenerationType = .fullBody
     var pendingGeneratedWorkout: GeneratedWorkout? = nil
     var showingGeneratedWorkout: Bool = false
     var showingCompleteProgramSheet: Bool = false

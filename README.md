@@ -1440,6 +1440,28 @@ Incremental internal refactor to remove duplicate program-session-to-draft conve
 - Updated `GeneratorViews` to call the new request-based façade directly with minimal UI-surface changes
 - Reduced `WorkoutGeneratorService` to a thin compatibility adapter to preserve existing external call compatibility while removing the oversized single-file implementation
 
+#### Prompt 4 [Recommendation-First SuggestMeSome Flow] — 2026-04-10
+- Replaced the direct generate-preview flow with a staged generator pipeline:
+  - Step 1: configure session inputs
+  - Step 2: receive an intermediate session recommendation
+  - Step 3: optionally build the workout from that recommendation and start it
+- Added explicit per-generation input value types and UI wiring for:
+  - mode (`Full Body`, `Upper`, `Lower`, `Push`, `Pull`, `Arms/Shoulders`, `Recovery`, `Conditioning`, `Surprise Me`)
+  - goal (`strength`, `hypertrophy`, `general fitness`, `fat loss`, `recovery`, `conditioning`)
+  - equipment profile (`Full Gym`, `Home Gym`, `Dumbbells Only`, `Barbell + Rack Only`, `Hotel Gym`, `Bodyweight Only`)
+  - duration and intensity
+- Added `SuggestMeSomeSessionRecommendationService` as the recommendation-stage seam:
+  - resolves mode-to-generation request mapping
+  - applies lightweight goal/mode intensity adjustments
+  - returns recommendation metadata + concrete `SuggestMeSomeGenerationRequest` used by build step
+- Introduced `SuggestMeSomeGeneratorFlowViewModel` to own step state, persisted last-used values, recommendation generation, workout build, and shuffle behavior
+- Refactored generator UI from one large file into modular step/components:
+  - root flow coordinator (`GeneratorViews`)
+  - configuration and recommendation screens (`GeneratorStepViews`)
+  - reusable input controls (`GeneratorInputComponents`)
+  - build preview screen (`GeneratorBuildStepView`)
+- Updated home/workout and dashboard launch points to open the new staged generator flow directly (removing the old type-selection dialog entry path)
+
 ---
 
 ## Project Setup

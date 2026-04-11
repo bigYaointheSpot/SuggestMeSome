@@ -61,9 +61,7 @@ struct WorkoutsTab: View {
     @State private var workoutToDelete: Workout?
 
     // MARK: Generator flow
-    @State private var showingGeneratorDialog  = false
     @State private var showingGeneratorSheet   = false
-    @State private var generatorSheetType: WorkoutGenerationType = .fullBody
     @State private var pendingGeneratedWorkout: GeneratedWorkout?
     @State private var showingGeneratedWorkout = false
 
@@ -144,17 +142,6 @@ struct WorkoutsTab: View {
                     selectedExerciseNames: $selectedExerciseNames
                 )
             }
-            .confirmationDialog("What type of workout?", isPresented: $showingGeneratorDialog, titleVisibility: .visible) {
-                Button("Custom Workout") {
-                    generatorSheetType = .custom
-                    showingGeneratorSheet = true
-                }
-                Button("Full Body Workout") {
-                    generatorSheetType = .fullBody
-                    showingGeneratorSheet = true
-                }
-                Button("Cancel", role: .cancel) {}
-            }
             .sheet(isPresented: $showingGeneratorSheet, onDismiss: {
                 if pendingGeneratedWorkout != nil {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -162,7 +149,7 @@ struct WorkoutsTab: View {
                     }
                 }
             }) {
-                GeneratorSheetRootView(type: generatorSheetType) { gw in
+                GeneratorSheetRootView { gw in
                     pendingGeneratedWorkout = gw
                     showingGeneratorSheet = false
                 }
@@ -221,7 +208,7 @@ struct WorkoutsTab: View {
             }
 
             Button {
-                showingGeneratorDialog = true
+                showingGeneratorSheet = true
             } label: {
                 Label("SuggestMeSome", systemImage: "wand.and.stars")
                     .font(.subheadline.weight(.semibold))

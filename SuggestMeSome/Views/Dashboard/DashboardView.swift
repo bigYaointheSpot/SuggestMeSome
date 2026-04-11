@@ -146,7 +146,7 @@ struct DashboardView: View {
                     }
                 }
             }) {
-                GeneratorSheetRootView(type: viewModel.generatorSheetType) { gw in
+                GeneratorSheetRootView { gw in
                     viewModel.pendingGeneratedWorkout = gw
                     viewModel.showingGeneratorSheet = false
                 }
@@ -193,7 +193,6 @@ struct DashboardView: View {
                     viewModel.navigateToEmptyWorkout = true
                 }
                 quickStartButton(icon: "wand.and.stars", label: "Suggest", color: .purple) {
-                    viewModel.generatorSheetType = .fullBody
                     viewModel.showingGeneratorSheet = true
                 }
                 quickStartButton(
