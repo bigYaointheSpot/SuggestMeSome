@@ -7,24 +7,20 @@ struct SuggestMeSomeBuildStepView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                summaryHeader
+                sessionIdentityHeader
 
                 if let workout = viewModel.generatedWorkout {
                     if workout.exercises.isEmpty {
-                        ContentUnavailableView(
-                            "No Exercises Generated",
-                            systemImage: "dumbbell",
-                            description: Text("Try a different mode or a longer duration.")
-                        )
-                        .padding(.top, 40)
+                        emptyState(for: viewModel.recommendation?.mode)
+                            .padding(.top, 40)
                     } else {
                         ForEach(workout.exercises.indices, id: \.self) { index in
-                            exerciseCard(workout.exercises[index])
+                            exerciseCard(workout.exercises[index], role: exerciseRole(at: index, in: workout.exercises))
                         }
                         startButton(workout)
                     }
                 } else {
-                    ProgressView("Building workout...")
+                    ProgressView("Building session…")
                         .frame(maxWidth: .infinity)
                         .padding(.top, 40)
                 }
@@ -43,34 +39,74 @@ struct SuggestMeSomeBuildStepView: View {
         }
     }
 
-    private var summaryHeader: some View {
-        let request = viewModel.recommendation?.request
-        let duration = Int(request?.durationMinutes ?? 0)
-        let intensity = request?.intensity ?? viewModel.configuration.intensity
-        let count = viewModel.generatedWorkout?.exercises.count ?? 0
+    // MARK: - Session identity header
 
-        return HStack(spacing: 12) {
-            Label("\(duration)m", systemImage: "clock")
-            Text("·").foregroundStyle(.secondary)
-            Label("Intensity \(intensity)", systemImage: "bolt.fill")
-            Text("·").foregroundStyle(.secondary)
-            Label("\(count) \(count == 1 ? "exercise" : "exercises")", systemImage: "dumbbell")
+    private var sessionIdentityHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let recommendation = viewModel.recommendation {
+                Text(recommendation.title)
+                    .font(.title3.weight(.semibold))
+            }
+
+            HStack(spacing: 10) {
+                let request = viewModel.recommendation?.request
+                let duration = Int(request?.durationMinutes ?? Double(viewModel.configuration.durationMinutes))
+                let intensity = request?.intensity ?? viewModel.configuration.intensity
+                let count = viewModel.generatedWorkout?.exercises.count ?? 0
+
+                Label("\(duration) min", systemImage: "clock")
+                Text("·").foregroundStyle(.tertiary)
+                Label("Intensity \(intensity)", systemImage: "bolt.fill")
+                Text("·").foregroundStyle(.tertiary)
+                Label("\(count) \(count == 1 ? "exercise" : "exercises")", systemImage: "dumbbell")
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
         }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
+
+    // MARK: - Exercise role
+
+    private func exerciseRole(at index: Int, in exercises: [GeneratedExercise]) -> String {
+        let exercise = exercises[index]
+        switch exercise.exercise.exerciseType {
+        case .cardio:
+            return "Cardio"
+        case .compound:
+            let firstCompoundIndex = exercises.firstIndex { $0.exercise.exerciseType == .compound }
+            return firstCompoundIndex == index ? "Main Lift" : "Supporting"
+        case .isolation:
+            return "Isolation"
+        case .accessory:
+            return "Accessory"
+        }
+    }
+
+    private func roleColor(_ role: String) -> Color {
+        switch role {
+        case "Main Lift": return .blue
+        case "Supporting": return .orange
+        case "Cardio": return .red
+        default: return Color(.systemGray2)
+        }
+    }
+
+    // MARK: - Exercise cards
 
     @ViewBuilder
-    private func exerciseCard(_ exercise: GeneratedExercise) -> some View {
+    private func exerciseCard(_ exercise: GeneratedExercise, role: String) -> some View {
         if exercise.exercise.exerciseType == .cardio {
-            cardioCard(exercise)
+            cardioCard(exercise, role: role)
         } else {
-            strengthCard(exercise)
+            strengthCard(exercise, role: role)
         }
     }
 
-    private func cardioCard(_ exercise: GeneratedExercise) -> some View {
+    private func cardioCard(_ exercise: GeneratedExercise, role: String) -> some View {
         let totalSeconds = Int(exercise.effectiveTimeMinutes * 60)
         let mins = totalSeconds / 60
         let secs = totalSeconds % 60
@@ -87,13 +123,7 @@ struct SuggestMeSomeBuildStepView: View {
                 Text(durationText).font(.subheadline).foregroundStyle(.secondary)
             }
             Spacer()
-            Text("Cardio")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color(.tertiarySystemBackground))
-                .clipShape(Capsule())
+            roleLabel(role)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 12)
@@ -101,7 +131,7 @@ struct SuggestMeSomeBuildStepView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    private func strengthCard(_ exercise: GeneratedExercise) -> some View {
+    private func strengthCard(_ exercise: GeneratedExercise, role: String) -> some View {
         let warmupSets = exercise.sets.filter(\.isWarmup)
         let workingSets = exercise.sets.filter { !$0.isWarmup }
         let unit = exercise.sets.first?.unit ?? .lbs
@@ -110,13 +140,7 @@ struct SuggestMeSomeBuildStepView: View {
             HStack {
                 Text(exercise.exercise.name).font(.headline)
                 Spacer()
-                Text(exercise.exercise.exerciseType.rawValue.capitalized)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Color(.tertiarySystemBackground))
-                    .clipShape(Capsule())
+                roleLabel(role)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -160,6 +184,16 @@ struct SuggestMeSomeBuildStepView: View {
         )
     }
 
+    private func roleLabel(_ role: String) -> some View {
+        Text(role)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(roleColor(role))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(roleColor(role).opacity(0.12))
+            .clipShape(Capsule())
+    }
+
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
             .font(.caption2.weight(.semibold))
@@ -192,11 +226,39 @@ struct SuggestMeSomeBuildStepView: View {
         .background(Color(.systemBackground))
     }
 
+    // MARK: - Empty states
+
+    @ViewBuilder
+    private func emptyState(for mode: SuggestMeSomeSessionMode?) -> some View {
+        switch mode {
+        case .recovery:
+            ContentUnavailableView(
+                "No Recovery Exercises",
+                systemImage: "arrow.counterclockwise.heart",
+                description: Text("No recovery-compatible exercises matched your equipment profile. Try Full Gym or Home Gym.")
+            )
+        case .conditioning:
+            ContentUnavailableView(
+                "No Conditioning Exercises",
+                systemImage: "heart.circle",
+                description: Text("No cardio or conditioning exercises matched your equipment profile. Try Full Gym or Home Gym.")
+            )
+        default:
+            ContentUnavailableView(
+                "No Exercises Generated",
+                systemImage: "dumbbell",
+                description: Text("Try a different mode, equipment profile, or increase the duration.")
+            )
+        }
+    }
+
+    // MARK: - Start button
+
     private func startButton(_ workout: GeneratedWorkout) -> some View {
         Button {
             onStart(workout)
         } label: {
-            Label("Start This Workout", systemImage: "play.fill")
+            Label("Start Session", systemImage: "play.fill")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)

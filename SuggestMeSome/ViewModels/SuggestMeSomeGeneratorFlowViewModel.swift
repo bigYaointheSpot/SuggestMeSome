@@ -34,9 +34,9 @@ final class SuggestMeSomeGeneratorFlowViewModel {
 
     var currentStepTitle: String {
         switch step {
-        case .configure: return "Step 1: Configure"
-        case .recommendation: return "Step 2: Recommendation"
-        case .build: return "Step 3: Build Workout"
+        case .configure: return "Session Setup"
+        case .recommendation: return "Your Session"
+        case .build: return "Session Preview"
         }
     }
 

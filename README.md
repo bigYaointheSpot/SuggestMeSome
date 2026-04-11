@@ -1509,6 +1509,62 @@ Incremental internal refactor to remove duplicate program-session-to-draft conve
 
 ---
 
+#### Prompt 7 [SuggestMeSome Polish + Explainability Pass] — 2026-04-11
+
+Polished the end-to-end SuggestMeSome experience for coherence, trust, and clarity without redesigning the architecture.
+
+**Explainability additions:**
+- Added `reasonChips: [String]` and `wasRedirected: Bool` to `SuggestMeSomeSessionRecommendation` — structured metadata powering a new chip row in the recommendation UI
+- `buildReasonChips` in `SuggestMeSomeRecommendationService` builds compact per-factor chips: equipment profile, duration, intensity, blocked lift names, high-overlap indicator, mode-adjusted indicator, program-aware indicator
+- Conflict and redirect chips styled in an orange tint to distinguish them from neutral context chips
+
+**Recommendation step polish:**
+- Reason chips row (horizontal scroll) surfaces the key factors that shaped the recommendation at a glance
+- Session plan section replaces the three overlapping bullet sections (Movement Priorities, Exercise Families, Anchor Lifts) with a consolidated anchor-lifts chip row + up to 3 movement priorities
+- Redirect notice (orange callout) shown when mode was adjusted away from the user's configured choice, with the full rationale inline
+- Not-buildable state replaced with a named notice card ("Duration too short") with actionable copy instead of a disabled button
+- Build CTA changed from "Build Workout" to "Build This Session"
+
+**Summary and rationale copy rewrites:**
+- Removed the robotic "Inputs: mode X, goal Y, equipment Z, intensity N." opening from `rationaleText`
+- `summaryText` now provides mode-specific descriptive copy when no conflicts are present (e.g., "A balanced session covering all major muscle groups" for Full Body), and leads with human-readable conflict explanation when conflicts are present
+- Fixed "Recovery · Recovery" and "Conditioning · Conditioning" title duplication — `recommendationTitle` now deduplicates when mode and goal labels match
+
+**Build step polish:**
+- Session identity header added above the exercise list — shows the recommendation title and a duration/intensity/exercise-count stat row
+- Exercise role labels replace the generic exerciseType capsule ("compound" → "Main Lift" or "Supporting", "isolation" → "Isolation", "accessory" → "Accessory") — role color-coded (blue for main, orange for supporting)
+- Empty state copy differentiated by mode: recovery mode gets a recovery-specific message; conditioning gets a conditioning-specific message; default falls back to a generic suggestion
+- Start CTA changed from "Start This Workout" to "Start Session"
+
+**Navigation titles:**
+- "Step 1: Configure" → "Session Setup"
+- "Step 2: Recommendation" → "Your Session"
+- "Step 3: Build Workout" → "Session Preview"
+
+**Validation:**
+- Added `Feature9Prompt7PolishValidationTests.swift` with 9 focused tests covering:
+  - reason chips always include equipment, duration, and intensity
+  - reason chips include an "avoided" chip when a canonical lift is blocked
+  - "Mode adjusted" chip appears when wasRedirected is true
+  - `wasRedirected` is false with no conflict, true when mode changes
+  - Recovery and Conditioning title deduplication
+  - Summary is always descriptive and never starts with "Inputs:"
+  - Rationale no longer starts with the old "Inputs:" prefix
+- Updated `recentHardBenchExposureAvoidsHeavyBenchRecommendation` test to match new summary copy (checks for "Bench Press" presence rather than exact old phrase)
+
+**Files created:**
+- `SuggestMeSomeTests/Feature9Prompt7PolishValidationTests.swift`
+
+**Files edited:**
+- `SuggestMeSome/Services/Adaptive/SuggestMeSomeGenerationModels.swift`
+- `SuggestMeSome/Services/Adaptive/SuggestMeSomeRecommendationService.swift`
+- `SuggestMeSome/ViewModels/SuggestMeSomeGeneratorFlowViewModel.swift`
+- `SuggestMeSome/Views/Generator/GeneratorStepViews.swift`
+- `SuggestMeSome/Views/Generator/GeneratorBuildStepView.swift`
+- `SuggestMeSomeTests/Feature9RecommendationEngineValidationTests.swift`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

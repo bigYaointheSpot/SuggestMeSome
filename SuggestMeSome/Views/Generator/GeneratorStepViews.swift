@@ -108,6 +108,8 @@ struct SuggestMeSomeConfigurationStepView: View {
     }
 }
 
+// MARK: - Recommendation Step
+
 struct SuggestMeSomeRecommendationStepView: View {
     @Bindable var viewModel: SuggestMeSomeGeneratorFlowViewModel
     let onBuildWorkout: () -> Void
@@ -115,120 +117,179 @@ struct SuggestMeSomeRecommendationStepView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                recommendationCard
-                inputsSummaryCard
-
-                Button {
-                    onBuildWorkout()
-                } label: {
-                    Label("Build Workout", systemImage: "hammer.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.green)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                if let recommendation = viewModel.recommendation {
+                    recommendationCard(recommendation)
+                    buildArea(recommendation)
+                } else {
+                    ContentUnavailableView(
+                        "No Recommendation",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text("Go back and try different inputs to generate a session recommendation.")
+                    )
                 }
-                .disabled(!(viewModel.recommendation?.isBuildableIntoWorkout ?? false))
             }
             .padding()
         }
     }
 
-    @ViewBuilder
-    private var recommendationCard: some View {
-        if let recommendation = viewModel.recommendation {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("Recommended Session", systemImage: "lightbulb.max.fill")
-                    .font(.headline)
-                Text(recommendation.title)
-                    .font(.title3.weight(.semibold))
-                Text(recommendation.summary)
-                    .font(.subheadline.weight(.medium))
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(recommendation.rationale)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+    // MARK: - Recommendation card
 
-                Divider()
-
-                recommendationListSection(
-                    title: "Movement Priorities",
-                    values: recommendation.recommendedMovementPriorities
-                )
-                recommendationListSection(
-                    title: "Exercise Families",
-                    values: recommendation.candidateExerciseFamilies
-                )
-                recommendationListSection(
-                    title: "Anchor Lifts",
-                    values: recommendation.candidateAnchorLifts
-                )
-            }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        } else {
-            ContentUnavailableView(
-                "Recommendation Unavailable",
-                systemImage: "exclamationmark.triangle",
-                description: Text("Go back and re-run the session recommendation.")
-            )
-        }
-    }
-
-    private var inputsSummaryCard: some View {
-        let config = viewModel.configuration
-
-        return VStack(alignment: .leading, spacing: 8) {
-            Label("Session Inputs", systemImage: "slider.horizontal.3")
+    private func recommendationCard(_ recommendation: SuggestMeSomeSessionRecommendation) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            Label("Recommended Session", systemImage: "lightbulb.max.fill")
                 .font(.headline)
+                .foregroundStyle(.primary)
 
-            summaryRow("Mode", config.mode.title)
-            summaryRow("Goal", config.goal.title)
-            summaryRow("Equipment", config.equipmentProfile.title)
-            summaryRow("Duration", "\(config.durationMinutes) min")
-            summaryRow("Intensity", "\(config.intensity)")
+            // Session title
+            Text(recommendation.title)
+                .font(.title3.weight(.semibold))
+
+            // Reason chips — compact horizontal scroll row
+            if !recommendation.reasonChips.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(recommendation.reasonChips, id: \.self) { chip in
+                            reasonChip(chip)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+
+            Divider()
+
+            // Summary — plain-English "why this session"
+            Text(recommendation.summary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Redirect notice — shown only when mode was adjusted
+            if recommendation.wasRedirected {
+                redirectNotice(recommendation)
+            }
+
+            // Session plan section
+            if recommendation.isBuildableIntoWorkout {
+                Divider()
+                sessionPlanSection(recommendation)
+            }
         }
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    private func summaryRow(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-        }
+    private func reasonChip(_ text: String) -> some View {
+        let isConflict = text.contains("avoided") || text == "Mode adjusted"
+            || text == "High recent overlap" || text == "Program-aware"
+
+        return Text(text)
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(isConflict ? Color.orange.opacity(0.15) : Color(.tertiarySystemBackground))
+            .foregroundStyle(isConflict ? Color.orange : Color.secondary)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().stroke(
+                    isConflict ? Color.orange.opacity(0.35) : Color(.separator),
+                    lineWidth: 0.5
+                )
+            )
     }
 
-    private func recommendationListSection(title: String, values: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
+    private func redirectNotice(_ recommendation: SuggestMeSomeSessionRecommendation) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .padding(.top, 2)
+            Text(recommendation.rationale)
+                .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
 
-            if values.isEmpty {
-                Text("No specific targets.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else {
-                ForEach(values, id: \.self) { value in
-                    HStack(alignment: .top, spacing: 6) {
-                        Text("•")
-                            .foregroundStyle(.secondary)
-                        Text(value)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+    private func sessionPlanSection(_ recommendation: SuggestMeSomeSessionRecommendation) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("SESSION PLAN")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+
+            // Key lifts as chips
+            if !recommendation.candidateAnchorLifts.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(recommendation.candidateAnchorLifts, id: \.self) { lift in
+                        Text(lift)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue.opacity(0.12))
+                            .foregroundStyle(Color.blue)
+                            .clipShape(Capsule())
                     }
                 }
             }
+
+            // Movement priorities (up to 3)
+            ForEach(Array(recommendation.recommendedMovementPriorities.prefix(3)), id: \.self) { priority in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green.opacity(0.7))
+                        .padding(.top, 1)
+                    Text(priority)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
+    }
+
+    // MARK: - Build area
+
+    @ViewBuilder
+    private func buildArea(_ recommendation: SuggestMeSomeSessionRecommendation) -> some View {
+        if recommendation.isBuildableIntoWorkout {
+            Button {
+                onBuildWorkout()
+            } label: {
+                Label("Build This Session", systemImage: "hammer.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.green)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        } else {
+            notBuildableNotice
+        }
+    }
+
+    private var notBuildableNotice: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "clock.badge.exclamationmark")
+                .font(.title3)
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Duration too short")
+                    .font(.subheadline.weight(.semibold))
+                Text("Go back and set at least 20 minutes to build a session.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }

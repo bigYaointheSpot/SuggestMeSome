@@ -135,6 +135,11 @@ struct SuggestMeSomeSessionRecommendation {
     let title: String
     let summary: String
     let rationale: String
+    /// Short explainability chips surfaced in the recommendation UI.
+    /// Each chip is a compact phrase (2–5 words) describing a factor that shaped this recommendation.
+    let reasonChips: [String]
+    /// True when the final session mode differs from the user's configured mode.
+    let wasRedirected: Bool
     let mode: SuggestMeSomeSessionMode
     let goal: SuggestMeSomeGenerationGoal
     let recommendedMovementPriorities: [String]

@@ -89,6 +89,17 @@ struct SuggestMeSomeRecommendationService {
             sessionMode: finalMode
         ) : nil
 
+        let chips = buildReasonChips(
+            equipmentProfile: configuration.equipmentProfile,
+            durationMinutes: configuration.durationMinutes,
+            adjustedIntensity: adjustedIntensity,
+            configuredMode: configuration.mode,
+            finalMode: finalMode,
+            blockedLifts: blockedLifts,
+            overlapCount: overlapCount,
+            hasProgramConflict: programConflict.hasConflict
+        )
+
         return SuggestMeSomeSessionRecommendation(
             title: recommendationTitle(mode: finalMode, goal: finalGoal),
             summary: summaryText(
@@ -109,6 +120,8 @@ struct SuggestMeSomeRecommendationService {
                 overlapCount: overlapCount,
                 programConflictReason: programConflict.reason
             ),
+            reasonChips: chips,
+            wasRedirected: finalMode != configuration.mode,
             mode: finalMode,
             goal: finalGoal,
             recommendedMovementPriorities: movementPriorities,
@@ -630,7 +643,9 @@ struct SuggestMeSomeRecommendationService {
     }
 
     private func recommendationTitle(mode: SuggestMeSomeSessionMode, goal: SuggestMeSomeGenerationGoal) -> String {
-        "\(mode.title) · \(goal.title)"
+        // Avoid redundant "Recovery · Recovery" or "Conditioning · Conditioning" labels.
+        if mode.title == goal.title { return mode.title }
+        return "\(mode.title) · \(goal.title)"
     }
 
     private func summaryText(
@@ -642,22 +657,45 @@ struct SuggestMeSomeRecommendationService {
         buildable: Bool
     ) -> String {
         guard buildable else {
-            return "At least 20 minutes is required to build a quality session from this recommendation."
+            return "Increase the duration to at least 20 minutes to build a session from this recommendation."
         }
 
-        var parts: [String] = ["\(durationMinutes)-minute \(mode.title.lowercased()) recommendation."]
+        var parts: [String] = []
 
         if !blockedLifts.isEmpty {
-            let liftLabel = blockedLifts.map(\.displayName).sorted().joined(separator: ", ")
-            parts.append("Avoiding heavy \(liftLabel) due to recent hard exposure.")
+            let liftLabel = blockedLifts.map(\.displayName).sorted().joined(separator: " and ")
+            parts.append("Recent hard \(liftLabel) exposure — steering away from high-intensity work on \(blockedLifts.count == 1 ? "it" : "these") today.")
         }
 
         if overlapCount >= 2 {
-            parts.append("Recent muscle overlap is high, so volume is biased toward recovery-friendly choices.")
+            parts.append("Your last session covered similar muscle groups, so today's volume is kept recovery-friendly.")
         }
 
         if hasProgramConflict {
-            parts.append("Active program context suggests avoiding obvious redundant overlap today.")
+            parts.append("This recommendation avoids redundant overlap with your active training program.")
+        }
+
+        if parts.isEmpty {
+            switch mode {
+            case .recovery:
+                return "A light session to maintain movement quality and let hard-worked muscles recover."
+            case .conditioning:
+                return "A conditioning session to raise your heart rate and build metabolic fitness."
+            case .fullBody:
+                return "A balanced session covering all major muscle groups."
+            case .upper:
+                return "An upper-body session emphasizing horizontal push, pull, and vertical press patterns."
+            case .lower:
+                return "A lower-body session centered on knee-dominant and hip-hinge patterns."
+            case .push:
+                return "A pressing session targeting chest, shoulders, and triceps."
+            case .pull:
+                return "A pulling session targeting back, rear delts, and biceps."
+            case .armsShoulders:
+                return "A focused session for shoulder and arm development."
+            case .surpriseMe:
+                return "A mixed session selected based on your current training context."
+            }
         }
 
         return parts.joined(separator: " ")
@@ -673,21 +711,21 @@ struct SuggestMeSomeRecommendationService {
         overlapCount: Int,
         programConflictReason: String?
     ) -> String {
-        var reasons: [String] = [
-            "Inputs: mode \(configuredMode.title), goal \(goal.title), equipment \(equipmentProfile.title), intensity \(adjustedIntensity)."
-        ]
+        var reasons: [String] = []
 
         if finalMode != configuredMode {
-            reasons.append("Mode shifted to \(finalMode.title) to reduce near-term fatigue conflict.")
+            reasons.append("Session shifted from \(configuredMode.title) to \(finalMode.title) to reduce near-term fatigue conflict.")
+        } else {
+            reasons.append("\(finalMode.title) recommended for your \(goal.title.lowercased()) goal at intensity \(adjustedIntensity).")
         }
 
         if !blockedLifts.isEmpty {
-            let blocked = blockedLifts.map(\.displayName).sorted().joined(separator: ", ")
-            reasons.append("Heavy \(blocked) exposure was detected in recent workouts.")
+            let blocked = blockedLifts.map(\.displayName).sorted().joined(separator: " and ")
+            reasons.append("Recent hard exposure on \(blocked) — avoided in today's anchor selection.")
         }
 
         if overlapCount >= 2 {
-            reasons.append("Recent exercise history shows substantial muscle overlap within 48 hours.")
+            reasons.append("Recent history shows substantial muscle overlap within 48 hours.")
         }
 
         if let programConflictReason {
@@ -695,6 +733,41 @@ struct SuggestMeSomeRecommendationService {
         }
 
         return reasons.joined(separator: " ")
+    }
+
+    private func buildReasonChips(
+        equipmentProfile: SuggestMeSomeEquipmentProfile,
+        durationMinutes: Int,
+        adjustedIntensity: Int,
+        configuredMode: SuggestMeSomeSessionMode,
+        finalMode: SuggestMeSomeSessionMode,
+        blockedLifts: Set<CanonicalLift>,
+        overlapCount: Int,
+        hasProgramConflict: Bool
+    ) -> [String] {
+        var chips: [String] = []
+
+        chips.append(equipmentProfile.title)
+        chips.append("\(durationMinutes) min")
+        chips.append("Intensity \(adjustedIntensity)")
+
+        if finalMode != configuredMode {
+            chips.append("Mode adjusted")
+        }
+
+        for lift in blockedLifts.map(\.displayName).sorted() {
+            chips.append("\(lift) avoided")
+        }
+
+        if overlapCount >= 2 {
+            chips.append("High recent overlap")
+        }
+
+        if hasProgramConflict {
+            chips.append("Program-aware")
+        }
+
+        return chips
     }
 
     // MARK: - Utility helpers
