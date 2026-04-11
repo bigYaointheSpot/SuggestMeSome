@@ -12,6 +12,15 @@ import SwiftData
 
 struct ContentView: View {
     @State private var selectedTab = 0
+    @AppStorage("appColorScheme") private var appColorScheme: String = "system"
+
+    private var preferredColorScheme: ColorScheme? {
+        switch appColorScheme {
+        case "light": return .light
+        case "dark":  return .dark
+        default:      return nil
+        }
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -35,7 +44,13 @@ struct ContentView: View {
                     Label("Training Programs", systemImage: "list.clipboard")
                 }
                 .tag(3)
+            SettingsTab()
+                .tabItem {
+                    Label("Settings", systemImage: "gear")
+                }
+                .tag(4)
         }
+        .preferredColorScheme(preferredColorScheme)
     }
 }
 
@@ -126,15 +141,6 @@ struct WorkoutsTab: View {
             }
             .navigationTitle("SuggestMeSome")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Image(systemName: "gear")
-                    }
-                }
-            }
             .sheet(isPresented: $showingExerciseFilter) {
                 ExerciseFilterSheet(
                     muscleGroups: muscleGroups,

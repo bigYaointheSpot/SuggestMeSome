@@ -1606,6 +1606,42 @@ Extended the SuggestMeSome generation pipeline to handle equipment-constrained p
 
 ---
 
+#### Prompt 9 [Settings Tab Migration + New Settings] — 2026-04-11
+
+Migrated the settings menu from a gear-icon push inside the Workouts tab into a dedicated first-class Settings tab (rightmost in the tab bar). Redesigned the settings screen to be cleaner and less bloated, and added four new user-configurable preferences.
+
+**Navigation changes:**
+- Added `SettingsTab` as the 5th tab in `ContentView` with a `gear` icon; removed the gear icon toolbar button from `WorkoutsTab`
+- Appearance color scheme preference (`@AppStorage("appColorScheme")`) wired up to `.preferredColorScheme()` on the root `TabView` so the setting takes effect app-wide immediately
+
+**New settings:**
+- **Appearance** — System / Light / Dark segmented picker stored in `@AppStorage("appColorScheme")`
+- **Rest Timer Default** — navigation-link picker (Off, 30 s, 1 min, 90 s, 2 min, 3 min, 5 min) stored in `@AppStorage("defaultRestTimerSeconds")`; defaults to 90 seconds
+- **Preferred Training Days** — day-of-week multi-select stored as a bitmask integer in `@AppStorage("coachPreferredDays")`; the Daily Coach can read this preference to prioritise workout suggestions; defaults to Mon/Wed/Fri
+- **Export Workout Data** — generates a CSV file (date, duration, exercise, muscle group, set, weight, unit, reps, PR) and surfaces it via `ShareLink`
+
+**Settings screen structure:**
+- Preferences section: Default Weight Unit + Appearance
+- Workout section: Rest Timer Default + Preferred Training Days
+- Quick Links: Personal Records, Health Data, Manage Exercises, Export Workout Data
+- Data Management: Delete by Date Range, Delete All (unchanged functionality)
+- Card-like footer row with app icon, version `1.0`, and "Created by Alex Yao in partnership with Claude"
+
+**De-bloat — exercise library collapsed:**
+- The inline muscle-group CRUD sections that previously appeared directly in the settings list are now behind a single "Manage Exercises" NavigationLink
+- Extracted into `ManageExercisesView.swift` (all CRUD state, dialogs, and helpers unchanged)
+
+**New files:**
+- `SuggestMeSome/Views/Settings/SettingsTab.swift` — main settings tab, `CoachScheduleView`, `DeleteByRangeSheet`
+- `SuggestMeSome/Views/Settings/ManageExercisesView.swift` — exercise library CRUD (extracted from old SettingsView)
+- `SuggestMeSome/Views/Settings/DataExportView.swift` — CSV export with `ShareLink`
+
+**Files modified:**
+- `ContentView.swift` — added Settings tab, removed gear icon toolbar, wired appearance preference
+- `SettingsView.swift` — cleared (superseded by the above three files)
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
