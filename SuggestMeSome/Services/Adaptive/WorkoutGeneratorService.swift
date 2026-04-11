@@ -20,6 +20,21 @@ struct GeneratedExercise {
     let exercise: Exercise
     let sets: [GeneratedSet]
     let effectiveTimeMinutes: Double
+    /// Present when this exercise replaced a preferred exercise due to equipment constraints.
+    /// Example: "Dumbbell Bench Press (replaces Bench Press — dumbbell variation)"
+    let substitutionNote: String?
+
+    init(
+        exercise: Exercise,
+        sets: [GeneratedSet],
+        effectiveTimeMinutes: Double,
+        substitutionNote: String? = nil
+    ) {
+        self.exercise = exercise
+        self.sets = sets
+        self.effectiveTimeMinutes = effectiveTimeMinutes
+        self.substitutionNote = substitutionNote
+    }
 }
 
 struct GeneratedWorkout {
@@ -27,6 +42,22 @@ struct GeneratedWorkout {
     let totalEstimatedMinutes: Double
     let intensity: Int
     let generationType: WorkoutGenerationType
+    /// Present when the session shape was adapted due to equipment constraints.
+    let adaptationNote: String?
+
+    init(
+        exercises: [GeneratedExercise],
+        totalEstimatedMinutes: Double,
+        intensity: Int,
+        generationType: WorkoutGenerationType,
+        adaptationNote: String? = nil
+    ) {
+        self.exercises = exercises
+        self.totalEstimatedMinutes = totalEstimatedMinutes
+        self.intensity = intensity
+        self.generationType = generationType
+        self.adaptationNote = adaptationNote
+    }
 }
 
 // MARK: - Compatibility Adapter

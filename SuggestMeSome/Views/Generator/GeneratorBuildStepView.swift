@@ -10,6 +10,10 @@ struct SuggestMeSomeBuildStepView: View {
                 sessionIdentityHeader
 
                 if let workout = viewModel.generatedWorkout {
+                    if let note = workout.adaptationNote {
+                        adaptationBanner(note)
+                    }
+
                     if workout.exercises.isEmpty {
                         emptyState(for: viewModel.recommendation?.mode)
                             .padding(.top, 40)
@@ -67,6 +71,29 @@ struct SuggestMeSomeBuildStepView: View {
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - Adaptation banner
+
+    private func adaptationBanner(_ note: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "wand.and.stars")
+                .font(.subheadline)
+                .foregroundStyle(.purple)
+                .padding(.top, 1)
+            Text(note)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.purple.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.purple.opacity(0.2), lineWidth: 0.5)
+        )
     }
 
     // MARK: - Exercise role
@@ -137,10 +164,18 @@ struct SuggestMeSomeBuildStepView: View {
         let unit = exercise.sets.first?.unit ?? .lbs
 
         return VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(exercise.exercise.name).font(.headline)
-                Spacer()
-                roleLabel(role)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(exercise.exercise.name).font(.headline)
+                    Spacer()
+                    roleLabel(role)
+                }
+                if let note = exercise.substitutionNote {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.purple.opacity(0.8))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)

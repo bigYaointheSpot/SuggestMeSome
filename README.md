@@ -1565,6 +1565,47 @@ Polished the end-to-end SuggestMeSome experience for coherence, trust, and clari
 
 ---
 
+#### Prompt 8 [Equipment-Aware Substitution + Fallback Session Generation] — 2026-04-11
+
+Extended the SuggestMeSome generation pipeline to handle equipment-constrained profiles gracefully: instead of silently dropping exercises, the engine now substitutes compatible alternatives and surfaces the adaptation to the user.
+
+**Substitution service:**
+- Added `SuggestMeSomeExerciseSubstitutionService` with a hand-curated substitution table covering ~35 exercises across all major movement patterns: horizontal push (bench variants), vertical push (OHP variants), horizontal pull, vertical pull, squat variants, hinge (deadlift variants), and isolation/accessory work
+- `rankedSubstitutes(for:equipmentProfile:availableExercises:)` returns candidates that are (a) in the substitution table for the removed exercise, (b) compatible with the active equipment profile, and (c) present in the seeded exercise database — preventing phantom exercises from entering the pool
+- `adaptationNote(removedCompoundCount:substitutionCount:canBuildSession:equipmentProfile:mode:goal:)` generates mode-aware adaptation copy per equipment profile (bodyweight-only, dumbbells-only, hotel gym, home gym, barbell/rack-only) describing what was swapped and why
+
+**Generation pipeline integration:**
+- `SuggestMeSomeGenerationService` now calls `applySubstitutions` after equipment filtering in `generateCustomWorkout`: identifies removed compound exercises, finds compatible substitutes from the same selected-muscle-group pool, and augments the filtered pool with them
+- Per-exercise substitution notes tracked in a `[PersistentIdentifier: String]` dictionary and re-attached after prescription
+- `generateFullBodyWorkout` detects filtered compound count and attaches an adaptation note when equipment constraints materially reduce available compound movements
+- Full-Gym profiles skip substitution entirely (no overhead)
+
+**Output model extensions:**
+- `GeneratedExercise` gained `substitutionNote: String?` (present when the exercise replaced a preferred exercise due to equipment constraints)
+- `GeneratedWorkout` gained `adaptationNote: String?` (present when the session shape was adapted due to equipment constraints)
+- Both fields default to `nil` so all existing call sites remain unchanged
+
+**UI surfaces:**
+- `GeneratorBuildStepView` shows a purple adaptation banner at the top of the exercise list when `adaptationNote` is set — wand-and-stars icon, purple tint, concise explanation
+- Per-exercise substitution labels rendered as a small purple caption below the exercise name in the strength card header
+
+**Validation:**
+- Added `Feature9Prompt8EquipmentSubstitutionTests.swift` with 14 tests:
+  - Substitution table coverage: bench press → dumbbell bench; barbell row → dumbbell row; OHP → dumbbell press; squat → goblet squat; deadlift → Romanian deadlift; cable fly → dumbbell fly; lat pulldown → bodyweight/TRX row
+  - Adaptation note tests: bodyweight-only note contains "bodyweight", dumbbells-only note contains "dumbbell", hotel gym note is non-nil, full gym returns nil note
+  - End-to-end tests: no substitution note in full gym, substitution note present in dumbbell profile for bench-focused session, session is still buildable (non-empty exercises) after equipment filtering with substitution
+
+**Files created:**
+- `SuggestMeSome/Services/Adaptive/SuggestMeSomeExerciseSubstitutionService.swift`
+- `SuggestMeSomeTests/Feature9Prompt8EquipmentSubstitutionTests.swift`
+
+**Files edited:**
+- `SuggestMeSome/Services/Adaptive/WorkoutGeneratorService.swift`
+- `SuggestMeSome/Services/Adaptive/SuggestMeSomeGenerationService.swift`
+- `SuggestMeSome/Views/Generator/GeneratorBuildStepView.swift`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
