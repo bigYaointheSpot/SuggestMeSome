@@ -1378,6 +1378,26 @@ Foundation work for HealthKit-powered recovery data import, workout import/expor
 
 ---
 
+### Feature 9 — Shared Draft Builder + Grouping Extraction
+
+**Status:** Complete
+
+Incremental internal refactor to remove duplicate program-session-to-draft conversion logic while preserving existing behavior in program and Daily Coach workout launch flows.
+
+---
+
+#### Prompt 1 [Shared Draft Builder + Grouping Extraction] — 2026-04-10
+- Added `ProgramSessionRowGroupingService` (`SuggestMeSome/Services/Adaptive/ProgramSessionRowGroupingService.swift`) to centralize contiguous row grouping and top/backoff group coalescing for ordered `ProgramSessionExercise` rows
+- Added `ProgramWorkoutDraftBuilder` (`SuggestMeSome/Services/Adaptive/ProgramWorkoutDraftBuilder.swift`) to centralize conversion from grouped program rows into `DraftExerciseEntry`:
+  - shared cardio-row detection and duration mapping
+  - shared set expansion + merged set numbering across grouped rows
+  - shared prescribed metadata snapshot preservation on draft entries (`sourceProgramSessionExerciseID`, prescribed sets/reps/load/effort fields)
+- Refactored `WorkoutView` to replace local `buildDraftEntries`/grouping helpers with `ProgramWorkoutDraftBuilder.buildEntries(...)`, preserving personal-record unit lookup behavior via a call-site unit provider closure
+- Refactored `DailyCoachWorkoutPreparationService` to use the same shared builder for all prepared-draft generation paths and to use `ProgramSessionRowGroupingService` for accessory/backoff trim grouping decisions
+- No intended behavior changes: prepared Daily Coach drafts, program workout prefill, cardio handling, and warmup/top/backoff grouping behavior remain aligned with prior logic
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

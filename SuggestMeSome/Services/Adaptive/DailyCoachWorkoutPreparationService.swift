@@ -55,7 +55,7 @@ struct DailyCoachWorkoutPreparationService {
     // MARK: - trimAccessories
 
     private static func applyTrimAccessories(_ ordered: [ProgramSessionExercise]) -> PreparedWorkoutDraft {
-        let groups = groupExercises(ordered)
+        let groups = ProgramSessionRowGroupingService.group(ordered)
 
         // Identify accessory groups and score them (lower value = lower priority = trim first).
         var accessoryItems: [(index: Int, priority: Int, name: String)] = []
@@ -115,7 +115,7 @@ struct DailyCoachWorkoutPreparationService {
 
         if backoffRows.isEmpty {
             // Fallback: trim the last set in the primary block when no explicit backoff rows exist.
-            let groups = groupExercises(ordered)
+            let groups = ProgramSessionRowGroupingService.group(ordered)
             if let primaryGroup = groups.first(where: { $0.contains { !$0.isWarmup } }),
                primaryGroup.count > 1,
                let rowToRemove = primaryGroup.last {
@@ -219,104 +219,10 @@ struct DailyCoachWorkoutPreparationService {
 
     // MARK: - Draft Building
 
-    /// Converts resolved `ProgramSessionExercise` rows into `DraftExerciseEntry` values.
-    /// Mirrors the grouping and set-merge logic in `WorkoutView.buildDraftEntries`,
-    /// using `AppPreferences.defaultWeightUnit` in place of a personal-record lookup.
     private static func buildDraftEntries(from exercises: [ProgramSessionExercise]) -> [DraftExerciseEntry] {
-        let ordered = exercises.sorted { $0.orderIndex < $1.orderIndex }
-        let groups = groupExercises(ordered)
-
-        return groups.enumerated().map { index, rows in
-            let anchor = rows.first(where: { !$0.isWarmup }) ?? rows[0]
-            let unit = AppPreferences.defaultWeightUnit
-
-            // Cardio detection (mirrors WorkoutView heuristic).
-            if anchor.targetSets == nil && anchor.targetPercentage1RM == nil && anchor.targetRPE != nil {
-                let totalSeconds = (anchor.targetReps ?? 0) * 60
-                let mins = totalSeconds / 60
-                let secs = totalSeconds % 60
-                return DraftExerciseEntry(
-                    exerciseName: anchor.exerciseName,
-                    unit: unit,
-                    orderIndex: index,
-                    sets: [],
-                    isCardio: true,
-                    cardioMinutesText: mins > 0 ? "\(mins)" : "",
-                    cardioSecondsText: secs > 0 ? "\(secs)" : "",
-                    sourceProgramSessionExerciseID: anchor.id,
-                    prescribedTargetSets: anchor.targetSets,
-                    prescribedTargetReps: anchor.targetReps,
-                    prescribedTargetPercentage1RM: anchor.targetPercentage1RM,
-                    prescribedTargetRPE: anchor.targetRPE,
-                    prescribedTargetRIR: anchor.targetRIR,
-                    prescribedWeight: anchor.prescribedWeight,
-                    prescribedWeightUnit: anchor.prescribedWeightUnit,
-                    prescribedWorkingSetStyle: anchor.workingSetStyle,
-                    prescribedTargetEffortType: anchor.targetEffortType
-                )
-            }
-
-            var setNumber = 1
-            var mergedSets: [DraftSet] = []
-            for row in rows {
-                let rowSetCount = max(1, row.targetSets ?? (row.isWarmup ? 1 : 3))
-                let repsText = row.targetReps.map { "\($0)" } ?? ""
-                let weightText = formatWeight(row.prescribedWeight)
-                for _ in 0..<rowSetCount {
-                    mergedSets.append(DraftSet(
-                        setNumber: setNumber,
-                        repsText: repsText,
-                        weightText: weightText,
-                        isWarmup: row.isWarmup
-                    ))
-                    setNumber += 1
-                }
-            }
-
-            return DraftExerciseEntry(
-                exerciseName: anchor.exerciseName,
-                unit: unit,
-                orderIndex: index,
-                sets: mergedSets,
-                sourceProgramSessionExerciseID: anchor.id,
-                prescribedTargetSets: anchor.targetSets,
-                prescribedTargetReps: anchor.targetReps,
-                prescribedTargetPercentage1RM: anchor.targetPercentage1RM,
-                prescribedTargetRPE: anchor.targetRPE,
-                prescribedTargetRIR: anchor.targetRIR,
-                prescribedWeight: anchor.prescribedWeight,
-                prescribedWeightUnit: anchor.prescribedWeightUnit,
-                prescribedWorkingSetStyle: anchor.workingSetStyle,
-                prescribedTargetEffortType: anchor.targetEffortType
-            )
+        ProgramWorkoutDraftBuilder.buildEntries(from: exercises) { _ in
+            AppPreferences.defaultWeightUnit
         }
-    }
-
-    // MARK: - Exercise Grouping
-
-    /// Groups ordered exercises into blocks using the same logic as `WorkoutView.groupProgramExercises`.
-    private static func groupExercises(_ ordered: [ProgramSessionExercise]) -> [[ProgramSessionExercise]] {
-        var groups: [[ProgramSessionExercise]] = []
-        for exercise in ordered {
-            guard let lastGroup = groups.last, let last = lastGroup.last else {
-                groups.append([exercise])
-                continue
-            }
-            let shareTopBackoffGroup = {
-                guard let a = last.topBackoffGroupID, let b = exercise.topBackoffGroupID else { return false }
-                return a == b
-            }()
-            let contiguousSameExercise =
-                last.topBackoffGroupID == nil &&
-                exercise.topBackoffGroupID == nil &&
-                last.exerciseName == exercise.exerciseName
-            if shareTopBackoffGroup || contiguousSameExercise {
-                groups[groups.count - 1].append(exercise)
-            } else {
-                groups.append([exercise])
-            }
-        }
-        return groups
     }
 
     // MARK: - Accessory Detection
@@ -349,4 +255,5 @@ struct DailyCoachWorkoutPreparationService {
         guard let w, w > 0 else { return "" }
         return w.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(w)) : String(format: "%.1f", w)
     }
+
 }
