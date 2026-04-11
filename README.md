@@ -1102,9 +1102,9 @@ Every focus defines sessions for each valid frequency from its minimum through 6
 
 ### Feature 7 — Daily Coach
 
-**Status:** In Progress
+**Status:** Complete
 
-A program-first daily coaching system that collects readiness check-ins, surfaces weekly reviews, and will use check-in data to personalize daily session suggestions.
+A program-first daily coaching system that collects readiness check-ins, surfaces weekly reviews, and uses check-in data to personalize daily session suggestions.
 
 ---
 
