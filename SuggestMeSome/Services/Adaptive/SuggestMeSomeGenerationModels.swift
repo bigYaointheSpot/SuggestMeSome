@@ -9,6 +9,9 @@ struct SuggestMeSomeGenerationRequest {
     let selectedExercises: [Exercise]
     let goal: SuggestMeSomeGenerationGoal?
     let equipmentProfile: SuggestMeSomeEquipmentProfile?
+    /// Session mode carried from the recommendation stage.
+    /// Used by the generation service to apply mode-specific workout shaping.
+    let sessionMode: SuggestMeSomeSessionMode?
 
     init(
         generationType: WorkoutGenerationType,
@@ -17,7 +20,8 @@ struct SuggestMeSomeGenerationRequest {
         selectedMuscleGroups: [MuscleGroup] = [],
         selectedExercises: [Exercise] = [],
         goal: SuggestMeSomeGenerationGoal? = nil,
-        equipmentProfile: SuggestMeSomeEquipmentProfile? = nil
+        equipmentProfile: SuggestMeSomeEquipmentProfile? = nil,
+        sessionMode: SuggestMeSomeSessionMode? = nil
     ) {
         self.generationType = generationType
         self.durationMinutes = durationMinutes
@@ -26,6 +30,7 @@ struct SuggestMeSomeGenerationRequest {
         self.selectedExercises = selectedExercises
         self.goal = goal
         self.equipmentProfile = equipmentProfile
+        self.sessionMode = sessionMode
     }
 }
 

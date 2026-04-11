@@ -85,7 +85,8 @@ struct SuggestMeSomeRecommendationService {
             selectedMuscleGroups: selectedMuscleGroups,
             selectedExercises: selectedExercises,
             goal: finalGoal,
-            equipmentProfile: configuration.equipmentProfile
+            equipmentProfile: configuration.equipmentProfile,
+            sessionMode: finalMode
         ) : nil
 
         return SuggestMeSomeSessionRecommendation(

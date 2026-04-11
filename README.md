@@ -1485,6 +1485,28 @@ Incremental internal refactor to remove duplicate program-session-to-draft conve
   - build button gating when recommendation is marked non-buildable
 - Added focused validation in `Feature9RecommendationEngineValidationTests` covering deterministic surprise-mode resolution, heavy-lift conflict avoidance, program-overlap recovery biasing, and non-buildable short-duration behavior
 
+#### Prompt 6 [Build Workout from Recommendation + Validation] — 2026-04-10
+- Implemented real equipment-compatibility filtering in `SuggestMeSomeEquipmentCompatibilityService` — replaced the stub pass-through with a tag-based resolver that maps each exercise's name to required equipment tags (`barbell`, `rack`, `dumbbell`, `cable`, `machine`, `bodyweight`, `cardio`) and tests them against `SuggestMeSomeEquipmentProfile.availableTags`; explicit catalogs cover all seeded exercises plus keyword-based fallback for unknowns
+- Added variation load fallback to `SuggestMeSomePersonalRecordLookupService` via a new `bestAvailableWeight(for:repCount:)` method with three-stage resolution: (1) direct PR, (2) `FocusTemplateLibrary.loadMapping` source-lift × multiplier (e.g. Front Squat → Back Squats PR × 0.85), (3) canonical family primary variation with conservative 0.90 multiplier — exercises like `Pause Bench Press`, `Front Squat`, and `Romanian Deadlift` now receive weight suggestions when the parent lift has a PR even if the variation itself does not
+- Added goal-aware prescription to `SuggestMeSomeWorkoutPrescriptionService`:
+  - recovery goal: no warmup sets, 2 working sets, 65% load factor
+  - conditioning/fat-loss goal: no warmup sets, 3 working sets, 85% load factor
+  - accessory and isolation exercises: always skip warmups regardless of goal
+  - compound exercises with hypertrophy/strength/general-fitness goal: retain full 3-warmup + 4-working structure
+  - ramping working-set percentages (85% → 100%) computed generically across all working set counts
+- Added `sessionMode: SuggestMeSomeSessionMode?` field to `SuggestMeSomeGenerationRequest` (additive, nil-backward-compatible); `SuggestMeSomeRecommendationService` now stamps the resolved final mode on every request so the generation service can apply mode-specific shaping
+- Updated `SuggestMeSomeGenerationService` to:
+  - pass `request.goal` through to `prescribeStrengthExercise` so all modes receive goal-aware prescription
+  - apply mode/goal-specific time-budget splits: conditioning mode allocates only 30% of session time to strength circuits (leaving cardio dominant), recovery mode allocates 55%, other modes use the full budget
+  - propagate the real `equipmentProfile` to both strength and cardio pools so filtering is applied consistently across the full generation pipeline
+- Added `Feature9SuggestMeSomeBuildValidationTests.swift` with 17 validation tests covering:
+  - equipment filtering: bodyweightOnly excludes barbell/cable, dumbbellsOnly excludes barbell/cable, homeGym excludes cable/machine, fullGym and nil pass all exercises, cardio exercises respect profile
+  - variation load fallback: FocusTemplateLibrary mapping resolves correctly, direct PR takes priority over mapping, canonical family fallback fires when no direct/mapped PR exists
+  - goal-aware prescription: recovery goal produces no warmups, recovery produces fewer working sets, accessory exercises always skip warmups, compound + normal goal retains warmups
+  - recommendation-to-workout conversion: buildable full-body request produces non-empty workout, recovery mode exercises have no warmup sets, conditioning mode includes a cardio exercise, conditioning mode allocates more time to cardio than strength
+  - mode routing: push mode selects chest/shoulder muscle groups, lower mode selects legs, surprise-me resolution remains deterministic for identical inputs
+  - conflict avoidance: blocked bench anchor lift does not appear in recommendation anchor lifts after recent hard exposure
+
 ---
 
 ## Project Setup

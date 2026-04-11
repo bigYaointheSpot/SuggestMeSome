@@ -44,14 +44,34 @@ struct SuggestMeSomeGenerationService {
             equipmentProfile: request.equipmentProfile
         )
 
+        // For conditioning and recovery modes, reserve the majority of time for cardio/light work.
+        let isCardioFirstMode = request.sessionMode == .conditioning || request.goal == .conditioning
+        let isRecoveryMode = request.sessionMode == .recovery || request.goal == .recovery
+
+        // Strength time budget: reduced for cardio-primary and recovery modes
+        let strengthTimeBudget: Double
+        if isCardioFirstMode {
+            // Conditioning: only allocate up to 30% of time to strength circuits
+            strengthTimeBudget = request.durationMinutes * 0.30
+        } else if isRecoveryMode {
+            // Recovery: allow strength (core) work but leave room for cardio
+            strengthTimeBudget = request.durationMinutes * 0.55
+        } else {
+            strengthTimeBudget = request.durationMinutes
+        }
+
         let selectedStrength = exerciseSelectionService.selectStrengthExercises(
             from: strengthPool,
-            targetMinutes: request.durationMinutes,
+            targetMinutes: strengthTimeBudget,
             intensity: request.intensity
         )
 
         var generatedExercises = selectedStrength.map {
-            workoutPrescriptionService.prescribeStrengthExercise($0, intensity: request.intensity)
+            workoutPrescriptionService.prescribeStrengthExercise(
+                $0,
+                intensity: request.intensity,
+                goal: request.goal
+            )
         }
 
         let usedMinutes = generatedExercises.reduce(0.0) { $0 + $1.effectiveTimeMinutes }
@@ -89,7 +109,11 @@ struct SuggestMeSomeGenerationService {
         )
 
         let generatedExercises = selected.map {
-            workoutPrescriptionService.prescribeStrengthExercise($0, intensity: request.intensity)
+            workoutPrescriptionService.prescribeStrengthExercise(
+                $0,
+                intensity: request.intensity,
+                goal: request.goal
+            )
         }
 
         let totalTime = generatedExercises.reduce(0.0) { $0 + $1.effectiveTimeMinutes }
