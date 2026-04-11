@@ -522,13 +522,32 @@ struct WorkoutRow: View {
                             .foregroundStyle(.yellow)
                             .font(.caption)
                     }
+                    if let badge = workout.sourceBadgeLabel {
+                        Text(badge)
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color(.tertiarySystemBackground))
+                            .clipShape(Capsule())
+                    }
                 }
                 HStack(spacing: 6) {
                     Image(systemName: "clock").font(.caption)
                     Text(workout.formattedDuration)
-                    Text("·")
-                    let count = workout.exerciseEntries.count
-                    Text("\(count) \(count == 1 ? "exercise" : "exercises")")
+                    if workout.isHealthKitImported {
+                        if let importedType = workout.importedWorkoutTypeLabel {
+                            Text("·")
+                            Text(importedType)
+                        } else if !workout.exerciseEntries.isEmpty {
+                            Text("·")
+                            let count = workout.exerciseEntries.count
+                            Text("\(count) \(count == 1 ? "exercise" : "exercises")")
+                        }
+                    } else {
+                        Text("·")
+                        let count = workout.exerciseEntries.count
+                        Text("\(count) \(count == 1 ? "exercise" : "exercises")")
+                    }
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

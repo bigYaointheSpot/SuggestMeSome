@@ -15,6 +15,9 @@ struct WorkoutDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 headerCard
+                if workout.isHealthKitImported {
+                    importedSummaryCard
+                }
                 exerciseSections
                 if let notes = workout.comments, !notes.isEmpty {
                     notesCard(notes)
@@ -53,8 +56,12 @@ struct WorkoutDetailView: View {
                 }
 
                 Divider().frame(height: 44)
-                let count = workout.exerciseEntries.count
-                DetailStat(icon: "dumbbell.fill", label: "Exercises", value: "\(count)")
+                if workout.isHealthKitImported, workout.exerciseEntries.isEmpty, let importedType = workout.importedWorkoutTypeLabel {
+                    DetailStat(icon: "waveform.path.ecg", label: "Activity", value: importedType)
+                } else {
+                    let count = workout.exerciseEntries.count
+                    DetailStat(icon: "dumbbell.fill", label: "Exercises", value: "\(count)")
+                }
             }
         }
         .padding()
@@ -66,9 +73,67 @@ struct WorkoutDetailView: View {
 
     @ViewBuilder
     private var exerciseSections: some View {
-        ForEach(workout.exerciseEntries.sorted(by: { $0.orderIndex < $1.orderIndex })) { entry in
-            ExerciseDetailCard(entry: entry)
+        if workout.exerciseEntries.isEmpty {
+            if workout.isHealthKitImported {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("No set-by-set details imported", systemImage: "info.circle")
+                        .font(.headline)
+                    Text("This HealthKit workout was imported without native exercise or set structure.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+        } else {
+            ForEach(workout.exerciseEntries.sorted(by: { $0.orderIndex < $1.orderIndex })) { entry in
+                ExerciseDetailCard(entry: entry)
+            }
         }
+    }
+
+    private var importedSummaryCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "heart.text.square.fill")
+                    .foregroundStyle(.pink)
+                Text("Imported from HealthKit")
+                    .font(.headline)
+                Spacer()
+                if let badge = workout.sourceBadgeLabel {
+                    Text(badge)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color(.tertiarySystemBackground))
+                        .clipShape(Capsule())
+                }
+            }
+
+            if let importedType = workout.importedWorkoutTypeLabel {
+                HStack {
+                    Text("Activity")
+                    Spacer()
+                    Text(importedType)
+                        .foregroundStyle(.secondary)
+                }
+                .font(.subheadline)
+            }
+
+            if let importedAt = workout.sourceImportedAt {
+                HStack {
+                    Text("Imported")
+                    Spacer()
+                    Text(importedAt, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                        .foregroundStyle(.secondary)
+                }
+                .font(.subheadline)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: - Notes

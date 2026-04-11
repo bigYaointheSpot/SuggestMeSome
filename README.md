@@ -1294,6 +1294,35 @@ Foundation work for HealthKit-powered recovery data import, workout import/expor
   - renders visible recommendation source attribution pills and expanded source-influence detail text
 - Updated `Feature7ValidationTests` call sites for the additive `DailyCoachRecommendationService.generate(... objectiveRecoveryInsight:)` parameter
 
+#### Prompt 5 [HealthKit Workout Import, Source Badges, and Limited Edits] — 2026-04-10
+- Added `HealthKitWorkoutImportService` (`Services/HealthKit/HealthKitWorkoutImportService.swift`) that manually imports the last 90 days of `HKWorkout` samples and filters import scope to:
+  - cardio activity types (explicit allowlist)
+  - `Traditional Strength Training`
+- Implemented conservative upsert behavior keyed by HealthKit workout UUID (`sourceExternalIdentifier`) so repeated syncs do not create duplicate history rows
+- Imported rows are created as first-class `Workout` records with source metadata:
+  - `sourceType = .healthKitImported`
+  - `sourceExternalIdentifier`
+  - `sourceDisplayName` (e.g. Apple Watch/Health app source label)
+  - `sourceImportedAt`
+  - additive imported activity metadata fields on `Workout`: `sourceWorkoutTypeIdentifier`, `sourceWorkoutTypeDisplayName`
+- Import keeps representation honest for HealthKit data:
+  - no fabricated set-by-set structure for imported `Traditional Strength Training`
+  - imported workouts can exist with zero native exercise entries
+- Updated history and detail UI for imported workouts:
+  - source badge chips in workout rows and detail header (e.g. `HealthKit`, `Apple Watch`, or source label)
+  - imported workout activity label shown in rows/details when available
+  - avoids awkward imported `0 exercises` presentation in history rows
+  - added imported summary card in `WorkoutDetailView` (source, activity type, import timestamp) plus a clear no-set-details message when applicable
+- Added limited edit behavior for imported workouts in `WorkoutEditView`:
+  - allows editing only date, calories, and notes
+  - blocks full exercise/set structure editing for imported entries
+  - preserves existing full edit flow for native app-logged workouts
+- Wired manual workout import into Health Data settings:
+  - new `Import Workouts (Last 90 Days)` action in `HealthDataSettingsView`
+  - status feedback for importing/success/failure
+  - sync timestamp updated on successful workout import
+  - writeback remains explicitly not implemented
+
 ---
 
 ## Project Setup

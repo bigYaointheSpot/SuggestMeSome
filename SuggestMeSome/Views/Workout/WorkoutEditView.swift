@@ -24,6 +24,10 @@ struct WorkoutEditView: View {
     @State private var showingExercisePicker = false
     @State private var showingSaveConfirmation = false
 
+    private var isImportedWorkout: Bool {
+        workout.isHealthKitImported
+    }
+
     init(workout: Workout) {
         self.workout = workout
 
@@ -74,8 +78,12 @@ struct WorkoutEditView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 datePicker
-                exerciseList
-                addExerciseButton
+                if isImportedWorkout {
+                    importedEditingNotice
+                } else {
+                    exerciseList
+                    addExerciseButton
+                }
                 caloriesField
                 notesField
                 saveButton
@@ -131,6 +139,19 @@ struct WorkoutEditView: View {
                 }
             }
         }
+    }
+
+    private var importedEditingNotice: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Limited editing for imported workouts", systemImage: "lock.fill")
+                .font(.headline)
+            Text("You can edit date, calories, and notes. Exercise/set structure is read-only for HealthKit imports.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var addExerciseButton: some View {
@@ -191,6 +212,15 @@ struct WorkoutEditView: View {
     // MARK: - Save logic
 
     private func saveChanges() {
+        if isImportedWorkout {
+            workout.date = workoutDate
+            workout.caloriesBurned = Int(caloriesText)
+            workout.comments = comments.isEmpty ? nil : comments
+            try? modelContext.save()
+            dismiss()
+            return
+        }
+
         // Collect affected exercise names (old ∪ new) so PR recomputation covers both
         let oldNames = Set(workout.exerciseEntries.map(\.exerciseName))
         let newNames = Set(exerciseEntries.map(\.exerciseName))

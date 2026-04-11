@@ -35,6 +35,10 @@ final class Workout {
     var sourceExternalIdentifier: String?
     /// Human-readable source app/device label shown in future UI.
     var sourceDisplayName: String?
+    /// Imported workout activity type identifier (for example HKWorkoutActivityType raw value).
+    var sourceWorkoutTypeIdentifier: String?
+    /// Human-readable imported workout activity label.
+    var sourceWorkoutTypeDisplayName: String?
     /// Timestamp when this workout was imported from an external source.
     var sourceImportedAt: Date?
     /// Timestamp when this workout was exported/written to HealthKit.
@@ -55,6 +59,8 @@ final class Workout {
         sourceType: WorkoutSourceType = .loggedInApp,
         sourceExternalIdentifier: String? = nil,
         sourceDisplayName: String? = nil,
+        sourceWorkoutTypeIdentifier: String? = nil,
+        sourceWorkoutTypeDisplayName: String? = nil,
         sourceImportedAt: Date? = nil,
         healthKitExportedAt: Date? = nil,
         healthKitWritebackIdentifier: String? = nil
@@ -71,6 +77,8 @@ final class Workout {
         self.sourceType = sourceType
         self.sourceExternalIdentifier = sourceExternalIdentifier
         self.sourceDisplayName = sourceDisplayName
+        self.sourceWorkoutTypeIdentifier = sourceWorkoutTypeIdentifier
+        self.sourceWorkoutTypeDisplayName = sourceWorkoutTypeDisplayName
         self.sourceImportedAt = sourceImportedAt
         self.healthKitExportedAt = healthKitExportedAt
         self.healthKitWritebackIdentifier = healthKitWritebackIdentifier
@@ -82,5 +90,25 @@ final class Workout {
         let m = (durationSeconds % 3600) / 60
         let s = durationSeconds % 60
         return String(format: "%02d:%02d:%02d", h, m, s)
+    }
+
+    var isHealthKitImported: Bool {
+        sourceType == .healthKitImported
+    }
+
+    var sourceBadgeLabel: String? {
+        guard isHealthKitImported else { return nil }
+        let trimmed = sourceDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else { return "HealthKit" }
+        return trimmed
+    }
+
+    var importedWorkoutTypeLabel: String? {
+        guard isHealthKitImported else { return nil }
+        let trimmed = sourceWorkoutTypeDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty {
+            return trimmed
+        }
+        return nil
     }
 }

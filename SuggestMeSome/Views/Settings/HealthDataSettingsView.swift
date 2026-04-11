@@ -17,6 +17,13 @@ enum HealthDataSyncStatus: Equatable {
     case failed(String)
 }
 
+enum HealthWorkoutImportStatus: Equatable {
+    case idle
+    case importing
+    case success(String)
+    case failed(String)
+}
+
 @MainActor
 final class HealthDataSettingsViewModel: ObservableObject {
     @Published private(set) var snapshot = HealthKitAuthorizationSnapshot(
@@ -28,9 +35,11 @@ final class HealthDataSettingsViewModel: ObservableObject {
     )
     @Published private(set) var isLoading = false
     @Published private(set) var syncStatus: HealthDataSyncStatus = .idle
+    @Published private(set) var workoutImportStatus: HealthWorkoutImportStatus = .idle
 
     private let authorizationService = HealthKitAuthorizationService()
     private let recoverySyncService = HealthKitRecoverySyncService()
+    private let workoutImportService = HealthKitWorkoutImportService()
 
     func refreshStatus(hasRequestedAuthorization: Bool) async {
         isLoading = true
@@ -66,6 +75,26 @@ final class HealthDataSettingsViewModel: ObservableObject {
             return false
         }
     }
+
+    func syncImportedWorkouts(context: ModelContext) async -> Bool {
+        workoutImportStatus = .importing
+        do {
+            let result = try await workoutImportService.importLast90Days(context: context)
+            workoutImportStatus = .success(result.summaryText)
+            return true
+        } catch let error as HealthKitWorkoutImportError {
+            switch error {
+            case .healthDataUnavailable:
+                workoutImportStatus = .failed("Health data is unavailable on this device.")
+            case .workoutReadDenied:
+                workoutImportStatus = .failed("Workout read access is denied. Enable workout read permissions in Health settings.")
+            }
+            return false
+        } catch {
+            workoutImportStatus = .failed("Workout import failed. Check Health permissions and try again.")
+            return false
+        }
+    }
 }
 
 struct HealthDataSettingsView: View {
@@ -98,6 +127,13 @@ struct HealthDataSettingsView: View {
 
     private var isSyncing: Bool {
         if case .syncing = viewModel.syncStatus {
+            return true
+        }
+        return false
+    }
+
+    private var isImportingWorkouts: Bool {
+        if case .importing = viewModel.workoutImportStatus {
             return true
         }
         return false
@@ -206,13 +242,35 @@ struct HealthDataSettingsView: View {
             Toggle("Write App Workouts to HealthKit", isOn: $writeAppWorkoutsToHealthKit)
                 .disabled(!healthKitEnabled || isUnavailable)
 
+            Button("Import Workouts (Last 90 Days)") {
+                Task {
+                    let didSync = await viewModel.syncImportedWorkouts(context: modelContext)
+                    if didSync {
+                        healthKitLastSyncTimestamp = Date().timeIntervalSince1970
+                    }
+                }
+            }
+            .disabled(
+                !healthKitEnabled ||
+                isUnavailable ||
+                viewModel.isLoading ||
+                isImportingWorkouts ||
+                !importHealthKitWorkouts
+            )
+
             Text("Imported workouts are labeled as HealthKit imports so source attribution stays clear.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Text("Workout import/export sync is not active yet in this version.")
+            Text("Imported workouts include source and activity metadata; set-by-set strength detail is not fabricated during import.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            Text("Workout writeback is not active yet in this version.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            workoutImportStatusMessage
         }
     }
 
@@ -285,6 +343,24 @@ struct HealthDataSettingsView: View {
             ProgressView("Syncing recovery data…")
         case .success(let date):
             Text("Recovery sync completed \(date, format: .dateTime.hour().minute().second()).")
+                .font(.footnote)
+                .foregroundStyle(.green)
+        case .failed(let message):
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.red)
+        }
+    }
+
+    @ViewBuilder
+    private var workoutImportStatusMessage: some View {
+        switch viewModel.workoutImportStatus {
+        case .idle:
+            EmptyView()
+        case .importing:
+            ProgressView("Importing workouts…")
+        case .success(let summary):
+            Text("Workout import completed. \(summary)")
                 .font(.footnote)
                 .foregroundStyle(.green)
         case .failed(let message):
