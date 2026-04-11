@@ -1152,6 +1152,18 @@ A program-first daily coaching system that collects readiness check-ins, surface
 - All recommendation objects are ephemeral; nothing new is persisted
 - **Commit:** `feat: add daily coach recommendation engine`
 
+#### Prompt 5 [Daily Coach Prepared Workout Drafts] — 2026-04-10
+- Extracted `DraftSet` and `DraftExerciseEntry` from `WorkoutView.swift` into a new shared file `Models/DraftWorkoutTypes.swift` so they can be referenced outside the view layer
+- Added `PreparedWorkoutDraft` struct (ephemeral: `entries: [DraftExerciseEntry]`, `changeDescriptions: [String]`, `adjustmentType: DailySuggestionType`) in `Services/Adaptive/DailyCoachWorkoutPreparationService.swift`
+- Added `DailyCoachWorkoutPreparationService` (`@MainActor` struct) with a single `prepare(exercises:suggestionType:) -> PreparedWorkoutDraft` entry point; never mutates any `ProgramSessionExercise` or `TrainingProgram` object; no SwiftData writes; no overlay or proposal creation
+- Supported adjustments: `trimAccessories` (removes 1–2 lowest-priority accessory groups using `explainabilityPurpose` and `explainabilitySelectionReason` metadata; falls back to last unlabelled group), `trimOneBackoffSet` (removes the last backoff row from the largest backoff block identified by `topBackoffGroupID`; falls back to trimming the last set of the primary block), `reduceWorkingLoadsSlightly` (reduces all non-warmup prescribed weights by ~5% in the draft sets), `suggestManualVariationSwap` (loads the session as-planned and surfaces the primary lift name in plain-English change notes for manual review)
+- Updated `WorkoutView` to accept an optional `preparedDraft: [DraftExerciseEntry]?` parameter; when set, `onAppear` loads the draft directly and starts the timer, bypassing the normal `buildDraftEntries` path; `programWorkout` is still required for save metadata (programRun / weekNumber / sessionNumber)
+- Updated `DailyCoachView`: added `@Environment(\.modelContext)`, workout launch state (`navigatingToWorkout`, `pendingProgramWorkout`, `pendingDraft`, `showingDraftReview`, `confirmedDraftLaunch`); added `sessionLaunchButtons` sub-view to the Coach Recommendation card showing **Start As Planned** and **Review Suggested Version** (the review button only appears when `primarySuggestion.type != .runAsPlanned`); buttons are visible only when a program user has an identified next session
+- Added private `DraftReviewSheet`: a `NavigationStack`-wrapped sheet that lists each change description with a type-appropriate icon; footer note confirms changes are today-only; "Start Suggested Session" toolbar button calls `onConfirm` then dismisses; `onDismiss` uses the same delayed-navigation pattern as the existing workout flows
+- Launch helpers `launchAsPlanned()` and `prepareReviewSheet()` call `ProgramOverlayResolutionService.resolvedExercises` to get the session exercises, then either navigate directly or show the review sheet
+- Base `TrainingProgram` data is never written to; standalone users see no action buttons (no prepared-draft logic applies to non-program sessions)
+- **Commit:** `feat: add daily coach prepared workout drafts`
+
 ---
 
 ## Project Setup

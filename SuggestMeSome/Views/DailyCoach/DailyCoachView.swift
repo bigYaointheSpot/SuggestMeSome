@@ -14,6 +14,8 @@ import SwiftData
 
 struct DailyCoachView: View {
 
+    @Environment(\.modelContext) private var modelContext
+
     // MARK: Queries
 
     @Query(filter: #Predicate<ProgramRun> { run in run.isCompleted == false },
@@ -65,10 +67,17 @@ struct DailyCoachView: View {
         return checkIns.first { Calendar.current.startOfDay(for: $0.date) == today }
     }
 
-    // MARK: Sheet state
+    // MARK: Sheet / navigation state
 
     @State private var showingCheckInSheet = false
     @State private var recommendationExpanded = false
+
+    // Workout launch
+    @State private var navigatingToWorkout = false
+    @State private var pendingProgramWorkout: ProgramWorkoutContext?
+    @State private var pendingDraft: PreparedWorkoutDraft?
+    @State private var showingDraftReview = false
+    @State private var confirmedDraftLaunch = false
 
     // MARK: Body
 
@@ -90,9 +99,32 @@ struct DailyCoachView: View {
             }
             .navigationTitle("Daily Coach")
             .navigationBarTitleDisplayMode(.large)
+            .navigationDestination(isPresented: $navigatingToWorkout) {
+                if let pw = pendingProgramWorkout {
+                    WorkoutView(programWorkout: pw, preparedDraft: pendingDraft?.entries)
+                }
+            }
         }
         .sheet(isPresented: $showingCheckInSheet) {
             CheckInFormView(existingCheckIn: todayCheckIn)
+        }
+        .sheet(isPresented: $showingDraftReview, onDismiss: {
+            if confirmedDraftLaunch {
+                confirmedDraftLaunch = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    navigatingToWorkout = true
+                }
+            }
+        }) {
+            if let draft = pendingDraft {
+                DraftReviewSheet(
+                    draft: draft,
+                    sessionLabel: nextSessionLabel(for: todayRecommendation.nextProgramSession)
+                ) {
+                    confirmedDraftLaunch = true
+                    showingDraftReview = false
+                }
+            }
         }
     }
 
@@ -306,6 +338,12 @@ struct DailyCoachView: View {
                     }
                 }
             }
+
+            // Session launch actions — only for program users with an identified next session.
+            if rec.nextProgramSession != nil, focusRun != nil {
+                Divider()
+                sessionLaunchButtons(rec: rec)
+            }
         }
         .padding()
         .background(Color(.secondarySystemBackground))
@@ -457,6 +495,93 @@ struct DailyCoachView: View {
         }
     }
 
+    // MARK: - Session Launch Buttons
+
+    @ViewBuilder
+    private func sessionLaunchButtons(rec: DailyCoachRecommendation) -> some View {
+        let canPrepareDraft = rec.primarySuggestion.type != .runAsPlanned
+        if canPrepareDraft {
+            HStack(spacing: 10) {
+                Button("Start As Planned") {
+                    launchAsPlanned()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(Color(.tertiarySystemBackground))
+                .foregroundStyle(.primary)
+                .clipShape(RoundedRectangle(cornerRadius: 9))
+                .buttonStyle(.plain)
+
+                Button("Review Suggested Version") {
+                    prepareReviewSheet()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(Color.accentColor)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 9))
+                .buttonStyle(.plain)
+            }
+            .font(.subheadline.weight(.medium))
+        } else {
+            Button("Start As Planned") {
+                launchAsPlanned()
+            }
+            .font(.subheadline.weight(.medium))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.accentColor)
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 9))
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Session Launch Helpers
+
+    private func launchAsPlanned() {
+        guard let run = focusRun,
+              let session = todayRecommendation.nextProgramSession else { return }
+        let exercises = ProgramOverlayResolutionService.resolvedExercises(
+            for: run, week: session.weekNumber, session: session.sessionNumber, context: modelContext
+        )
+        pendingProgramWorkout = ProgramWorkoutContext(
+            programRun: run,
+            weekNumber: session.weekNumber,
+            sessionNumber: session.sessionNumber,
+            exercises: exercises
+        )
+        pendingDraft = nil
+        navigatingToWorkout = true
+    }
+
+    private func prepareReviewSheet() {
+        guard let run = focusRun,
+              let session = todayRecommendation.nextProgramSession else { return }
+        let exercises = ProgramOverlayResolutionService.resolvedExercises(
+            for: run, week: session.weekNumber, session: session.sessionNumber, context: modelContext
+        )
+        let draft = DailyCoachWorkoutPreparationService.prepare(
+            exercises: exercises,
+            suggestionType: todayRecommendation.primarySuggestion.type
+        )
+        pendingProgramWorkout = ProgramWorkoutContext(
+            programRun: run,
+            weekNumber: session.weekNumber,
+            sessionNumber: session.sessionNumber,
+            exercises: exercises
+        )
+        pendingDraft = draft
+        showingDraftReview = true
+    }
+
+    private func nextSessionLabel(for session: NextProgramSessionInfo?) -> String {
+        guard let s = session else { return "Next Session" }
+        let base = "Week \(s.weekNumber), Session \(s.sessionNumber)"
+        if let name = s.sessionName, !name.isEmpty { return "\(base) — \(name)" }
+        return base
+    }
+
     // MARK: - Helpers
 
     private func fatigueColor(_ status: FatigueStatus) -> Color {
@@ -466,6 +591,90 @@ struct DailyCoachView: View {
         case .elevated:   return .yellow
         case .high:       return .orange
         case .critical:   return .red
+        }
+    }
+}
+
+// MARK: - DraftReviewSheet
+
+private struct DraftReviewSheet: View {
+    let draft: PreparedWorkoutDraft
+    let sessionLabel: String
+    let onConfirm: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text(sessionLabel)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Session")
+                }
+
+                Section {
+                    if draft.changeDescriptions.isEmpty {
+                        Text("No changes — session will run as planned.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(Array(draft.changeDescriptions.enumerated()), id: \.offset) { _, desc in
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: changeIcon)
+                                    .font(.subheadline)
+                                    .foregroundStyle(changeColor)
+                                    .frame(width: 20)
+                                Text(desc)
+                                    .font(.subheadline)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                } header: {
+                    Text("Suggested Changes")
+                } footer: {
+                    Text("These changes apply only to today's session. Your program is not modified.")
+                        .font(.caption)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Review Suggested Session")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Start Suggested Session") {
+                        onConfirm()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+
+    private var changeIcon: String {
+        switch draft.adjustmentType {
+        case .trimAccessories:            return "minus.circle"
+        case .trimOneBackoffSet:          return "arrow.down.circle"
+        case .reduceWorkingLoadsSlightly: return "scalemass"
+        case .suggestManualVariationSwap: return "exclamationmark.triangle"
+        default:                          return "checkmark.circle"
+        }
+    }
+
+    private var changeColor: Color {
+        switch draft.adjustmentType {
+        case .trimAccessories:            return .orange
+        case .trimOneBackoffSet:          return .yellow
+        case .reduceWorkingLoadsSlightly: return .orange
+        case .suggestManualVariationSwap: return .red
+        default:                          return .green
         }
     }
 }

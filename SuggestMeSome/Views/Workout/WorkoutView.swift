@@ -9,97 +9,14 @@ import SwiftUI
 import SwiftData
 import Combine
 
-// MARK: - In-memory draft types (not persisted until the user saves)
-
-struct DraftSet: Identifiable {
-    let id: UUID
-    var setNumber: Int
-    var repsText: String
-    var weightText: String
-    var isPR: Bool
-    var isWarmup: Bool
-
-    init(setNumber: Int, repsText: String = "", weightText: String = "", isPR: Bool = false, isWarmup: Bool = false) {
-        self.id = UUID()
-        self.setNumber = setNumber
-        self.repsText = repsText
-        self.weightText = weightText
-        self.isPR = isPR
-        self.isWarmup = isWarmup
-    }
-}
-
-struct DraftExerciseEntry: Identifiable {
-    let id: UUID
-    var exerciseName: String
-    var unit: WeightUnit
-    var orderIndex: Int
-    var sets: [DraftSet]
-    var isCardio: Bool
-    var cardioMinutesText: String
-    var cardioSecondsText: String
-
-    // Optional prescription snapshot for program-driven workouts.
-    var sourceProgramSessionExerciseID: UUID?
-    var prescribedTargetSets: Int?
-    var prescribedTargetReps: Int?
-    var prescribedTargetPercentage1RM: Double?
-    var prescribedTargetRPE: Double?
-    var prescribedTargetRIR: Double?
-    var prescribedWeight: Double?
-    var prescribedWeightUnit: String?
-    var prescribedWorkingSetStyle: ProgramWorkingSetStyle?
-    var prescribedTargetEffortType: ProgramTargetEffortType?
-
-    var cardioDurationSeconds: Int {
-        (Int(cardioMinutesText) ?? 0) * 60 + (Int(cardioSecondsText) ?? 0)
-    }
-
-    init(
-        exerciseName: String,
-        unit: WeightUnit,
-        orderIndex: Int,
-        sets: [DraftSet],
-        isCardio: Bool = false,
-        cardioMinutesText: String = "",
-        cardioSecondsText: String = "",
-        sourceProgramSessionExerciseID: UUID? = nil,
-        prescribedTargetSets: Int? = nil,
-        prescribedTargetReps: Int? = nil,
-        prescribedTargetPercentage1RM: Double? = nil,
-        prescribedTargetRPE: Double? = nil,
-        prescribedTargetRIR: Double? = nil,
-        prescribedWeight: Double? = nil,
-        prescribedWeightUnit: String? = nil,
-        prescribedWorkingSetStyle: ProgramWorkingSetStyle? = nil,
-        prescribedTargetEffortType: ProgramTargetEffortType? = nil
-    ) {
-        self.id = UUID()
-        self.exerciseName = exerciseName
-        self.unit = unit
-        self.orderIndex = orderIndex
-        self.sets = sets
-        self.isCardio = isCardio
-        self.cardioMinutesText = cardioMinutesText
-        self.cardioSecondsText = cardioSecondsText
-        self.sourceProgramSessionExerciseID = sourceProgramSessionExerciseID
-        self.prescribedTargetSets = prescribedTargetSets
-        self.prescribedTargetReps = prescribedTargetReps
-        self.prescribedTargetPercentage1RM = prescribedTargetPercentage1RM
-        self.prescribedTargetRPE = prescribedTargetRPE
-        self.prescribedTargetRIR = prescribedTargetRIR
-        self.prescribedWeight = prescribedWeight
-        self.prescribedWeightUnit = prescribedWeightUnit
-        self.prescribedWorkingSetStyle = prescribedWorkingSetStyle
-        self.prescribedTargetEffortType = prescribedTargetEffortType
-    }
-}
-
 // MARK: - WorkoutView
 
 struct WorkoutView: View {
     var generatedWorkout: GeneratedWorkout? = nil
     var programWorkout: ProgramWorkoutContext? = nil
+    /// Pre-built draft supplied by Daily Coach prepared workout flow.
+    /// When set, this overrides building the draft from `programWorkout.exercises`.
+    var preparedDraft: [DraftExerciseEntry]? = nil
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -163,7 +80,11 @@ struct WorkoutView: View {
         }
         .onAppear {
             guard exerciseEntries.isEmpty else { return }
-            if let gw = generatedWorkout {
+            if let draft = preparedDraft {
+                exerciseEntries = draft
+                startTime = Date.now
+                isActive = true
+            } else if let gw = generatedWorkout {
                 exerciseEntries = gw.exercises.enumerated().map { index, genExercise in
                     if genExercise.exercise.exerciseType == .cardio {
                         let totalSeconds = Int(genExercise.effectiveTimeMinutes * 60)
