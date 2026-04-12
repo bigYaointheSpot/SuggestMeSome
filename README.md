@@ -1,51 +1,114 @@
 # SuggestMeSome
 
-An iOS training companion for lifters who want more than a workout log.
-SuggestMeSome combines workout tracking, AI-guided workout and program
-generation, progress analytics, and adaptive coaching into one streamlined
-on-device app built with SwiftUI + SwiftData.
+SuggestMeSome is an iOS training companion for lifters who want the app to do
+more than store completed workouts. It combines fast workout logging,
+AI-guided session and program generation, readiness-aware daily coaching,
+HealthKit-informed recovery signals, progress analytics, and adaptive
+programming into one local SwiftUI + SwiftData experience.
 
 ---
 
 ## App Overview
 
-SuggestMeSome is built for lifters who want the flexibility of a workout
-tracker without giving up the structure of real programming. It combines fast
-manual logging, AI-guided workout generation, full multi-week program design,
-performance analytics, and adaptive coaching in one focused iOS app.
+Great workout apps make logging simple. Great training apps also connect the
+plan, the workout, the feedback, and the next adjustment. SuggestMeSome is built
+around that complete loop. A user can start from a blank session, generate a
+goal-driven workout, run a structured multi-week program, log effort and
+top-set feedback, review strength and volume trends, and receive explainable
+coaching guidance without stitching together a tracker, spreadsheet, program
+generator, and recovery app.
 
-The core value is that the app connects the full training loop. Users can go
-from logging a session, to generating the next workout, to running a
-periodized plan, to reviewing performance trends and coaching adjustments,
-without leaving the app or stitching together multiple tools.
+The product is designed around three questions lifters face every week:
+
+- What should I do today?
+- Am I actually progressing?
+- What should change next?
+
+What sets SuggestMeSome apart is that generated workouts, logged workouts,
+program prescriptions, readiness check-ins, HealthKit recovery data, and
+adaptive coaching all feed the same training system. The app does not treat AI
+generation as a one-off randomizer. It uses duration, intensity, selected
+muscle groups, cardio needs, active program state, fatigue status, readiness,
+pending coaching proposals, and learned exercise preferences to shape
+recommendations users can inspect, edit, and trust.
 
 Key highlights:
 
-- fast set-by-set workout logging with timers, editable generated sessions,
-  history, filtering, and automatic personal record detection
-- AI workout generation for both strength and cardio sessions, giving users
-  quick, goal-oriented training suggestions they can immediately start and edit
-- a more advanced AI program generation engine that builds structured 6 to
-  12-week plans across multiple training focuses, supports experience-based
-  progression models, prescribed loading, top-set and backoff logic,
-  anchor-relative periodization, weekly volume targets, and fatigue-aware
-  accessory selection
-- a dashboard layer that makes progress visible through PR feeds, estimated
-  1RM strength trends, workout frequency, muscle-group volume, active program
-  progress, and lift-specific trend signals
-- an adaptive coaching system that persists workout outcomes, rolls them into
+- Fast set-by-set workout logging with timers, editable generated sessions,
+  history, filtering, effort feedback, top-set RPE capture, and automatic
+  personal record detection.
+- AI-guided workout generation for strength, cardio, recovery, conditioning,
+  and mixed sessions, with recommendations that can account for recent
+  training, equipment constraints, fatigue, readiness, and active program
+  context.
+- A structured program generation engine that builds 6 to 12-week plans across
+  multiple training focuses, with experience-based progression models,
+  prescribed loading, top-set and backoff logic, anchor-relative
+  periodization, weekly volume targets, fatigue-aware accessory selection, and
+  deload handling.
+- A Daily Coach surface that combines manual readiness check-ins, active
+  program status, recent workout history, HealthKit recovery insights, pending
+  proposals, confidence scoring, source attribution, and adherence rescue into
+  a practical Today Plan.
+- An adaptive coaching system that persists workout outcomes, rolls them into
   weekly analysis, tracks fatigue and lift performance trends, and generates
   explainable recommendations for load progression, volume changes,
-  deload/downshift decisions, and exercise variation swaps
-- a non-destructive overlay model for coaching adjustments, so future program
-  changes can be applied transparently without mutating the original plan
-- on-device SwiftData persistence, keeping the experience fast, local, and
-  privacy-friendly
+  deload/downshift decisions, and exercise variation swaps.
+- A non-destructive overlay model for coaching adjustments, so approved
+  changes can affect future sessions while the original program remains
+  auditable and intact.
+- A dashboard layer that makes progress visible through PR feeds, estimated 1RM
+  trends, workout frequency, muscle-group volume, active program progress,
+  fatigue status, and lift-specific trend signals.
+- Optional HealthKit integration for recovery summaries, workout import, and
+  limited workout writeback, with the app remaining fully usable without Health
+  access.
+- Sync-ready and watch-ready architecture foundations, including stable
+  transport payloads for future cloud sync and Apple Watch companion surfaces.
+- On-device SwiftData persistence, keeping the core experience fast, local, and
+  privacy-friendly.
 
-In practical terms, SuggestMeSome is a workout tracker, program builder, and
-lightweight coaching engine in one product. It is designed to help users answer
-three questions clearly: what should I do today, am I progressing, and what
-should change next?
+In practical terms, SuggestMeSome is a workout tracker, program builder, daily
+coach, and adaptive training engine in one product. Its core promise is not just
+recording what happened in the gym, but helping the user decide what to do next
+and why.
+
+### What Makes SuggestMeSome Different
+
+Most training apps pick a lane: a logger, a program library, a readiness
+tracker, or an AI workout generator. SuggestMeSome is built on the belief
+that these surfaces are only useful when they share the same state. Every
+feature in the app writes into — and reads from — a single training system,
+which is what allows the Daily Coach, the program engine, and the AI
+generator to stay internally consistent instead of contradicting each other.
+
+Four design principles shape the product:
+
+1. **One source of truth.** Logged workouts, generated sessions, program
+   prescriptions, readiness check-ins, HealthKit recovery, fatigue state,
+   and coaching proposals all feed the same adaptive coaching data layer.
+   There is no second brain to reconcile.
+
+2. **Explainability over magic.** Every AI suggestion — a load bump, a
+   volume change, a deload, an exercise swap, a Today Plan recommendation —
+   ships with confidence scoring, source attribution, and the inputs that
+   produced it. Users can inspect, edit, approve, or reject before anything
+   affects their plan.
+
+3. **Non-destructive adaptation.** Coaching adjustments apply as overlays
+   on top of the original program. Approved changes shape future sessions
+   while the prescribed plan remains auditable and intact, so lifters never
+   lose the thread of what they were supposed to be doing.
+
+4. **Local-first, privacy-friendly, offline-capable.** The full experience
+   runs on-device through SwiftData. HealthKit, sync, and the Apple Watch
+   companion are additive — the core loop never depends on them.
+
+The result is a training companion that answers the three questions lifters
+actually face each week — *What should I do today? Am I progressing? What
+should change next?* — with reasoning the user can follow, trust, and
+override. SuggestMeSome is not trying to replace the coach in a lifter's
+head. It is trying to be the first training app that can explain itself.
 
 **Tech Stack:** SwiftUI, SwiftData, Xcode
 **Platform:** iOS
