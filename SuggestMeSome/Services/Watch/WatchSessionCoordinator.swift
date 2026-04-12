@@ -74,6 +74,7 @@ enum WatchPayloadMapper {
             hasPainFlag: rec.hasPainFlag,
             sessionLabel: sessionLabel,
             programName: programName ?? rec.nextProgramSession?.programName,
+            programRunStableID: programRunStableID,
             programWeekNumber: programWeek,
             programSessionNumber: programSession,
             activeSourceLabels: plan.attribution.activeSourceLabels,

@@ -1956,6 +1956,43 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 8 [Feature 10 Integration Hardening and Regression Pass] — 2026-04-12
+
+- Completed a final Feature 10 integration hardening pass across sync contracts, repository/query seams, generator/adaptive boundaries, coach-aware SuggestMeSome logic, Today Plan output, and watch payload transport.
+- Tightened SuggestMeSome coach-context loading so active overlays, pending user proposals, pending auto-apply proposals, and finalized fatigue status are scoped to the active program run through the read/query repository seam instead of broad global reads:
+  - added `ReadQueryRepository.pendingCoachContextProposals(for:context:limit:)`
+  - preserved standalone behavior by only surfacing nil-run pending proposals when no active run is in scope
+  - kept non-destructive overlay behavior unchanged; base program prescriptions remain source-of-truth and overlays are still resolved at runtime
+- Hardened Today Plan → watch payload source-of-truth mapping:
+  - added additive `programRunStableID` to `WatchTodayPlanSnapshot`
+  - wired `WatchPayloadMapper.makeTodayPlanSnapshot` and `WatchSessionCoordinator.broadcastTodayPlan` so watch snapshots can identify the active run while still deriving all coaching content verbatim from `TodayPlanEngine`
+- Tightened async validation durability for `DeferredNavigationService` by replacing a brittle fixed-yield assertion with a bounded scheduler wait in the existing Prompt 2 test.
+- Added focused Prompt 8 validation coverage in `SuggestMeSomeTests/Feature10Prompt8IntegrationHardeningTests.swift`:
+  - run-scoped coach context excludes overlays/proposals/fatigue from unrelated runs
+  - pending coach-context proposal query keeps active-run and standalone scopes separate
+  - Today Plan engine output maps verbatim into the watch snapshot, including confidence, source labels, what-changed text, pending proposal count, program coordinates, and run stable ID
+  - five-primary-focus matrix remains explicitly covered (`powerlifting`, `bodybuilding`, `powerbuilding`, `generalFitness`, `fullBody`)
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10Prompt8IntegrationHardeningTests` (pass)
+  - impacted Feature 10 regression slice:
+    - `Feature10Prompt2RepositoryQueryHardeningTests` (pass)
+    - `Feature10Prompt5CoachAwareFusionTests` (pass)
+    - `Feature10Prompt6TodayPlanEngineTests` (pass)
+    - `Feature10Prompt7WatchFoundationTests` (pass)
+    - `Feature10Prompt8IntegrationHardeningTests` (pass)
+  - broader regression slice:
+    - `Feature10SyncFoundationValidationTests` (pass)
+    - `Feature10Prompt3ProgramGeneratorDecompositionTests` (pass)
+    - `Feature10Prompt4AdaptivePipelineDecompositionTests` (pass)
+    - `Feature6ValidationTests` (pass)
+    - `Feature7ValidationTests` (pass)
+    - `Feature8ValidationTests` (pass)
+    - `Feature9RecommendationEngineValidationTests` (pass)
+    - `Feature9SuggestMeSomeBuildValidationTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
 ---
 
 ## Project Setup

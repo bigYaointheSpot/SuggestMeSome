@@ -68,6 +68,48 @@ enum ReadQueryRepository {
         }
     }
 
+    static func pendingCoachContextProposals(
+        for run: ProgramRun?,
+        context: ModelContext,
+        limit: Int = 10
+    ) -> [AdaptationProposal] {
+        let descriptor: FetchDescriptor<AdaptationProposal>
+        if let run {
+            let runID = run.id
+            descriptor = FetchDescriptor<AdaptationProposal>(
+                predicate: #Predicate<AdaptationProposal> { $0.programRun?.id == runID },
+                sortBy: [
+                    SortDescriptor(\AdaptationProposal.priority, order: .reverse),
+                    SortDescriptor(\AdaptationProposal.createdAt, order: .reverse),
+                ]
+            )
+        } else {
+            descriptor = FetchDescriptor<AdaptationProposal>(
+                sortBy: [
+                    SortDescriptor(\AdaptationProposal.priority, order: .reverse),
+                    SortDescriptor(\AdaptationProposal.createdAt, order: .reverse),
+                ]
+            )
+        }
+
+        var mutable = descriptor
+        mutable.fetchLimit = max(limit, 50)
+
+        let rows = (try? context.fetch(mutable)) ?? []
+        let filtered = rows.filter { proposal in
+            let isPending = proposal.proposalStatus == .pendingUserConfirmation ||
+                proposal.proposalStatus == .pendingAutoApply
+            guard isPending else { return false }
+
+            if let run {
+                return proposal.programRun?.id == run.id
+            }
+            return proposal.programRun == nil
+        }
+
+        return Array(filtered.prefix(max(1, limit)))
+    }
+
     static func activeOverlays(for run: ProgramRun, context: ModelContext) -> [AppliedProgramOverlay] {
         let runID = run.id
         let descriptor = FetchDescriptor<AppliedProgramOverlay>(

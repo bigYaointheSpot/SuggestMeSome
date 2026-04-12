@@ -76,6 +76,7 @@ struct WatchTodayPlanSnapshot: Codable, Equatable {
     var hasPainFlag: Bool
     var sessionLabel: String             // short label for the session (watch-safe)
     var programName: String?
+    var programRunStableID: String? = nil
     var programWeekNumber: Int?
     var programSessionNumber: Int?
     var activeSourceLabels: [String]

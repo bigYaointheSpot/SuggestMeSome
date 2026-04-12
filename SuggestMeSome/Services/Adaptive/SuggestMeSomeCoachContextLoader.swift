@@ -20,14 +20,16 @@ struct SuggestMeSomeCoachContextLoader {
 
     func loadContext(
         todayCheckIn: DailyCoachCheckIn?,
-        objectiveRecoveryInsight: ObjectiveRecoveryInsight? = nil
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight? = nil,
+        activeRun: ProgramRun? = nil
     ) -> SuggestMeSomeCoachContext {
-        let fatigueStatus = fetchLatestFatigueStatus()
+        let focusRun = activeRun ?? fetchActiveRun()
+        let fatigueStatus = fetchLatestFatigueStatus(for: focusRun)
         let readinessTier = todayCheckIn.map { DailyCoachRecommendationService.computeReadinessTier(from: $0) }
         let hasPain = todayCheckIn?.hasPainOrDiscomfort ?? false
 
-        let overlaySummaries = fetchActiveOverlaySummaries()
-        let proposals = fetchPendingProposals()
+        let overlaySummaries = fetchActiveOverlaySummaries(for: focusRun)
+        let proposals = fetchPendingProposals(for: focusRun)
         let preferences = learnPreferences()
 
         return SuggestMeSomeCoachContext(
@@ -43,43 +45,44 @@ struct SuggestMeSomeCoachContextLoader {
 
     // MARK: - Private fetches
 
-    private func fetchLatestFatigueStatus() -> FatigueStatus? {
+    private func fetchActiveRun() -> ProgramRun? {
+        ReadQueryRepository.activeProgramRuns(limit: 1, context: context).first
+    }
+
+    private func fetchLatestFatigueStatus(for run: ProgramRun?) -> FatigueStatus? {
+        if let run {
+            let runID = run.id
+            let descriptor = FetchDescriptor<WeeklyTrainingAnalysis>(
+                predicate: #Predicate<WeeklyTrainingAnalysis> {
+                    $0.programRun?.id == runID && $0.isFinalized
+                },
+                sortBy: [SortDescriptor(\WeeklyTrainingAnalysis.weekStartDate, order: .reverse)]
+            )
+            var limited = descriptor
+            limited.fetchLimit = 1
+            let results = (try? context.fetch(limited)) ?? []
+            return results.first?.fatigueStatus
+        }
+
         let descriptor = FetchDescriptor<WeeklyTrainingAnalysis>(
             predicate: #Predicate<WeeklyTrainingAnalysis> { $0.isFinalized },
             sortBy: [SortDescriptor(\WeeklyTrainingAnalysis.weekStartDate, order: .reverse)]
         )
         var limited = descriptor
-        limited.fetchLimit = 1
+        limited.fetchLimit = 10
         let results = (try? context.fetch(limited)) ?? []
-        return results.first?.fatigueStatus
+        return results.first(where: { $0.programRun == nil })?.fatigueStatus
     }
 
-    private func fetchActiveOverlaySummaries() -> [String] {
-        // Fetch all and filter in-memory to avoid SwiftData predicate limitations with enums.
-        let descriptor = FetchDescriptor<AppliedProgramOverlay>(
-            sortBy: [SortDescriptor(\AppliedProgramOverlay.appliedAt, order: .reverse)]
-        )
-        let overlays = (try? context.fetch(descriptor)) ?? []
-        return overlays
-            .filter { $0.overlayStatus == .active }
+    private func fetchActiveOverlaySummaries(for run: ProgramRun?) -> [String] {
+        guard let run else { return [] }
+        return ReadQueryRepository.activeOverlays(for: run, context: context)
             .compactMap(\.summaryText)
             .filter { !$0.isEmpty }
     }
 
-    private func fetchPendingProposals() -> [SuggestMeSomeCoachContextProposal] {
-        // Fetch all and filter in-memory to avoid SwiftData predicate limitations with enums.
-        let descriptor = FetchDescriptor<AdaptationProposal>(
-            sortBy: [SortDescriptor(\AdaptationProposal.priority, order: .reverse)]
-        )
-        var limited = descriptor
-        limited.fetchLimit = 50   // fetch more than needed; filter down below
-        let all = (try? context.fetch(limited)) ?? []
-
-        let pending = all.filter {
-            $0.proposalStatus == .pendingUserConfirmation || $0.proposalStatus == .pendingAutoApply
-        }.prefix(10)
-
-        return pending.map { proposal in
+    private func fetchPendingProposals(for run: ProgramRun?) -> [SuggestMeSomeCoachContextProposal] {
+        ReadQueryRepository.pendingCoachContextProposals(for: run, context: context, limit: 10).map { proposal in
             SuggestMeSomeCoachContextProposal(
                 proposalType: proposal.proposalType,
                 targetLiftKey: proposal.targetLiftKey,

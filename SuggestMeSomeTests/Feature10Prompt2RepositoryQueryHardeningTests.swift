@@ -170,8 +170,9 @@ struct Feature10Prompt2RepositoryQueryHardeningTests {
         DeferredNavigationService.launchAfterSheetDismissIfNeeded(hasPendingDestination: true) {
             launched = true
         }
-        await Task.yield()
-        await Task.yield()
+        for _ in 0..<10 where !launched {
+            await Task.yield()
+        }
         #expect(launched == true)
     }
 
