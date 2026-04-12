@@ -16,6 +16,9 @@ protocol WatchCompanionBridge {
     func refreshStatus() async -> WatchCompanionStatus
     func sendWorkoutLaunch(_ payload: WatchWorkoutLaunchPayload) async
     func sendWorkoutProgress(_ snapshot: WatchWorkoutProgressSnapshot) async
+    func sendTodayPlanSnapshot(_ snapshot: WatchTodayPlanSnapshot) async
+    func sendLiveWorkoutSnapshot(_ snapshot: WatchLiveWorkoutSnapshot) async
+    func sendCurrentSessionContext(_ context: WatchCurrentSessionContext) async
 }
 
 @MainActor
@@ -65,17 +68,8 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
 
     func sendWorkoutLaunch(_ payload: WatchWorkoutLaunchPayload) async {
 #if canImport(WatchConnectivity)
-        guard let session else { return }
-        guard session.activationState == .activated else { return }
-        guard session.isWatchAppInstalled else { return }
-        let message: [String: Any] = [
-            "event": "workoutLaunch",
-            "workoutID": payload.workoutID.uuidString,
-            "startedAt": payload.startedAt.timeIntervalSince1970,
-            "programRunID": payload.programRunID?.uuidString as Any,
-            "programWeekNumber": payload.programWeekNumber as Any,
-            "programSessionNumber": payload.programSessionNumber as Any
-        ]
+        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let message = Self.makeTransferMessage(kind: .workoutLaunch, payload: payload) else { return }
         session.transferUserInfo(message)
 #else
         _ = payload
@@ -84,21 +78,89 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
 
     func sendWorkoutProgress(_ snapshot: WatchWorkoutProgressSnapshot) async {
 #if canImport(WatchConnectivity)
-        guard let session else { return }
-        guard session.activationState == .activated else { return }
-        guard session.isWatchAppInstalled else { return }
-        let message: [String: Any] = [
-            "event": "workoutProgress",
-            "workoutID": snapshot.workoutID.uuidString,
-            "elapsedSeconds": snapshot.elapsedSeconds,
-            "completedExercises": snapshot.completedExercises,
-            "totalExercises": snapshot.totalExercises,
-            "capturedAt": snapshot.capturedAt.timeIntervalSince1970
-        ]
+        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let message = Self.makeTransferMessage(kind: .workoutProgress, payload: snapshot) else { return }
         session.transferUserInfo(message)
 #else
         _ = snapshot
 #endif
+    }
+
+    func sendTodayPlanSnapshot(_ snapshot: WatchTodayPlanSnapshot) async {
+#if canImport(WatchConnectivity)
+        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let message = Self.makeContextMessage(kind: .todayPlanSnapshot, payload: snapshot) else { return }
+        try? session.updateApplicationContext(message)
+#else
+        _ = snapshot
+#endif
+    }
+
+    func sendLiveWorkoutSnapshot(_ snapshot: WatchLiveWorkoutSnapshot) async {
+#if canImport(WatchConnectivity)
+        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let message = Self.makeContextMessage(kind: .liveWorkoutSnapshot, payload: snapshot) else { return }
+        try? session.updateApplicationContext(message)
+#else
+        _ = snapshot
+#endif
+    }
+
+    func sendCurrentSessionContext(_ context: WatchCurrentSessionContext) async {
+#if canImport(WatchConnectivity)
+        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let message = Self.makeContextMessage(kind: .currentSessionContext, payload: context) else { return }
+        try? session.updateApplicationContext(message)
+#else
+        _ = context
+#endif
+    }
+}
+
+// MARK: - Shared message encoding
+
+extension DefaultWatchCompanionBridge {
+    static func makeTransferMessage<Payload: Codable & Equatable>(
+        kind: WatchPayloadKind,
+        payload: Payload,
+        now: Date = Date()
+    ) -> [String: Any]? {
+        guard let payloadData = encodePayload(payload) else { return nil }
+        return [
+            "schemaVersion": WatchPayloadContractVersion.current,
+            "kind": kind.rawValue,
+            "sentAt": now.timeIntervalSince1970,
+            "payloadJSON": payloadData
+        ]
+    }
+
+    static func makeContextMessage<Payload: Codable & Equatable>(
+        kind: WatchPayloadKind,
+        payload: Payload,
+        now: Date = Date()
+    ) -> [String: Any]? {
+        // updateApplicationContext must be property-list-safe. We encode the
+        // payload to JSON Data (allowed) and pair it with primitive metadata.
+        guard let payloadData = encodePayload(payload) else { return nil }
+        return [
+            "schemaVersion": WatchPayloadContractVersion.current,
+            "kind": kind.rawValue,
+            "sentAt": now.timeIntervalSince1970,
+            "payloadJSON": payloadData
+        ]
+    }
+
+    static func encodePayload<Payload: Codable>(_ payload: Payload) -> Data? {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        encoder.outputFormatting = [.sortedKeys]
+        return try? encoder.encode(payload)
+    }
+
+    static func decodePayload<Payload: Codable>(_ type: Payload.Type, from data: Data) -> Payload? {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        return try? decoder.decode(type, from: data)
     }
 }
 

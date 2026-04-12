@@ -1905,6 +1905,57 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 7 [Apple Watch Companion and Today Plan Transport Foundation] — 2026-04-12
+
+- Made the Apple Watch companion seam substantially more real so that near-term watch work (remote launcher, live workout companion, Today Plan glance) can land on top of a shared, sync-aligned foundation without destabilising the iOS project.
+- Added shared watch-safe contract layer in `Models/WatchPayloadContracts.swift`:
+  - `WatchPayloadContractVersion` namespace mirroring `SyncContractVersion` (Feature 10 Prompt 1)
+  - `WatchPayloadKind` discriminator enum (`workoutLaunch`, `workoutProgress`, `todayPlanSnapshot`, `currentSessionContext`, `liveWorkoutSnapshot`)
+  - `WatchPayloadEnvelope<Payload>` versioned Codable wrapper (kind + schemaVersion + sentAt + payload); intentionally kept separate from `SyncEnvelopeDTO` so cloud sync and watch transport can evolve independently while sharing idioms
+  - `WatchTodayPlanSnapshot` compact Today Plan summary for watch display (confidence, compact summary, primary suggestion text, readiness tier, pain flag, session label, program coordinates, active source labels, what-changed-today, adherence headline/guidance/sessions-behind, pending proposal count)
+  - `WatchCurrentSessionContext` point-in-time view of the current exercise + set (exercise index, total sets, logged sets, next set number, next prescribed reps/weight/unit, cardio target seconds)
+  - `WatchLiveWorkoutSnapshot` richer live-progress snapshot (elapsed, completed/total exercises, completed/total sets in current exercise, current exercise name, session label, program coordinates)
+  - All payloads are `Codable + Equatable`, SwiftData-runtime independent, and explicitly additive-evolution so older watch builds remain forward compatible
+- Added pure iPhone-side mapping layer in `Services/Watch/WatchSessionCoordinator.swift`:
+  - `WatchPayloadMapper` — side-effect-free static mapping functions (Today Plan → snapshot, draft entries → current session context, draft entries → live snapshot, draft entries → progress snapshot, launch payload builder, completion helpers for draft sets/exercises including cardio)
+  - `WatchSessionCoordinator` — `@MainActor` façade owning a `WatchCompanionBridge` that forwards typed broadcasts (`broadcastTodayPlan`, `broadcastWorkoutLaunch`, `broadcastLiveWorkout`, `broadcastCurrentSessionContext`); injection-friendly for tests
+  - Current-session cursor logic: picks the first exercise whose sets are not all fully logged; honours explicit cursor override; falls back to the last entry when every exercise is complete
+  - Prescribed-target fallback: when the next set has no live reps/weight, the context falls back to prescribed reps/weight/unit from the draft entry
+- Extended `Services/Watch/WatchCompanionBridge.swift`:
+  - `WatchCompanionBridge` protocol expanded with `sendTodayPlanSnapshot`, `sendLiveWorkoutSnapshot`, `sendCurrentSessionContext`
+  - `DefaultWatchCompanionBridge` now JSON-encodes payloads via a shared `encodePayload` helper (`JSONEncoder` with `.secondsSince1970` dates and sorted keys for deterministic output) and routes them through two channels:
+    - `transferUserInfo` for queued events (`workoutLaunch`, `workoutProgress`)
+    - `updateApplicationContext` for latest-wins state (`todayPlanSnapshot`, `liveWorkoutSnapshot`, `currentSessionContext`)
+  - Every bridge message now carries `schemaVersion`, `kind`, and `sentAt` alongside the JSON payload data so the future watch side can dispatch deterministically without peeking at the payload shape
+  - Kept `#if canImport(WatchConnectivity)` and activation-state guards so the bridge stays safe on simulators/devices without a paired watch
+- Coaching trust preserved:
+  - the coordinator never synthesises its own plan — it maps verbatim from `TodayPlan` produced by `TodayPlanEngine` (Feature 10 Prompt 6), so watch surfaces stay faithful to the explainable iPhone output
+  - confidence, readiness tier, pain flag, adherence rescue, active source labels, and what-changed-today all flow through unchanged
+- Future cloud-sync compatibility:
+  - watch DTOs avoid duplicating persisted model shapes and instead compose from the same Today Plan + draft entry value types the iPhone already uses
+  - the envelope + schema-version discipline matches the sync-ready contract style from Prompt 1, so future cloud sync does not have to fight an ad hoc watch-only shape
+- watchOS target scope decision: a net-new watchOS companion target would have required pbxproj structural changes outside the existing file-system-synchronized group setup. To protect project integrity, the watchOS target was deliberately deferred; the shared contracts, bridge layer, and iPhone-side coordination are fully implemented and tested so a subsequent prompt can add the watchOS target non-destructively against a stable foundation.
+- Added focused Prompt 7 validation coverage in `SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests.swift` (24 tests):
+  - envelope versioning + Codable round-trip for Today Plan snapshot, live workout snapshot, and current session context
+  - Today Plan snapshot mapping: program session label with week/session/name, standalone session type fallback, pain flag, adherence rescue headline/guidance/sessions-behind, what-changed and pending proposal propagation, readiness tier label mapping
+  - launch payload generation: program coordinates carried through, standalone launch with nil coordinates
+  - current session context mapping: first-incomplete picker, cursor override, nil-for-empty entries, prescribed target fallback, last-entry fallback when everything is logged
+  - live workout snapshot mapping: completed exercise counts, current exercise name + set counts, negative-elapsed clamp, cardio completion detection
+  - progress snapshot parity with live snapshot completed counts
+  - coordinator broadcasts: launch + progress + live snapshot sent in a single `broadcastLiveWorkout` call, Today Plan broadcast, current session context broadcast, skip-when-empty guard
+  - `MockWatchCompanionBridge` test double recording all five typed send paths
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests` (24/24 pass)
+  - broader regression slice:
+    - `Feature10SyncFoundationValidationTests` (pass)
+    - `Feature10Prompt6TodayPlanEngineTests` (pass)
+    - `Feature10Prompt5CoachAwareFusionTests` (pass)
+    - `Feature7ValidationTests` (pass)
+    - `Feature8ValidationTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
 ---
 
 ## Project Setup
