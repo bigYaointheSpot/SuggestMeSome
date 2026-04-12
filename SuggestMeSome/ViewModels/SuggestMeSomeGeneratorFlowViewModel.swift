@@ -20,6 +20,7 @@ final class SuggestMeSomeGeneratorFlowViewModel {
 
     private let recommendationService: SuggestMeSomeRecommendationService
     private let generationService: SuggestMeSomeGenerationService
+    private let coachContextLoader: SuggestMeSomeCoachContextLoader
 
     var step: Step = .configure
     var configuration: SuggestMeSomeSessionConfiguration
@@ -29,6 +30,7 @@ final class SuggestMeSomeGeneratorFlowViewModel {
     init(context: ModelContext) {
         self.recommendationService = SuggestMeSomeRecommendationService(context: context)
         self.generationService = SuggestMeSomeGenerationService(context: context)
+        self.coachContextLoader = SuggestMeSomeCoachContextLoader(context: context)
         self.configuration = SuggestMeSomeGeneratorFlowViewModel.loadLastConfiguration()
     }
 
@@ -48,11 +50,20 @@ final class SuggestMeSomeGeneratorFlowViewModel {
         configuration.intensity = value
     }
 
-    func makeRecommendation(allMuscleGroups: [MuscleGroup]) {
+    func makeRecommendation(
+        allMuscleGroups: [MuscleGroup],
+        todayCheckIn: DailyCoachCheckIn? = nil,
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight? = nil
+    ) {
         persistConfiguration()
+        let coachContext = coachContextLoader.loadContext(
+            todayCheckIn: todayCheckIn,
+            objectiveRecoveryInsight: objectiveRecoveryInsight
+        )
         recommendation = recommendationService.recommendSession(
             configuration: configuration,
-            allMuscleGroups: allMuscleGroups
+            allMuscleGroups: allMuscleGroups,
+            coachContext: coachContext
         )
         generatedWorkout = nil
         step = .recommendation

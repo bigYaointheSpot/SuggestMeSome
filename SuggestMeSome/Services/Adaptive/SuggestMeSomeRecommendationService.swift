@@ -15,13 +15,25 @@ struct SuggestMeSomeRecommendationService {
 
     func recommendSession(
         configuration: SuggestMeSomeSessionConfiguration,
-        allMuscleGroups: [MuscleGroup]
+        allMuscleGroups: [MuscleGroup],
+        coachContext: SuggestMeSomeCoachContext? = nil
     ) -> SuggestMeSomeSessionRecommendation {
         let recentWorkouts = fetchRecentWorkouts(limit: 24)
         let activeRun = fetchMostRecentActiveRun()
 
+        // Pain/discomfort is the highest-priority override — it forces recovery mode and
+        // caps intensity to 1 regardless of all other signals.
+        let painForced = coachContext?.hasPainOrDiscomfort ?? false
+
         let resolvedMode = resolveMode(configuration.mode, configuration: configuration, recentWorkouts: recentWorkouts)
-        let adjustedIntensity = adjustedIntensity(for: configuration, resolvedMode: resolvedMode)
+        var adjustedIntensity = adjustedIntensity(for: configuration, resolvedMode: resolvedMode)
+
+        // Apply coach context intensity caps before any conflict analysis.
+        adjustedIntensity = applyCoachContextIntensityCap(
+            adjustedIntensity,
+            coachContext: coachContext,
+            painForced: painForced
+        )
 
         let heavyLiftExposures = mostRecentHardCanonicalExposures(in: recentWorkouts)
         let blockedLifts = blockedCanonicalLifts(
@@ -42,9 +54,19 @@ struct SuggestMeSomeRecommendationService {
             allMuscleGroups: allMuscleGroups
         )
 
-        let shouldBiasRecovery = (overlapCount >= 2 && adjustedIntensity >= 4) || !blockedLifts.isEmpty || programConflict.hasConflict
+        // Coach-context recovery bias: fatigue, overlays, deload proposals, and pain all
+        // contribute additionally to the existing overlap/conflict/blocked-lift signals.
+        let coachBiasesRecovery = shouldCoachBiasRecovery(
+            coachContext: coachContext,
+            painForced: painForced
+        )
+        let shouldBiasRecovery = coachBiasesRecovery
+            || (overlapCount >= 2 && adjustedIntensity >= 4)
+            || !blockedLifts.isEmpty
+            || programConflict.hasConflict
+
         let finalMode = adjustedMode(
-            baseMode: resolvedMode,
+            baseMode: painForced ? .recovery : resolvedMode,
             shouldBiasRecovery: shouldBiasRecovery,
             durationMinutes: configuration.durationMinutes
         )
@@ -61,14 +83,16 @@ struct SuggestMeSomeRecommendationService {
             goal: finalGoal,
             blockedLifts: blockedLifts,
             overlapCount: overlapCount,
-            equipmentProfile: configuration.equipmentProfile
+            equipmentProfile: configuration.equipmentProfile,
+            coachContext: coachContext
         )
 
         let anchorLifts = candidateAnchorLifts(
             mode: finalMode,
             allMuscleGroups: allMuscleGroups,
             blockedLifts: blockedLifts,
-            equipmentProfile: configuration.equipmentProfile
+            equipmentProfile: configuration.equipmentProfile,
+            preferences: coachContext?.exercisePreferences
         )
 
         let selectedMuscleGroups = selectedGroups(for: finalMode, allMuscleGroups: allMuscleGroups)
@@ -97,7 +121,8 @@ struct SuggestMeSomeRecommendationService {
             finalMode: finalMode,
             blockedLifts: blockedLifts,
             overlapCount: overlapCount,
-            hasProgramConflict: programConflict.hasConflict
+            hasProgramConflict: programConflict.hasConflict,
+            coachContext: coachContext
         )
 
         return SuggestMeSomeSessionRecommendation(
@@ -108,7 +133,8 @@ struct SuggestMeSomeRecommendationService {
                 blockedLifts: blockedLifts,
                 hasProgramConflict: programConflict.hasConflict,
                 durationMinutes: configuration.durationMinutes,
-                buildable: buildable
+                buildable: buildable,
+                coachContext: coachContext
             ),
             rationale: rationaleText(
                 configuredMode: configuration.mode,
@@ -118,7 +144,8 @@ struct SuggestMeSomeRecommendationService {
                 adjustedIntensity: adjustedIntensity,
                 blockedLifts: blockedLifts,
                 overlapCount: overlapCount,
-                programConflictReason: programConflict.reason
+                programConflictReason: programConflict.reason,
+                coachContext: coachContext
             ),
             reasonChips: chips,
             wasRedirected: finalMode != configuration.mode,
@@ -148,6 +175,90 @@ struct SuggestMeSomeRecommendationService {
             sortBy: [SortDescriptor(\ProgramRun.startDate, order: .reverse)]
         )
         return (try? context.fetch(descriptor))?.first
+    }
+
+    // MARK: - Coach context integration helpers
+
+    /// Applies intensity caps derived from coach context signals.
+    ///
+    /// Priority order (highest to lowest):
+    ///   1. Pain/discomfort → cap at 1 (manual override, always respected)
+    ///   2. Critical fatigue → cap at 1
+    ///   3. High fatigue → cap at 2
+    ///   4. Elevated fatigue → cap at 3
+    ///   5. Low readiness tier → cap at 3
+    ///   6. HealthKit caution → nudge down by 1 (medium influence only)
+    ///
+    /// HealthKit caution cannot override a cap that came from manual readiness or fatigue.
+    private func applyCoachContextIntensityCap(
+        _ intensity: Int,
+        coachContext: SuggestMeSomeCoachContext?,
+        painForced: Bool
+    ) -> Int {
+        guard let ctx = coachContext else { return intensity }
+        var result = intensity
+
+        // 1. Pain — highest priority, always forces floor.
+        if painForced {
+            return 1
+        }
+
+        // 2–4. Fatigue caps.
+        if let fatigue = ctx.fatigueStatus {
+            switch fatigue {
+            case .critical:
+                result = min(result, 1)
+            case .high:
+                result = min(result, 2)
+            case .elevated:
+                result = min(result, 3)
+            case .low, .manageable:
+                break
+            }
+        }
+
+        // 5. Low readiness tier.
+        if let tier = ctx.readinessTier, tier == .low {
+            result = min(result, 3)
+        }
+
+        // 6. HealthKit caution — medium influence, nudge only, cannot override prior caps.
+        if let hk = ctx.objectiveRecoveryInsight, hk.status == .caution {
+            result = max(1, result - 1)
+        }
+
+        return result
+    }
+
+    /// Returns true if any coach context signal independently warrants biasing toward recovery.
+    ///
+    /// This complements (does not replace) the existing overlap/blocked-lift/program-conflict signals.
+    private func shouldCoachBiasRecovery(
+        coachContext: SuggestMeSomeCoachContext?,
+        painForced: Bool
+    ) -> Bool {
+        guard let ctx = coachContext else { return false }
+
+        if painForced { return true }
+
+        if let fatigue = ctx.fatigueStatus, fatigue == .elevated || fatigue == .high || fatigue == .critical {
+            return true
+        }
+
+        if let tier = ctx.readinessTier, tier == .low {
+            return true
+        }
+
+        // An active deload overlay means the coach already approved conservative loading.
+        let hasDeloadOverlay = ctx.activeOverlaySummaries.contains { $0.localizedCaseInsensitiveContains("deload") }
+        if hasDeloadOverlay { return true }
+
+        // A pending deload proposal means the system recommends conservative loading soon.
+        if ctx.pendingProposals.contains(where: { $0.proposalType == .deload }) {
+            return true
+        }
+
+        return false
     }
 
     // MARK: - Mode / goal normalization
@@ -456,7 +567,8 @@ struct SuggestMeSomeRecommendationService {
         goal: SuggestMeSomeGenerationGoal,
         blockedLifts: Set<CanonicalLift>,
         overlapCount: Int,
-        equipmentProfile: SuggestMeSomeEquipmentProfile
+        equipmentProfile: SuggestMeSomeEquipmentProfile,
+        coachContext: SuggestMeSomeCoachContext? = nil
     ) -> [String] {
         var families: [String]
 
@@ -511,6 +623,19 @@ struct SuggestMeSomeRecommendationService {
             }
         }
 
+        // Coach context additions: overlay and proposal context, underused variety hint.
+        if let ctx = coachContext {
+            if !ctx.activeOverlaySummaries.isEmpty {
+                families.insert("Coach-approved overlay in effect", at: 0)
+            }
+            if ctx.pendingProposals.contains(where: { $0.proposalType == .variationSwap }) {
+                families.append("Variation swap candidate (pending proposal)")
+            }
+            if let prefs = ctx.exercisePreferences, !prefs.underusedExercises.isEmpty {
+                families.append("Variety rotation available")
+            }
+        }
+
         return uniquePreservingOrder(families)
     }
 
@@ -518,7 +643,8 @@ struct SuggestMeSomeRecommendationService {
         mode: SuggestMeSomeSessionMode,
         allMuscleGroups: [MuscleGroup],
         blockedLifts: Set<CanonicalLift>,
-        equipmentProfile: SuggestMeSomeEquipmentProfile
+        equipmentProfile: SuggestMeSomeEquipmentProfile,
+        preferences: SuggestMeSomeExercisePreferences? = nil
     ) -> [String] {
         var canonicalCandidates: [CanonicalLift]
 
@@ -542,7 +668,12 @@ struct SuggestMeSomeRecommendationService {
         canonicalCandidates.removeAll { blockedLifts.contains($0) }
 
         var anchors: [String] = canonicalCandidates.compactMap {
-            bestAnchorName(for: $0, allMuscleGroups: allMuscleGroups, equipmentProfile: equipmentProfile)
+            preferenceAwareAnchorName(
+                for: $0,
+                allMuscleGroups: allMuscleGroups,
+                equipmentProfile: equipmentProfile,
+                preferences: preferences
+            )
         }
 
         if anchors.isEmpty {
@@ -569,6 +700,42 @@ struct SuggestMeSomeRecommendationService {
         }
 
         return Array(anchors.prefix(3))
+    }
+
+    /// Returns the best anchor name for a canonical lift, with preference signal bias.
+    ///
+    /// If the user has a frequently-used variation that is available and equipment-compatible,
+    /// that variation is preferred over the default canonical ordering. Falls back to
+    /// `bestAnchorName` when no preference match is found.
+    private func preferenceAwareAnchorName(
+        for canonical: CanonicalLift,
+        allMuscleGroups: [MuscleGroup],
+        equipmentProfile: SuggestMeSomeEquipmentProfile,
+        preferences: SuggestMeSomeExercisePreferences?
+    ) -> String? {
+        guard let prefs = preferences, !prefs.frequentlyUsedExercises.isEmpty else {
+            return bestAnchorName(for: canonical, allMuscleGroups: allMuscleGroups, equipmentProfile: equipmentProfile)
+        }
+
+        let availableNames = Set(allMuscleGroups.flatMap { group in
+            group.exercises.map { $0.name.lowercased() }
+        })
+
+        let frequentLower = Set(prefs.frequentlyUsedExercises.map { $0.lowercased() })
+
+        // Scan variation names; return the first that is frequently used AND available AND compatible.
+        for variation in canonical.variationNames {
+            let lower = variation.lowercased()
+            guard availableNames.contains(lower) else { continue }
+            guard isLikelyCompatible(variation, with: equipmentProfile) else { continue }
+            guard frequentLower.contains(lower) else { continue }
+            return allMuscleGroups
+                .flatMap { $0.exercises }
+                .first(where: { $0.name.lowercased() == lower })?
+                .name
+        }
+
+        return bestAnchorName(for: canonical, allMuscleGroups: allMuscleGroups, equipmentProfile: equipmentProfile)
     }
 
     private func bestAnchorName(
@@ -654,13 +821,48 @@ struct SuggestMeSomeRecommendationService {
         blockedLifts: Set<CanonicalLift>,
         hasProgramConflict: Bool,
         durationMinutes: Int,
-        buildable: Bool
+        buildable: Bool,
+        coachContext: SuggestMeSomeCoachContext? = nil
     ) -> String {
         guard buildable else {
             return "Increase the duration to at least 20 minutes to build a session from this recommendation."
         }
 
         var parts: [String] = []
+
+        // Pain/discomfort — highest priority, always surfaces first.
+        if coachContext?.hasPainOrDiscomfort == true {
+            parts.append("Pain or discomfort flagged — today's session is conservative to protect recovery.")
+        }
+
+        // Fatigue signal.
+        if let fatigue = coachContext?.fatigueStatus {
+            switch fatigue {
+            case .critical:
+                parts.append("Critical fatigue detected — intensity is capped to protect your training capacity.")
+            case .high:
+                parts.append("High fatigue from recent training — volume and intensity are reduced today.")
+            case .elevated:
+                parts.append("Elevated fatigue from recent training — a conservative session is recommended.")
+            default:
+                break
+            }
+        }
+
+        // Readiness.
+        if let tier = coachContext?.readinessTier, tier == .low, coachContext?.hasPainOrDiscomfort != true {
+            parts.append("Today's readiness check-in shows low energy or high stress — keeping intensity conservative.")
+        }
+
+        // Active overlay.
+        if let overlays = coachContext?.activeOverlaySummaries, !overlays.isEmpty {
+            parts.append("Coach-approved adjustment is active: \(overlays.first!).")
+        }
+
+        // HealthKit caution — medium signal, never overrides manual flags.
+        if let hk = coachContext?.objectiveRecoveryInsight, hk.status == .caution {
+            parts.append("HealthKit recovery data suggests caution — intensity nudged down by one step.")
+        }
 
         if !blockedLifts.isEmpty {
             let liftLabel = blockedLifts.map(\.displayName).sorted().joined(separator: " and ")
@@ -709,7 +911,8 @@ struct SuggestMeSomeRecommendationService {
         adjustedIntensity: Int,
         blockedLifts: Set<CanonicalLift>,
         overlapCount: Int,
-        programConflictReason: String?
+        programConflictReason: String?,
+        coachContext: SuggestMeSomeCoachContext? = nil
     ) -> String {
         var reasons: [String] = []
 
@@ -732,6 +935,45 @@ struct SuggestMeSomeRecommendationService {
             reasons.append(programConflictReason)
         }
 
+        if let ctx = coachContext {
+            if ctx.hasPainOrDiscomfort {
+                reasons.append("Pain or discomfort flagged — intensity capped to 1 and recovery mode forced.")
+            }
+
+            if let fatigue = ctx.fatigueStatus {
+                switch fatigue {
+                case .critical:
+                    reasons.append("Critical fatigue status from weekly analysis — intensity hard-capped at 1.")
+                case .high:
+                    reasons.append("High fatigue status from weekly analysis — intensity hard-capped at 2.")
+                case .elevated:
+                    reasons.append("Elevated fatigue from weekly analysis — intensity capped at 3.")
+                default:
+                    break
+                }
+            }
+
+            if let tier = ctx.readinessTier, tier == .low {
+                reasons.append("Low readiness tier from today's check-in — intensity kept at or below 3.")
+            }
+
+            if let hk = ctx.objectiveRecoveryInsight, hk.status == .caution {
+                reasons.append("HealthKit recovery caution (\(hk.compactSummary)) — intensity nudged down 1 step.")
+            }
+
+            if !ctx.activeOverlaySummaries.isEmpty {
+                reasons.append("Active coach overlay in effect — session shaped around existing approved adjustments.")
+            }
+
+            if ctx.pendingProposals.contains(where: { $0.proposalType == .deload }) {
+                reasons.append("Pending deload proposal — biasing session conservative ahead of planned deload.")
+            }
+
+            if let prefs = ctx.exercisePreferences, !prefs.frequentlyUsedExercises.isEmpty {
+                reasons.append("Anchor lifts biased toward your frequently-trained exercise patterns.")
+            }
+        }
+
         return reasons.joined(separator: " ")
     }
 
@@ -743,7 +985,8 @@ struct SuggestMeSomeRecommendationService {
         finalMode: SuggestMeSomeSessionMode,
         blockedLifts: Set<CanonicalLift>,
         overlapCount: Int,
-        hasProgramConflict: Bool
+        hasProgramConflict: Bool,
+        coachContext: SuggestMeSomeCoachContext? = nil
     ) -> [String] {
         var chips: [String] = []
 
@@ -765,6 +1008,42 @@ struct SuggestMeSomeRecommendationService {
 
         if hasProgramConflict {
             chips.append("Program-aware")
+        }
+
+        // Coach context chips — each one maps to an explicit decision factor.
+        if let ctx = coachContext {
+            if ctx.hasPainOrDiscomfort {
+                chips.append("Pain override")
+            }
+
+            if let fatigue = ctx.fatigueStatus {
+                switch fatigue {
+                case .critical: chips.append("Critical fatigue")
+                case .high:     chips.append("High fatigue")
+                case .elevated: chips.append("Elevated fatigue")
+                default:        break
+                }
+            }
+
+            if let tier = ctx.readinessTier, tier == .low {
+                chips.append("Low readiness")
+            }
+
+            if !ctx.activeOverlaySummaries.isEmpty {
+                chips.append("Overlay active")
+            }
+
+            if ctx.pendingProposals.contains(where: { $0.proposalType == .deload }) {
+                chips.append("Deload proposed")
+            }
+
+            if let hk = ctx.objectiveRecoveryInsight, hk.status == .caution {
+                chips.append("HealthKit nudge")
+            }
+
+            if let prefs = ctx.exercisePreferences, !prefs.frequentlyUsedExercises.isEmpty {
+                chips.append("Preference-biased")
+            }
         }
 
         return chips

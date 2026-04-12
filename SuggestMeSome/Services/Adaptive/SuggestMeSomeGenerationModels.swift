@@ -148,3 +148,69 @@ struct SuggestMeSomeSessionRecommendation {
     let isBuildableIntoWorkout: Bool
     let request: SuggestMeSomeGenerationRequest?
 }
+
+// MARK: - Coach Context Types
+
+/// Aggregated coaching signals passed into the SuggestMeSome recommendation stage.
+///
+/// All fields are optional; the recommendation service degrades gracefully when signals
+/// are absent. This struct is never persisted — it is built on demand from SwiftData models.
+struct SuggestMeSomeCoachContext {
+    /// Latest weekly fatigue state derived from `WeeklyTrainingAnalysis`.
+    let fatigueStatus: FatigueStatus?
+    /// Readiness tier derived from today's `DailyCoachCheckIn`.
+    let readinessTier: ReadinessTier?
+    /// Whether the user flagged pain or discomfort in today's check-in.
+    /// When true, the recommendation must cap intensity to 1 and force recovery mode.
+    let hasPainOrDiscomfort: Bool
+    /// One-line summaries of active non-destructive overlays on the current program run.
+    /// Present when the coach has already approved adjustments that should carry forward.
+    let activeOverlaySummaries: [String]
+    /// Lightweight view of pending proposals relevant to session shaping (e.g. deload, swap).
+    let pendingProposals: [SuggestMeSomeCoachContextProposal]
+    /// Objective HealthKit recovery insight — medium influence only.
+    /// A `.caution` status nudges intensity down by 1 but cannot override manual readiness.
+    let objectiveRecoveryInsight: ObjectiveRecoveryInsight?
+    /// Learned exercise preferences derived from the user's recent workout history.
+    let exercisePreferences: SuggestMeSomeExercisePreferences?
+
+    init(
+        fatigueStatus: FatigueStatus? = nil,
+        readinessTier: ReadinessTier? = nil,
+        hasPainOrDiscomfort: Bool = false,
+        activeOverlaySummaries: [String] = [],
+        pendingProposals: [SuggestMeSomeCoachContextProposal] = [],
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight? = nil,
+        exercisePreferences: SuggestMeSomeExercisePreferences? = nil
+    ) {
+        self.fatigueStatus = fatigueStatus
+        self.readinessTier = readinessTier
+        self.hasPainOrDiscomfort = hasPainOrDiscomfort
+        self.activeOverlaySummaries = activeOverlaySummaries
+        self.pendingProposals = pendingProposals
+        self.objectiveRecoveryInsight = objectiveRecoveryInsight
+        self.exercisePreferences = exercisePreferences
+    }
+}
+
+/// Lightweight view of one pending adaptation proposal for SuggestMeSome shaping.
+struct SuggestMeSomeCoachContextProposal {
+    let proposalType: ProposalType
+    let targetLiftKey: String?
+    let summaryText: String
+}
+
+/// Learned exercise preference signals derived from the user's workout history.
+struct SuggestMeSomeExercisePreferences {
+    /// Exercise names that appeared 3 or more times in the last 30 workouts.
+    /// Used to bias anchor lift selection toward familiar patterns.
+    let frequentlyUsedExercises: [String]
+    /// Exercise names present in overall history but absent from the last 8 sessions.
+    /// Surfaced as variety candidates in candidateExerciseFamilies context.
+    let underusedExercises: [String]
+
+    init(frequentlyUsedExercises: [String] = [], underusedExercises: [String] = []) {
+        self.frequentlyUsedExercises = frequentlyUsedExercises
+        self.underusedExercises = underusedExercises
+    }
+}

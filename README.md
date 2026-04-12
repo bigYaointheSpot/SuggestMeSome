@@ -1789,6 +1789,68 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 5 [Coach-Aware SuggestMeSome Fusion] — 2026-04-12
+
+- Fused SuggestMeSome recommendation and generation stage with the coaching engine and active program state, making the daily session generator context-aware across fatigue, readiness, overlays, pending proposals, HealthKit recovery, and exercise preferences.
+- Added `SuggestMeSomeCoachContext` and supporting value types (`SuggestMeSomeCoachContextProposal`, `SuggestMeSomeExercisePreferences`) to `SuggestMeSomeGenerationModels.swift` — carries all coaching signals into the recommendation stage without touching any persisted models.
+- Added `SuggestMeSomePreferenceLearnerService` — learns user exercise preference tendencies from workout history:
+  - counts exercise appearances across a configurable recency window (default 30 workouts, threshold 3)
+  - identifies frequently-used exercises (appear 3+ times in window)
+  - identifies underused exercises (in history but absent from last 8 sessions)
+  - each session counts at most once per exercise to prevent duplication inflation
+- Added `SuggestMeSomeCoachContextLoader` — assembles a `SuggestMeSomeCoachContext` snapshot from SwiftData on demand:
+  - latest fatigue status from most recent finalized `WeeklyTrainingAnalysis`
+  - readiness tier from today's `DailyCoachCheckIn` via `DailyCoachRecommendationService.computeReadinessTier`
+  - active overlay summaries (fetched + in-memory filtered to avoid SwiftData enum predicate limitations)
+  - pending proposals (`.pendingUserConfirmation` or `.pendingAutoApply`, in-memory filtered, priority-sorted)
+  - learned preferences from recent workout history via `SuggestMeSomePreferenceLearnerService`
+- Extended `SuggestMeSomeRecommendationService.recommendSession` with optional `coachContext: SuggestMeSomeCoachContext? = nil` parameter (backward compatible; all existing call sites unaffected):
+  - **Pain/discomfort priority** (unchanged + extended): pain flag now propagates through coach context, forces mode to `.recovery` and caps intensity at 1 regardless of all other signals
+  - **Fatigue-aware intensity caps** (new): critical → 1, high → 2, elevated → 3; applied before conflict analysis
+  - **Readiness tier cap** (new): `ReadinessTier.low` caps intensity at 3
+  - **HealthKit medium-influence nudge** (new): `.caution` status nudges intensity down by 1 step; cannot override a tighter manual/fatigue cap
+  - **Recovery bias from coach signals** (new): elevated/high/critical fatigue, low readiness tier, deload overlay keyword, and pending deload proposals all independently trigger recovery bias (additive to existing overlap/conflict/blocked-lift signals)
+  - **Overlay-aware candidate families** (new): active overlays inject "Coach-approved overlay in effect" into candidate exercise families; pending variation swap proposals inject "Variation swap candidate (pending proposal)"
+  - **Preference-aware anchor selection** (new): `preferenceAwareAnchorName` biases anchor lift selection toward the user's frequently-used variation of each canonical lift family
+  - **Underused variety hint** (new): underused exercises trigger "Variety rotation available" in candidate families
+  - **Coach context explainability chips** (new): eight new chips per signal factor (Pain override, Critical/High/Elevated fatigue, Low readiness, Overlay active, Deload proposed, HealthKit nudge, Preference-biased)
+  - **Extended rationale text** (new): all coach context factors append specific, readable sentences to the recommendation rationale
+  - **Extended summary text** (new): pain, fatigue, readiness, overlay, and HealthKit signals each inject explicit, user-facing sentences into the recommendation summary
+- Updated `SuggestMeSomeGeneratorFlowViewModel.makeRecommendation` to load and pass `SuggestMeSomeCoachContext` via `SuggestMeSomeCoachContextLoader`; accepts optional `todayCheckIn` and `objectiveRecoveryInsight` parameters; the existing call site in `GeneratorViews.swift` remains unchanged (defaults to nil context for incremental adoption).
+- Preserved all prior recommendation behavior when `coachContext` is nil — no regressions in existing test suites.
+- Added focused Prompt 5 validation coverage in `SuggestMeSomeTests/Feature10Prompt5CoachAwareFusionTests.swift` (36 tests):
+  - pain override forces recovery mode and intensity 1 regardless of other signals
+  - pain beats critical fatigue for mode determination
+  - critical/high/elevated fatigue intensity caps
+  - manageable fatigue produces no restriction chips
+  - elevated fatigue biases session toward recovery
+  - low readiness tier caps at intensity 3; strong readiness produces no chip
+  - deload overlay summary biases recovery; non-deload overlay chips but does not force recovery
+  - pending deload proposal biases recovery; pending variation swap surfaces in candidate families
+  - frequently-used variation preferred over default canonical anchor
+  - preference-biased chip present with frequent exercises; absent without preferences
+  - underused exercises produce "Variety rotation available" family
+  - HealthKit caution nudges intensity down; good status adds no nudge chip; caution cannot override lower manual cap
+  - rationale has content for all 8 session modes
+  - baseline chips (equipment/duration/intensity) always present; coach chips never appear with nil context
+  - coach context rationale is cumulative (at least as long as base rationale)
+  - focus matrix quality: strength/push produces pressing anchors, hypertrophy/arms-shoulders produces accessory families, full body/general fitness produces compound families, strength/lower produces squat-deadlift anchors, recovery produces low-impact priorities
+  - active program next-session conflict biases recovery with Program-aware chip
+  - preference learner: empty input, frequency detection, threshold non-triggering, underused detection, once-per-session counting
+  - nil context backward compatibility: no coach chips present
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10Prompt5CoachAwareFusionTests` (36/36 pass)
+  - broader regression slice:
+    - `Feature9RecommendationEngineValidationTests` (pass)
+    - `Feature9SuggestMeSomeBuildValidationTests` (pass)
+    - `Feature9Prompt7PolishValidationTests` (pass)
+    - `Feature7ValidationTests` (pass)
+    - `Feature10Prompt4AdaptivePipelineDecompositionTests` (pass)
+    - Note: `Feature9Prompt8EquipmentSubstitutionTests/generatedWorkoutHasSubstitutionNoteWhenBarbellUnavailable` fails non-deterministically in parallel runs due to random exercise selection — pre-existing issue confirmed by reproducing on clean main before this prompt's changes
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
 ---
 
 ## Project Setup
