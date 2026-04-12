@@ -128,6 +128,7 @@ struct CheckInFormView: View {
             existing.hasPainOrDiscomfort = hasPainOrDiscomfort
             existing.painNotes = hasPainOrDiscomfort && !painNotes.isEmpty ? painNotes : nil
             existing.updatedAt = Date()
+            existing.markSyncUpdated(at: existing.updatedAt)
         } else {
             let checkIn = DailyCoachCheckIn(
                 date: today,

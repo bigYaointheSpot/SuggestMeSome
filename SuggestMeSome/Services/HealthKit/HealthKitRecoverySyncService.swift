@@ -154,6 +154,7 @@ final class HealthKitRecoverySyncService {
                 row.bodyMassKilograms = snapshot.bodyMassKilograms
                 row.sourceUpdatedAt = sourceUpdatedAt
                 row.updatedAt = sourceUpdatedAt
+                row.markSyncUpdated(at: sourceUpdatedAt)
                 updated += 1
             } else {
                 context.insert(

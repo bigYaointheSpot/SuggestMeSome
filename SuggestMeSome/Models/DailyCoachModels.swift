@@ -24,6 +24,12 @@ enum WorkoutEffortFeedback: String, Codable, Hashable {
 @Model
 final class DailyCoachCheckIn {
     var id: UUID
+    /// Stable identifier for cross-device sync contracts.
+    var syncStableID: String?
+    /// Monotonic version for deterministic merge tie-breaks.
+    var syncVersion: Int
+    /// Last modified timestamp used by sync conflict policies.
+    var syncLastModifiedAt: Date
     /// Calendar day this check-in represents (time component should be start-of-day).
     var date: Date
     /// Timestamp when the user started the check-in flow.
@@ -50,6 +56,9 @@ final class DailyCoachCheckIn {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date? = nil,
         date: Date,
         dayStart: Date = Date(),
         sleepQuality: Int = 3,
@@ -64,6 +73,8 @@ final class DailyCoachCheckIn {
         updatedAt: Date = Date()
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
         self.date = date
         self.dayStart = dayStart
         self.sleepQuality = sleepQuality
@@ -76,6 +87,7 @@ final class DailyCoachCheckIn {
         self.programRun = programRun
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.syncLastModifiedAt = syncLastModifiedAt ?? updatedAt
     }
 }
 
@@ -85,6 +97,12 @@ final class DailyCoachCheckIn {
 @Model
 final class DailyCoachWeeklyReview {
     var id: UUID
+    /// Stable identifier for cross-device sync contracts.
+    var syncStableID: String?
+    /// Monotonic version for deterministic merge tie-breaks.
+    var syncVersion: Int
+    /// Last modified timestamp used by sync conflict policies.
+    var syncLastModifiedAt: Date
     /// Monday (or chosen week-start) of the reviewed week.
     var weekStart: Date
     /// Sunday (or chosen week-end) of the reviewed week.
@@ -110,6 +128,9 @@ final class DailyCoachWeeklyReview {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date? = nil,
         weekStart: Date,
         weekEnd: Date,
         isProgramWeek: Bool = false,
@@ -123,6 +144,8 @@ final class DailyCoachWeeklyReview {
         createdAt: Date = Date()
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
         self.weekStart = weekStart
         self.weekEnd = weekEnd
         self.isProgramWeek = isProgramWeek
@@ -134,5 +157,6 @@ final class DailyCoachWeeklyReview {
         self.sourceWeeklyAnalysisIDText = sourceWeeklyAnalysisIDText
         self.hasBeenSeen = hasBeenSeen
         self.createdAt = createdAt
+        self.syncLastModifiedAt = syncLastModifiedAt ?? createdAt
     }
 }

@@ -1642,6 +1642,60 @@ Migrated the settings menu from a gear-icon push inside the Workouts tab into a 
 
 ---
 
+### Feature 10 — Sync-Ready Architecture Foundation
+
+**Status:** Complete
+
+Additive sync architecture groundwork so persisted training/coaching entities can be mapped into stable transport payloads for future cloud sync and Apple Watch data exchange, without introducing backend/network behavior.
+
+---
+
+#### Prompt 1 [Sync-Ready Contracts, IDs, and Conflict Policy] — 2026-04-11
+
+- Added additive sync metadata to key persisted entities:
+  - `Workout`, `ExerciseEntry`, `SetEntry`, `PersonalRecord`
+  - `TrainingProgram`, `ProgramRun`, `ProgramSessionExercise`
+  - `DailyCoachCheckIn`, `DailyCoachWeeklyReview`
+  - `AdaptationProposal`, `AppliedProgramOverlay`, `AppliedOverlayAdjustment`
+  - `HealthKitDailySummary`
+- New additive fields include `syncStableID`, `syncVersion`, and `syncLastModifiedAt`; `Workout` also gained `syncDeletedAt` for future tombstone propagation
+- Added shared sync metadata helper layer in `SyncContracts/SyncMetadataSupport.swift`:
+  - `SyncTrackableModel` protocol + helpers for stable ID fallback, metadata initialization, update marking, and tombstone marking
+  - explicit model conformances for all Feature 10 sync-scope entities
+- Added transport-safe DTO contracts in `SyncContracts/SyncPayloadContracts.swift`:
+  - explicit versioned payloads for workout logs, programs/prescriptions, daily coach records, adaptation proposals/overlays, and HealthKit daily summaries
+  - separate watch-ready envelope type (`SyncEnvelopeDTO`) so the same contracts can be reused later for watch communication without duplicate representations
+- Added model↔DTO mapper layer in `SyncMappers/SyncContractMappers.swift`:
+  - mapping functions for all core sync entities and nested workout/overlay structures
+  - payloads are SwiftData-runtime independent and encode only transport-safe fields
+- Added deterministic conflict policy layer in `ConflictResolution/SyncConflictResolutionPolicy.swift`:
+  - workout merge policy with nested exercise/set reconciliation
+  - same-day check-in conflict policy (lastModified/version deterministic tiebreak)
+  - adaptation proposal decision-state merge policy
+  - overlay activation conflict policy (single active overlay per scope, older conflicts superseded)
+  - program run progress merge policy (start/end/completion reconciliation)
+- Added repository seam layer for local + future remote coexistence:
+  - `Repositories/SyncRepositoryProtocols.swift` defines workout/program/daily-coach/adaptive/health-summary sync protocols
+  - `Repositories/LocalSyncRepository.swift` provides local-only SwiftData implementation with nested upsert behavior and workout tombstone support
+- Updated key mutation paths to keep sync metadata current in existing flows:
+  - `WorkoutSaveCoordinator` (workout initialization, PR updates, run completion)
+  - `HealthKitRecoverySyncService` and `HealthKitWorkoutImportService` (upsert updates)
+  - `CheckInFormView` same-day check-in updates
+- Validation coverage added in `SuggestMeSomeTests/Feature10SyncFoundationValidationTests.swift`:
+  - DTO mapping round-trip checks
+  - stable identifier fallback/normalization checks
+  - conflict policy behavior checks
+  - local repository upsert + tombstone behavior checks
+- Verification runs for this prompt:
+  - `xcodebuild test ... -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests` (pass)
+  - broader regression slice:
+    - `Feature7ValidationTests` (pass)
+    - `Feature8ValidationTests` (pass)
+    - `Feature9RecommendationEngineValidationTests` (pass)
+  - `xcodebuild build ...` on simulator destination (pass)
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

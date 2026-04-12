@@ -64,7 +64,7 @@ final class WorkoutSaveCoordinator {
     }
 
     private func buildWorkout(using request: WorkoutSaveRequest) -> Workout {
-        Workout(
+        let workout = Workout(
             date: request.endTime,
             startTime: request.startTime,
             durationSeconds: Int(request.endTime.timeIntervalSince(request.startTime)),
@@ -74,6 +74,8 @@ final class WorkoutSaveCoordinator {
             programWeekNumber: request.programContext?.weekNumber,
             programSessionNumber: request.programContext?.sessionNumber
         )
+        workout.initializeSyncMetadataIfNeeded(at: request.endTime)
+        return workout
     }
 
     private func persistExerciseEntries(
@@ -148,6 +150,7 @@ final class WorkoutSaveCoordinator {
 
         run.isCompleted = true
         run.endDate = Date.now
+        run.markSyncUpdated(at: Date.now)
         try? modelContext.save()
     }
 
@@ -171,6 +174,7 @@ final class WorkoutSaveCoordinator {
             existing.weight = setEntry.weight
             existing.unit = unit
             existing.dateAchieved = date
+            existing.markSyncUpdated(at: date)
             setEntry.isPR = true
         } else {
             let pr = PersonalRecord(

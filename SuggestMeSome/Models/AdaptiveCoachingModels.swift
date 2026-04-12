@@ -577,6 +577,12 @@ final class LiftTrendSnapshot {
 @Model
 final class AdaptationProposal {
     var id: UUID
+    /// Stable identifier for cross-device sync contracts.
+    var syncStableID: String?
+    /// Monotonic version for deterministic merge tie-breaks.
+    var syncVersion: Int
+    /// Last modified timestamp used by sync conflict policies.
+    var syncLastModifiedAt: Date
     var createdAt: Date
     var decidedAt: Date?
 
@@ -614,6 +620,9 @@ final class AdaptationProposal {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date? = nil,
         createdAt: Date = Date(),
         decidedAt: Date? = nil,
         programRun: ProgramRun? = nil,
@@ -642,6 +651,8 @@ final class AdaptationProposal {
         expiresAt: Date? = nil
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
         self.createdAt = createdAt
         self.decidedAt = decidedAt
         self.programRun = programRun
@@ -668,6 +679,7 @@ final class AdaptationProposal {
         self.summaryText = summaryText
         self.detailText = detailText
         self.expiresAt = expiresAt
+        self.syncLastModifiedAt = syncLastModifiedAt ?? decidedAt ?? createdAt
     }
 }
 
@@ -675,6 +687,12 @@ final class AdaptationProposal {
 @Model
 final class AppliedProgramOverlay {
     var id: UUID
+    /// Stable identifier for cross-device sync contracts.
+    var syncStableID: String?
+    /// Monotonic version for deterministic merge tie-breaks.
+    var syncVersion: Int
+    /// Last modified timestamp used by sync conflict policies.
+    var syncLastModifiedAt: Date
     var createdAt: Date
     var appliedAt: Date
 
@@ -694,6 +712,9 @@ final class AppliedProgramOverlay {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date? = nil,
         createdAt: Date = Date(),
         appliedAt: Date = Date(),
         programRun: ProgramRun? = nil,
@@ -707,6 +728,8 @@ final class AppliedProgramOverlay {
         summaryText: String? = nil
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
         self.createdAt = createdAt
         self.appliedAt = appliedAt
         self.programRun = programRun
@@ -718,6 +741,7 @@ final class AppliedProgramOverlay {
         self.appliedByUserConfirmation = appliedByUserConfirmation
         self.adjustmentReason = adjustmentReason
         self.summaryText = summaryText
+        self.syncLastModifiedAt = syncLastModifiedAt ?? appliedAt
     }
 }
 
@@ -725,6 +749,12 @@ final class AppliedProgramOverlay {
 @Model
 final class AppliedOverlayAdjustment {
     var id: UUID
+    /// Stable identifier for cross-device sync contracts.
+    var syncStableID: String?
+    /// Monotonic version for deterministic merge tie-breaks.
+    var syncVersion: Int
+    /// Last modified timestamp used by sync conflict policies.
+    var syncLastModifiedAt: Date
     var overlay: AppliedProgramOverlay?
     var sequence: Int
 
@@ -746,6 +776,9 @@ final class AppliedOverlayAdjustment {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date = Date(),
         overlay: AppliedProgramOverlay? = nil,
         sequence: Int = 0,
         targetProgramSessionExerciseID: UUID? = nil,
@@ -763,6 +796,9 @@ final class AppliedOverlayAdjustment {
         isAutoApplied: Bool = false
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
+        self.syncLastModifiedAt = syncLastModifiedAt
         self.overlay = overlay
         self.sequence = sequence
         self.targetProgramSessionExerciseID = targetProgramSessionExerciseID

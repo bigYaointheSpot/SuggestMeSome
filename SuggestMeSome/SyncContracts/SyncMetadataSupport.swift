@@ -1,0 +1,61 @@
+import Foundation
+
+protocol SyncTrackableModel: AnyObject {
+    var id: UUID { get }
+    var syncStableID: String? { get set }
+    var syncVersion: Int { get set }
+    var syncLastModifiedAt: Date { get set }
+}
+
+protocol SyncTombstoneTrackable: AnyObject {
+    var syncDeletedAt: Date? { get set }
+}
+
+extension SyncTrackableModel {
+    var resolvedSyncStableID: String {
+        let trimmed = syncStableID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty {
+            return trimmed
+        }
+        return id.uuidString
+    }
+
+    func initializeSyncMetadataIfNeeded(at date: Date = Date()) {
+        if syncStableID?.isEmpty != false {
+            syncStableID = id.uuidString
+        }
+        if syncVersion < 1 {
+            syncVersion = 1
+        }
+        if syncLastModifiedAt == .distantPast {
+            syncLastModifiedAt = date
+        }
+    }
+
+    func markSyncUpdated(at date: Date = Date()) {
+        initializeSyncMetadataIfNeeded(at: date)
+        syncVersion = max(1, syncVersion) + 1
+        syncLastModifiedAt = date
+    }
+}
+
+extension SyncTrackableModel where Self: SyncTombstoneTrackable {
+    func markSyncDeleted(at date: Date = Date()) {
+        syncDeletedAt = date
+        markSyncUpdated(at: date)
+    }
+}
+
+extension Workout: SyncTrackableModel, SyncTombstoneTrackable {}
+extension ExerciseEntry: SyncTrackableModel {}
+extension SetEntry: SyncTrackableModel {}
+extension PersonalRecord: SyncTrackableModel {}
+extension TrainingProgram: SyncTrackableModel {}
+extension ProgramRun: SyncTrackableModel {}
+extension ProgramSessionExercise: SyncTrackableModel {}
+extension DailyCoachCheckIn: SyncTrackableModel {}
+extension DailyCoachWeeklyReview: SyncTrackableModel {}
+extension AdaptationProposal: SyncTrackableModel {}
+extension AppliedProgramOverlay: SyncTrackableModel {}
+extension AppliedOverlayAdjustment: SyncTrackableModel {}
+extension HealthKitDailySummary: SyncTrackableModel {}

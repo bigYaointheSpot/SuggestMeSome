@@ -11,6 +11,14 @@ import SwiftData
 @Model
 final class Workout {
     var id: UUID
+    /// Stable identifier for cross-device sync contracts.
+    var syncStableID: String?
+    /// Monotonic version for deterministic merge tie-breaks.
+    var syncVersion: Int
+    /// Last modified timestamp used by sync conflict policies.
+    var syncLastModifiedAt: Date
+    /// Future tombstone marker for delete propagation.
+    var syncDeletedAt: Date?
     var date: Date
     var startTime: Date
     /// Total elapsed time stored in seconds; use `formattedDuration` for display.
@@ -48,6 +56,10 @@ final class Workout {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date = Date(),
+        syncDeletedAt: Date? = nil,
         date: Date,
         startTime: Date,
         durationSeconds: Int,
@@ -66,6 +78,10 @@ final class Workout {
         healthKitWritebackIdentifier: String? = nil
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
+        self.syncLastModifiedAt = syncLastModifiedAt
+        self.syncDeletedAt = syncDeletedAt
         self.date = date
         self.startTime = startTime
         self.durationSeconds = durationSeconds

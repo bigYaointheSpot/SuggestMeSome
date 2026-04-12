@@ -108,6 +108,7 @@ final class HealthKitWorkoutImportService {
                 if existing.sourceImportedAt == nil {
                     existing.sourceImportedAt = importedAt
                 }
+                existing.markSyncUpdated(at: importedAt)
                 updatedCount += 1
                 continue
             }

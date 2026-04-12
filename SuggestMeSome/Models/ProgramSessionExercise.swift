@@ -17,6 +17,12 @@ enum ProgramWorkingSetStyle: String, Codable {
 @Model
 final class ProgramSessionExercise {
     var id: UUID
+    /// Stable identifier for cross-device sync contracts.
+    var syncStableID: String?
+    /// Monotonic version for deterministic merge tie-breaks.
+    var syncVersion: Int
+    /// Last modified timestamp used by sync conflict policies.
+    var syncLastModifiedAt: Date
     var exerciseName: String
     /// Display ordering within the session.
     var orderIndex: Int
@@ -67,6 +73,9 @@ final class ProgramSessionExercise {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date = Date(),
         exerciseName: String,
         orderIndex: Int,
         targetSets: Int? = nil,
@@ -91,6 +100,9 @@ final class ProgramSessionExercise {
         explainabilitySelectionReason: ProgramAccessorySelectionReason? = nil
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
+        self.syncLastModifiedAt = syncLastModifiedAt
         self.exerciseName = exerciseName
         self.orderIndex = orderIndex
         self.targetSets = targetSets
@@ -118,6 +130,9 @@ final class ProgramSessionExercise {
     /// Backward-compatible initializer retained for existing call sites.
     convenience init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date = Date(),
         exerciseName: String,
         orderIndex: Int,
         targetSets: Int? = nil,
@@ -141,6 +156,9 @@ final class ProgramSessionExercise {
     ) {
         self.init(
             id: id,
+            syncStableID: syncStableID,
+            syncVersion: syncVersion,
+            syncLastModifiedAt: syncLastModifiedAt,
             exerciseName: exerciseName,
             orderIndex: orderIndex,
             targetSets: targetSets,

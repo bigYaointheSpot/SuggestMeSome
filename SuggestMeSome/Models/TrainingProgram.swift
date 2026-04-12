@@ -17,6 +17,12 @@ enum ProgramSource: String, Codable {
 @Model
 final class TrainingProgram {
     var id: UUID
+    /// Stable identifier for cross-device sync contracts.
+    var syncStableID: String?
+    /// Monotonic version for deterministic merge tie-breaks.
+    var syncVersion: Int
+    /// Last modified timestamp used by sync conflict policies.
+    var syncLastModifiedAt: Date
     var name: String
     /// Valid values: 6, 8, 10, 12
     var lengthInWeeks: Int
@@ -41,6 +47,9 @@ final class TrainingProgram {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date = Date(),
         name: String,
         lengthInWeeks: Int,
         sessionsPerWeek: Int,
@@ -54,6 +63,9 @@ final class TrainingProgram {
         usedTopSetBackoff: Bool? = nil
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
+        self.syncLastModifiedAt = syncLastModifiedAt
         self.name = name
         self.lengthInWeeks = lengthInWeeks
         self.sessionsPerWeek = sessionsPerWeek

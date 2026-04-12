@@ -11,6 +11,12 @@ import SwiftData
 @Model
 final class ExerciseEntry {
     var id: UUID
+    /// Stable identifier for cross-device sync contracts.
+    var syncStableID: String?
+    /// Monotonic version for deterministic merge tie-breaks.
+    var syncVersion: Int
+    /// Last modified timestamp used by sync conflict policies.
+    var syncLastModifiedAt: Date
     /// Snapshot of the exercise name at the time of logging.
     var exerciseName: String
     var unit: WeightUnit
@@ -45,6 +51,9 @@ final class ExerciseEntry {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date = Date(),
         exerciseName: String,
         unit: WeightUnit,
         orderIndex: Int,
@@ -62,6 +71,9 @@ final class ExerciseEntry {
         prescribedTargetEffortType: ProgramTargetEffortType? = nil
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
+        self.syncLastModifiedAt = syncLastModifiedAt
         self.exerciseName = exerciseName
         self.unit = unit
         self.orderIndex = orderIndex
