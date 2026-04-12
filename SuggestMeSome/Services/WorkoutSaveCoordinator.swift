@@ -29,13 +29,23 @@ struct WorkoutSaveRequest {
 final class WorkoutSaveCoordinator {
     private let modelContext: ModelContext
     private let writebackCoordinator: WorkoutSaveHealthKitWritebackCoordinator
+    private let outcomePersistor: (Workout, ModelContext) throws -> Void
+    private let weeklyAnalyzer: (Workout, ModelContext) throws -> Void
 
     init(
         modelContext: ModelContext,
-        writebackCoordinator: WorkoutSaveHealthKitWritebackCoordinator? = nil
+        writebackCoordinator: WorkoutSaveHealthKitWritebackCoordinator? = nil,
+        outcomePersistor: ((Workout, ModelContext) throws -> Void)? = nil,
+        weeklyAnalyzer: ((Workout, ModelContext) throws -> Void)? = nil
     ) {
         self.modelContext = modelContext
         self.writebackCoordinator = writebackCoordinator ?? WorkoutSaveHealthKitWritebackCoordinator()
+        self.outcomePersistor = outcomePersistor ?? { workout, context in
+            SessionOutcomeInferenceService.persistOutcomes(for: workout, context: context)
+        }
+        self.weeklyAnalyzer = weeklyAnalyzer ?? { workout, context in
+            WeeklyTrainingAnalysisService.analyzeCompletedWeeks(triggeredBy: workout, context: context)
+        }
     }
 
     @discardableResult
@@ -51,8 +61,16 @@ final class WorkoutSaveCoordinator {
 
         triggerHealthKitWritebackIfNeeded(for: workout, request: request)
 
-        SessionOutcomeInferenceService.persistOutcomes(for: workout, context: modelContext)
-        WeeklyTrainingAnalysisService.analyzeCompletedWeeks(triggeredBy: workout, context: modelContext)
+        do {
+            try outcomePersistor(workout, modelContext)
+        } catch {
+            // Keep workout save durable even when adaptive side effects fail.
+        }
+        do {
+            try weeklyAnalyzer(workout, modelContext)
+        } catch {
+            // Keep workout save durable even when adaptive side effects fail.
+        }
 
         try? modelContext.save()
 

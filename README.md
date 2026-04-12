@@ -1756,6 +1756,39 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 4 [Adaptive Coaching Pipeline Decomposition and Query Hardening] — 2026-04-11
+
+- Refactored `WeeklyTrainingAnalysisService` into a public façade/orchestrator while extracting week-analysis collaborators under `Services/Adaptive/WeeklyAnalysis/`:
+  - `WeeklyAnalysisWeekDataLoader` (week-scoped data loading and query coordination)
+  - `WeeklyAnalysisDedupeHelper` (workout/outcome dedupe)
+  - `WeeklyAnalysisAdherenceScorer` (adherence scoring)
+  - `WeeklyAnalysisFatigueEvaluator` (observed fatigue scoring + status inference)
+  - `WeeklyAnalysisVolumeAggregator` (completed/planned volume aggregation)
+  - `WeeklyAnalysisAggregateScorer` (weekly aggregate signal scoring)
+  - `WeeklyAnalysisPersistenceCoordinator` (analysis upsert, metric upsert, outcome attachment, finalize)
+  - `WeeklyAnalysisEventHistoryWriter` (weekly analysis history event upsert)
+  - `WeeklyAnalysisProposalPipelineCoordinator` (proposal generation + Daily Coach weekly review orchestration)
+  - shared staging contracts in `WeeklyAnalysisTypes.swift`
+- Preserved existing adaptive trust model and non-destructive overlay behavior:
+  - user-confirmation-required proposals remain confirmation-gated
+  - conservative variation swaps continue auto-applying through overlays where already designed
+  - HealthKit-influenced readiness behavior remains unchanged and manual readiness remains authoritative except existing pain/discomfort priority paths
+- Hardened query boundaries by keeping run/week-scoped fetches centralized in the loader and narrowing weekly history event upsert lookup to analysis-scoped reads.
+- Hardened workout-save durability around adaptive side effects in `WorkoutSaveCoordinator` by introducing non-fatal injectable side-effect closures with guarded execution while preserving default behavior.
+- Added focused Prompt 4 validation coverage in `SuggestMeSomeTests/Feature10Prompt4AdaptivePipelineDecompositionTests.swift`:
+  - weekly aggregation correctness
+  - dedupe behavior
+  - fatigue/adherence scoring continuity
+  - proposal pipeline orchestration with five-focus validation emphasis (`powerlifting`, `bodybuilding`, `powerbuilding`, `generalFitness`, `fullBody`)
+  - non-fatal workout-save side-effect durability
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10Prompt4AdaptivePipelineDecompositionTests` (pass)
+  - broader regression slice:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature6ValidationTests -only-testing:SuggestMeSomeTests/Feature7ValidationTests -only-testing:SuggestMeSomeTests/Feature10Prompt2RepositoryQueryHardeningTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
 ---
 
 ## Project Setup
