@@ -1729,6 +1729,33 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
     - `Feature9RecommendationEngineValidationTests` (pass)
   - `xcodebuild build ...` on simulator destination (pass)
 
+#### Prompt 3 [Program Generator Decomposition and Safety Refactor] — 2026-04-11
+
+- Refactored `ProgramGenerationService` into a façade/orchestrator while extracting internal policy collaborators under `Services/Adaptive/ProgramGeneration/`:
+  - `ProgramGenerationProgressionResolver` (strategy/model/phase resolution, parameter computation, top-set/backoff policy)
+  - `ProgramGenerationWeekScheduleBuilder` (deload cadence and advanced phase sequencing)
+  - `ProgramGenerationLoadPrescriptionResolver` (%1RM mapping + load rounding policy)
+  - `ProgramGenerationAccessoryPlanner` (volume/fatigue-aware accessory selection and guardrails)
+  - `ProgramGenerationMovementCoverageHelper` (focus-aware movement coverage rejection + bodybuilding session muscle priorities)
+  - `ProgramGenerationCardioPlanner` (cardio session typing, progression, deload step-back, and fatigue-per-minute policy)
+  - `ProgramGenerationExplainabilityStamper` (session/row explainability reason and purpose stamping)
+  - `ProgramGenerationWeeklySummaryReporter` (weekly/session fatigue-hardset reporting + planned fatigue stamping)
+  - `ProgramGenerationLoadEstimator` and shared policy types in `ProgramGenerationPolicyTypes.swift` to reduce hidden coupling between planner components
+- Preserved existing generator output semantics and public API while improving maintainability/scalability of internal generation logic.
+- Added focused Prompt 3 validation coverage in `SuggestMeSomeTests/Feature10Prompt3ProgramGeneratorDecompositionTests.swift`:
+  - collaborator policy mapping checks (progression resolver + schedule builder)
+  - mapped-load rounding behavior validation
+  - movement-coverage rejection guard validation
+  - cardio progression + deload step-back policy validation
+  - five-focus safety matrix validation (`powerlifting`, `bodybuilding`, `powerbuilding`, `generalFitness`, `fullBody`) for fatigue guardrails, explainability continuity, and top-set/backoff presence expectations
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10Prompt3ProgramGeneratorDecompositionTests` (pass)
+  - broader Feature 4 regression slice:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature4GeneratorValidationTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
 ---
 
 ## Project Setup
