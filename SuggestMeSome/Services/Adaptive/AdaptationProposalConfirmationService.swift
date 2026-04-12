@@ -124,7 +124,12 @@ enum AdaptationProposalConfirmationService {
         at timestamp: Date,
         context: ModelContext
     ) throws -> AppliedProgramOverlay {
-        let overlays = (try? context.fetch(FetchDescriptor<AppliedProgramOverlay>())) ?? []
+        let proposalID = proposal.id
+        let overlays = (try? context.fetch(
+            FetchDescriptor<AppliedProgramOverlay>(
+                predicate: #Predicate<AppliedProgramOverlay> { $0.sourceProposal?.id == proposalID }
+            )
+        )) ?? []
         let overlay = overlays.first(where: { $0.sourceProposal?.id == proposal.id }) ?? {
             let created = AppliedProgramOverlay(
                 programRun: proposal.programRun,
@@ -253,10 +258,13 @@ enum AdaptationProposalConfirmationService {
         proposal: AdaptationProposal,
         context: ModelContext
     ) {
-        let events = (try? context.fetch(FetchDescriptor<AdaptationEventHistory>())) ?? []
-        for event in events {
-            guard event.proposal?.id == proposal.id else { continue }
-            guard event.eventType == .proposalCreated else { continue }
+        let proposalID = proposal.id
+        let allProposalEvents = (try? context.fetch(
+            FetchDescriptor<AdaptationEventHistory>(
+                predicate: #Predicate<AdaptationEventHistory> { $0.proposal?.id == proposalID }
+            )
+        )) ?? []
+        for event in allProposalEvents where event.eventType == .proposalCreated {
             event.requiresUserAction = false
             event.userActionTaken = true
             event.timestamp = Date.now
@@ -270,11 +278,13 @@ enum AdaptationProposalConfirmationService {
         at timestamp: Date,
         context: ModelContext
     ) {
-        let events = (try? context.fetch(FetchDescriptor<AdaptationEventHistory>())) ?? []
-        let event = events.first(where: {
-            $0.proposal?.id == proposal.id &&
-            $0.eventType == type
-        }) ?? {
+        let proposalID = proposal.id
+        let proposalEvents = (try? context.fetch(
+            FetchDescriptor<AdaptationEventHistory>(
+                predicate: #Predicate<AdaptationEventHistory> { $0.proposal?.id == proposalID }
+            )
+        )) ?? []
+        let event = proposalEvents.first(where: { $0.eventType == type }) ?? {
             let created = AdaptationEventHistory(
                 programRun: proposal.programRun,
                 trainingProgram: proposal.trainingProgram,
@@ -316,7 +326,16 @@ enum AdaptationProposalConfirmationService {
         at timestamp: Date,
         context: ModelContext
     ) {
-        let events = (try? context.fetch(FetchDescriptor<AdaptationEventHistory>())) ?? []
+        let proposalID = proposal.id
+        let overlayID = overlay.id
+        let events = (try? context.fetch(
+            FetchDescriptor<AdaptationEventHistory>(
+                predicate: #Predicate<AdaptationEventHistory> {
+                    $0.proposal?.id == proposalID &&
+                    $0.overlay?.id == overlayID
+                }
+            )
+        )) ?? []
         let event = events.first(where: {
             $0.proposal?.id == proposal.id &&
             $0.overlay?.id == overlay.id &&

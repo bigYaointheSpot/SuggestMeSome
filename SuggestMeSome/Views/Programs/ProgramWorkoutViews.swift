@@ -106,7 +106,11 @@ struct ProgramListRow: View {
 struct ProgramRunDetailView: View {
     @Bindable var run: ProgramRun
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Workout.date) private var allWorkouts: [Workout]
+    @Query(
+        filter: #Predicate<Workout> { $0.programRun != nil },
+        sort: \Workout.date
+    )
+    private var allWorkouts: [Workout]
 
     @State private var showingEndConfirmation = false
 
@@ -171,7 +175,11 @@ struct CompleteProgramWorkoutSheet: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Workout.date) private var allWorkouts: [Workout]
+    @Query(
+        filter: #Predicate<Workout> { $0.programRun != nil },
+        sort: \Workout.date
+    )
+    private var allWorkouts: [Workout]
 
     @State private var selectedRun: ProgramRun? = nil
     @State private var weekNumber: Int = 1

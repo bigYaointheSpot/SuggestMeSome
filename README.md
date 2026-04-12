@@ -1694,6 +1694,41 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
     - `Feature9RecommendationEngineValidationTests` (pass)
   - `xcodebuild build ...` on simulator destination (pass)
 
+#### Prompt 2 [Repository and Query Layer Performance Hardening] — 2026-04-11
+
+- Added focused read/query repository layer in `Repositories/ReadQueryRepository.swift` to centralize high-value scoped reads and remove repeated fetch-all/filter logic:
+  - bounded recent workout reads (`fetchLimit` + date-sort)
+  - active run-scoped overlay lookups
+  - run-scoped pending proposal lookups
+  - run-scoped completed session key projections
+  - adaptation history snapshots with bounded proposal/overlay/event windows
+- Refactored performance-sensitive adaptive and context services to use narrower predicates and bounded fetches:
+  - `WeeklyTrainingAnalysisService` now performs date-window and run-scoped fetches for program/standalone workouts and outcomes instead of broad full-table reads
+  - `ProgramOverlayResolutionService` now resolves overlays through run-scoped repository reads
+  - `TrainingContextQueryService` now computes completed workout/session context from run-scoped reads instead of global workout scans
+  - `SuggestMeSomeRecommendationService` recent workout path now uses explicit fetch limits
+  - `AdaptationProposalConfirmationService` event-history upserts now avoid brittle enum predicate patterns that caused compile-time/type-check failures
+- Improved read-path architecture for program/adaptive UI surfaces by moving data assembly out of views:
+  - `AdaptationHistoryView` now consumes repository-built snapshot data instead of broad multi-`@Query` arrays
+  - `AdaptationProposalReviewView` now loads run-scoped pending proposals via a deterministic reload path
+  - program workout views/tabs tightened broad workout queries to program-scoped rows where applicable
+- Resolved app-root behavior issues discovered during audit while preserving launch flow behavior:
+  - removed forced dark-mode override in `SuggestMeSomeApp` so appearance follows persisted user preference
+  - introduced `AppAppearancePreferenceService` and routed `ContentView` appearance resolution through it
+  - replaced fixed-delay navigation timing hacks in `ContentView`, `DashboardView`, and `DailyCoachView` with `DeferredNavigationService` deferred-launch helper
+- Added focused, deterministic test coverage in `SuggestMeSomeTests/Feature10Prompt2RepositoryQueryHardeningTests.swift`:
+  - repository/query correctness for bounded/scoped reads
+  - adaptation history snapshot behavior
+  - appearance preference resolver behavior
+  - deferred navigation launch behavior
+- Verification runs for this prompt:
+  - `xcodebuild test ... -only-testing:SuggestMeSomeTests/Feature10Prompt2RepositoryQueryHardeningTests` (pass)
+  - broader regression slice:
+    - `Feature6ValidationTests` (pass)
+    - `Feature7ValidationTests` (pass)
+    - `Feature9RecommendationEngineValidationTests` (pass)
+  - `xcodebuild build ...` on simulator destination (pass)
+
 ---
 
 ## Project Setup

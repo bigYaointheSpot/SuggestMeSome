@@ -24,7 +24,8 @@ struct DailyCoachRecommendationService {
         latestAnalysis: WeeklyTrainingAnalysis?,
         pendingProposalCount: Int,
         recentWorkouts: [Workout],
-        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        completedProgramSessions: Set<ProgramSessionCompletionKey>? = nil
     ) -> DailyCoachRecommendation {
 
         let hasPain           = checkIn?.hasPainOrDiscomfort ?? false
@@ -42,7 +43,8 @@ struct DailyCoachRecommendationService {
                 fatigueStatus: fatigueStatus,
                 pendingProposalCount: pendingProposalCount,
                 recentWorkouts: recentWorkouts,
-                objectiveRecoveryInsight: objectiveRecoveryInsight
+                objectiveRecoveryInsight: objectiveRecoveryInsight,
+                completedProgramSessions: completedProgramSessions
             )
         }
 
@@ -85,10 +87,16 @@ struct DailyCoachRecommendationService {
         fatigueStatus: FatigueStatus,
         pendingProposalCount: Int,
         recentWorkouts: [Workout],
-        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        completedProgramSessions: Set<ProgramSessionCompletionKey>?
     ) -> DailyCoachRecommendation {
 
-        let nextSession  = detectNextSession(run: run, program: program, workouts: recentWorkouts)
+        let nextSession  = detectNextSession(
+            run: run,
+            program: program,
+            workouts: recentWorkouts,
+            completedSessions: completedProgramSessions
+        )
         let sessionLabel = sessionDisplayLabel(for: nextSession)
 
         let (primary, secondary, compact, expanded) = programSuggestions(
@@ -129,14 +137,22 @@ struct DailyCoachRecommendationService {
     private static func detectNextSession(
         run: ProgramRun,
         program: TrainingProgram,
-        workouts: [Workout]
+        workouts: [Workout],
+        completedSessions: Set<ProgramSessionCompletionKey>?
     ) -> NextProgramSessionInfo? {
         for wk in 1...program.lengthInWeeks {
             for sess in 1...program.sessionsPerWeek {
-                let done = workouts.contains {
-                    $0.programRun?.id == run.id &&
-                    $0.programWeekNumber == wk &&
-                    $0.programSessionNumber == sess
+                let done: Bool
+                if let completedSessions {
+                    done = completedSessions.contains(
+                        ProgramSessionCompletionKey(weekNumber: wk, sessionNumber: sess)
+                    )
+                } else {
+                    done = workouts.contains {
+                        $0.programRun?.id == run.id &&
+                        $0.programWeekNumber == wk &&
+                        $0.programSessionNumber == sess
+                    }
                 }
                 if !done {
                     let sessionName = program.weeks

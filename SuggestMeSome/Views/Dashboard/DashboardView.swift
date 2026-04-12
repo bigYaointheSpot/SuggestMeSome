@@ -140,10 +140,10 @@ struct DashboardView: View {
                 }
             }
             .sheet(isPresented: $viewModel.showingGeneratorSheet, onDismiss: {
-                if viewModel.pendingGeneratedWorkout != nil {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                DeferredNavigationService.launchAfterSheetDismissIfNeeded(
+                    hasPendingDestination: viewModel.pendingGeneratedWorkout != nil
+                ) {
                         viewModel.showingGeneratedWorkout = true
-                    }
                 }
             }) {
                 GeneratorSheetRootView { gw in
@@ -152,10 +152,10 @@ struct DashboardView: View {
                 }
             }
             .sheet(isPresented: $viewModel.showingCompleteProgramSheet, onDismiss: {
-                if viewModel.pendingProgramWorkout != nil {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                DeferredNavigationService.launchAfterSheetDismissIfNeeded(
+                    hasPendingDestination: viewModel.pendingProgramWorkout != nil
+                ) {
                         viewModel.showingProgramWorkout = true
-                    }
                 }
             }) {
                 CompleteProgramWorkoutSheet(activeRuns: Array(viewModel.activeProgramRuns)) { ctx in

@@ -42,12 +42,15 @@ enum WeeklyTrainingAnalysisService {
             max(1, inferredProgramWeekNumber(for: referenceDate, runStartDate: run.startDate))
         )
 
-        let allWorkouts = (try? context.fetch(FetchDescriptor<Workout>())) ?? []
+        let runWorkouts = fetchProgramWorkouts(
+            for: run,
+            beforeOrOn: referenceDate,
+            context: context
+        )
 
         for weekNumber in 1...maxWeek {
             let window = programWeekWindow(runStartDate: run.startDate, weekNumber: weekNumber)
-            let runWeekWorkouts = allWorkouts.filter {
-                $0.programRun?.id == run.id &&
+            let runWeekWorkouts = runWorkouts.filter {
                 resolvedProgramWeekNumber(for: $0, runStartDate: run.startDate) == weekNumber
             }
             let uniqueCompletedSessions = Set(runWeekWorkouts.compactMap(\.programSessionNumber)).count
@@ -67,24 +70,26 @@ enum WeeklyTrainingAnalysisService {
     ) -> WeeklyTrainingAnalysis? {
         guard let program = run.program else { return nil }
 
-        let allWorkouts = (try? context.fetch(FetchDescriptor<Workout>())) ?? []
-        let allOutcomes = (try? context.fetch(FetchDescriptor<ExercisePerformanceOutcome>())) ?? []
         let window = programWeekWindow(runStartDate: run.startDate, weekNumber: weekNumber)
+        let runWeekWorkouts = fetchProgramWorkouts(
+            for: run,
+            between: window,
+            context: context
+        )
+        let standaloneWorkouts = fetchStandaloneWorkouts(
+            between: window,
+            context: context
+        )
+        let weeklyOutcomes = fetchOutcomes(
+            between: window,
+            context: context
+        )
 
-        let runWeekWorkouts = allWorkouts.filter {
-            $0.programRun?.id == run.id &&
-            resolvedProgramWeekNumber(for: $0, runStartDate: run.startDate) == weekNumber
-        }
         let selectedProgramWorkouts = dedupeProgramWorkoutsBySession(runWeekWorkouts)
-        let standaloneWorkouts = allWorkouts.filter {
-            $0.programRun == nil &&
-            $0.date >= window.weekStartDate &&
-            $0.date <= window.weekEndDate
-        }
 
         let selectedWorkoutIDs = Set((selectedProgramWorkouts + standaloneWorkouts).map(\.id))
         let selectedOutcomes = dedupeOutcomes(
-            allOutcomes.filter { outcome in
+            weeklyOutcomes.filter { outcome in
                 guard let workoutID = outcome.workout?.id else { return false }
                 return selectedWorkoutIDs.contains(workoutID)
             }
@@ -169,12 +174,13 @@ enum WeeklyTrainingAnalysisService {
         allRuns: [ProgramRun],
         context: ModelContext
     ) {
-        let allWorkouts = (try? context.fetch(FetchDescriptor<Workout>())) ?? []
-        let standaloneWorkouts = allWorkouts.filter { $0.programRun == nil }
-        guard !standaloneWorkouts.isEmpty else { return }
-
         guard let currentWeekInterval = isoCalendar.dateInterval(of: .weekOfYear, for: referenceDate) else { return }
         let currentWeekStart = currentWeekInterval.start
+        let standaloneWorkouts = fetchStandaloneWorkouts(
+            before: currentWeekStart,
+            context: context
+        )
+        guard !standaloneWorkouts.isEmpty else { return }
 
         let endedWeekStarts: Set<Date> = Set(
             standaloneWorkouts.compactMap { workout in
@@ -197,21 +203,21 @@ enum WeeklyTrainingAnalysisService {
         startingAt weekStartDate: Date,
         context: ModelContext
     ) -> WeeklyTrainingAnalysis? {
-        let allWorkouts = (try? context.fetch(FetchDescriptor<Workout>())) ?? []
-        let allOutcomes = (try? context.fetch(FetchDescriptor<ExercisePerformanceOutcome>())) ?? []
         let window = weekWindowFromStart(weekStartDate)
-
-        let standaloneWorkouts = allWorkouts.filter {
-            $0.programRun == nil &&
-            $0.date >= window.weekStartDate &&
-            $0.date <= window.weekEndDate
-        }
+        let standaloneWorkouts = fetchStandaloneWorkouts(
+            between: window,
+            context: context
+        )
+        let weeklyOutcomes = fetchOutcomes(
+            between: window,
+            context: context
+        )
 
         guard !standaloneWorkouts.isEmpty else { return nil }
 
         let selectedWorkoutIDs = Set(standaloneWorkouts.map(\.id))
         let selectedOutcomes = dedupeOutcomes(
-            allOutcomes.filter { outcome in
+            weeklyOutcomes.filter { outcome in
                 guard let workoutID = outcome.workout?.id else { return false }
                 return selectedWorkoutIDs.contains(workoutID)
             }
@@ -644,19 +650,29 @@ enum WeeklyTrainingAnalysisService {
         for key: AnalysisKey,
         context: ModelContext
     ) -> WeeklyTrainingAnalysis {
-        let analyses = (try? context.fetch(FetchDescriptor<WeeklyTrainingAnalysis>())) ?? []
-
         switch key {
         case .program(let runID, let weekNumber):
-            if let existing = analyses.first(where: {
-                $0.programRun?.id == runID && $0.programWeekNumber == weekNumber
-            }) {
+            let analyses = (try? context.fetch(
+                FetchDescriptor<WeeklyTrainingAnalysis>(
+                    predicate: #Predicate<WeeklyTrainingAnalysis> {
+                        $0.programRun?.id == runID && $0.programWeekNumber == weekNumber
+                    }
+                )
+            )) ?? []
+            if let existing = analyses.first {
                 return existing
             }
         case .standalone(let weekStartDate):
-            if let existing = analyses.first(where: {
-                $0.programRun == nil && $0.programWeekNumber == nil && $0.weekStartDate == weekStartDate
-            }) {
+            let analyses = (try? context.fetch(
+                FetchDescriptor<WeeklyTrainingAnalysis>(
+                    predicate: #Predicate<WeeklyTrainingAnalysis> {
+                        $0.programRun == nil &&
+                        $0.programWeekNumber == nil &&
+                        $0.weekStartDate == weekStartDate
+                    }
+                )
+            )) ?? []
+            if let existing = analyses.first {
                 return existing
             }
         }
@@ -715,6 +731,87 @@ enum WeeklyTrainingAnalysisService {
             if $0.workoutDate == $1.workoutDate { return $0.id.uuidString < $1.id.uuidString }
             return $0.workoutDate < $1.workoutDate
         }
+    }
+
+    // MARK: - Scoped Query Helpers
+
+    private static func fetchProgramWorkouts(
+        for run: ProgramRun,
+        beforeOrOn date: Date,
+        context: ModelContext
+    ) -> [Workout] {
+        let runID = run.id
+        let descriptor = FetchDescriptor<Workout>(
+            predicate: #Predicate<Workout> {
+                $0.programRun?.id == runID && $0.date <= date
+            },
+            sortBy: [SortDescriptor(\Workout.date, order: .forward)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    private static func fetchProgramWorkouts(
+        for run: ProgramRun,
+        between window: AnalysisWeekWindow,
+        context: ModelContext
+    ) -> [Workout] {
+        let runID = run.id
+        let weekStartDate = window.weekStartDate
+        let weekEndDate = window.weekEndDate
+        let descriptor = FetchDescriptor<Workout>(
+            predicate: #Predicate<Workout> {
+                $0.programRun?.id == runID &&
+                $0.date >= weekStartDate &&
+                $0.date <= weekEndDate
+            },
+            sortBy: [SortDescriptor(\Workout.date, order: .forward)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    private static func fetchStandaloneWorkouts(
+        before date: Date,
+        context: ModelContext
+    ) -> [Workout] {
+        let descriptor = FetchDescriptor<Workout>(
+            predicate: #Predicate<Workout> { $0.date < date },
+            sortBy: [SortDescriptor(\Workout.date, order: .forward)]
+        )
+        let rows = (try? context.fetch(descriptor)) ?? []
+        return rows.filter { $0.programRun == nil }
+    }
+
+    private static func fetchStandaloneWorkouts(
+        between window: AnalysisWeekWindow,
+        context: ModelContext
+    ) -> [Workout] {
+        let weekStartDate = window.weekStartDate
+        let weekEndDate = window.weekEndDate
+        let descriptor = FetchDescriptor<Workout>(
+            predicate: #Predicate<Workout> {
+                $0.date >= weekStartDate &&
+                $0.date <= weekEndDate
+            },
+            sortBy: [SortDescriptor(\Workout.date, order: .forward)]
+        )
+        let rows = (try? context.fetch(descriptor)) ?? []
+        return rows.filter { $0.programRun == nil }
+    }
+
+    private static func fetchOutcomes(
+        between window: AnalysisWeekWindow,
+        context: ModelContext
+    ) -> [ExercisePerformanceOutcome] {
+        let weekStartDate = window.weekStartDate
+        let weekEndDate = window.weekEndDate
+        let descriptor = FetchDescriptor<ExercisePerformanceOutcome>(
+            predicate: #Predicate<ExercisePerformanceOutcome> {
+                $0.workoutDate >= weekStartDate &&
+                $0.workoutDate <= weekEndDate
+            },
+            sortBy: [SortDescriptor(\ExercisePerformanceOutcome.workoutDate, order: .forward)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     // MARK: - Week Anchors

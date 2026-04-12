@@ -14,16 +14,11 @@ struct AdaptationProposalReviewView: View {
     @Bindable var run: ProgramRun
 
     @Environment(\.modelContext) private var modelContext
-    @Query private var allProposals: [AdaptationProposal]
+    @State private var pendingProposals: [AdaptationProposal] = []
 
     @State private var inFlightProposalID: UUID?
     @State private var proposalPendingReject: AdaptationProposal?
     @State private var errorMessage: String?
-
-    private var pendingProposals: [AdaptationProposal] {
-        AdaptationProposalConfirmationService
-            .pendingUserProposals(for: run, proposals: allProposals)
-    }
 
     var body: some View {
         List {
@@ -75,6 +70,9 @@ struct AdaptationProposalReviewView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "Unknown error")
+        }
+        .task(id: run.id) {
+            reloadPendingProposals()
         }
     }
 
@@ -148,6 +146,7 @@ struct AdaptationProposalReviewView: View {
 
         do {
             try AdaptationProposalConfirmationService.approve(proposal, context: modelContext)
+            reloadPendingProposals()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -163,6 +162,7 @@ struct AdaptationProposalReviewView: View {
 
         do {
             try AdaptationProposalConfirmationService.reject(proposal, context: modelContext)
+            reloadPendingProposals()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -269,5 +269,11 @@ struct AdaptationProposalReviewView: View {
             return String(format: "+%.0f%%", percent)
         }
         return String(format: "%.0f%%", percent)
+    }
+
+    private func reloadPendingProposals() {
+        pendingProposals = ReadQueryRepository
+            .pendingUserProposals(for: run, context: modelContext, limit: 32)
+            .filter { AdaptationProposalConfirmationService.isPendingUserProposal($0) }
     }
 }

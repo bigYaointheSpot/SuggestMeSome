@@ -15,11 +15,7 @@ struct ContentView: View {
     @AppStorage("appColorScheme") private var appColorScheme: String = "system"
 
     private var preferredColorScheme: ColorScheme? {
-        switch appColorScheme {
-        case "light": return .light
-        case "dark":  return .dark
-        default:      return nil
-        }
+        AppAppearancePreferenceService.preferredColorScheme(for: appColorScheme)
     }
 
     var body: some View {
@@ -149,10 +145,10 @@ struct WorkoutsTab: View {
                 )
             }
             .sheet(isPresented: $showingGeneratorSheet, onDismiss: {
-                if pendingGeneratedWorkout != nil {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                DeferredNavigationService.launchAfterSheetDismissIfNeeded(
+                    hasPendingDestination: pendingGeneratedWorkout != nil
+                ) {
                         showingGeneratedWorkout = true
-                    }
                 }
             }) {
                 GeneratorSheetRootView { gw in
@@ -164,10 +160,10 @@ struct WorkoutsTab: View {
                 WorkoutView(generatedWorkout: pendingGeneratedWorkout)
             }
             .sheet(isPresented: $showingCompleteProgramSheet, onDismiss: {
-                if pendingProgramWorkout != nil {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                DeferredNavigationService.launchAfterSheetDismissIfNeeded(
+                    hasPendingDestination: pendingProgramWorkout != nil
+                ) {
                         showingProgramWorkout = true
-                    }
                 }
             }) {
                 CompleteProgramWorkoutSheet(activeRuns: Array(activeProgramRuns)) { ctx in

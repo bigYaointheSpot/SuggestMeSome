@@ -128,7 +128,9 @@ struct DailyCoachView: View {
         .sheet(isPresented: $showingDraftReview, onDismiss: {
             if confirmedDraftLaunch {
                 confirmedDraftLaunch = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                DeferredNavigationService.launchAfterSheetDismissIfNeeded(
+                    hasPendingDestination: true
+                ) {
                     navigatingToWorkout = true
                 }
             }

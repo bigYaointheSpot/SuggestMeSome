@@ -85,7 +85,6 @@ struct SuggestMeSomeApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .preferredColorScheme(.dark)
                 .onAppear {
                     // v1.0: Populates default MuscleGroups and Exercises on first launch.
                     seedDefaultDataIfNeeded(context: sharedModelContainer.mainContext)

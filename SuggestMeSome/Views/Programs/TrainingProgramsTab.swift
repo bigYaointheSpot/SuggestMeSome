@@ -12,7 +12,12 @@ import SwiftData
 
 struct TrainingProgramsTab: View {
     @Query private var programRuns: [ProgramRun]
-    @Query(sort: \Workout.date, order: .reverse) private var allWorkouts: [Workout]
+    @Query(
+        filter: #Predicate<Workout> { $0.programRun != nil },
+        sort: \Workout.date,
+        order: .reverse
+    )
+    private var allWorkouts: [Workout]
     @State private var showingAIGenerator = false
 
     var sortedRuns: [ProgramRun] {

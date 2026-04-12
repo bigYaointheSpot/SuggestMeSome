@@ -13,32 +13,21 @@ import SwiftData
 struct AdaptationHistoryView: View {
     @Bindable var run: ProgramRun
 
-    @Query private var allAnalyses: [WeeklyTrainingAnalysis]
-    @Query private var allTrendSnapshots: [LiftTrendSnapshot]
-    @Query private var allProposals: [AdaptationProposal]
-    @Query private var allOverlays: [AppliedProgramOverlay]
-    @Query private var allEvents: [AdaptationEventHistory]
+    @Environment(\.modelContext) private var modelContext
+    @State private var snapshot = AdaptationHistoryReadSnapshot(
+        analyses: [],
+        trendSnapshots: [],
+        proposals: [],
+        overlays: [],
+        events: []
+    )
 
     private var analyses: [WeeklyTrainingAnalysis] {
-        allAnalyses
-            .filter { $0.programRun?.id == run.id }
-            .sorted { lhs, rhs in
-                if lhs.weekStartDate == rhs.weekStartDate {
-                    return lhs.createdAt > rhs.createdAt
-                }
-                return lhs.weekStartDate > rhs.weekStartDate
-            }
+        snapshot.analyses
     }
 
     private var trendSnapshots: [LiftTrendSnapshot] {
-        allTrendSnapshots
-            .filter { $0.programRun?.id == run.id }
-            .sorted { lhs, rhs in
-                if lhs.weekEndDate == rhs.weekEndDate {
-                    return lhs.createdAt > rhs.createdAt
-                }
-                return lhs.weekEndDate > rhs.weekEndDate
-            }
+        snapshot.trendSnapshots
     }
 
     private var latestTrendByLift: [LiftTrendSnapshot] {
@@ -56,14 +45,7 @@ struct AdaptationHistoryView: View {
     }
 
     private var proposals: [AdaptationProposal] {
-        allProposals
-            .filter { $0.programRun?.id == run.id }
-            .sorted { lhs, rhs in
-                if lhs.createdAt == rhs.createdAt {
-                    return lhs.priority > rhs.priority
-                }
-                return lhs.createdAt > rhs.createdAt
-            }
+        snapshot.proposals
     }
 
     private var autoVariationSwaps: [AdaptationProposal] {
@@ -74,15 +56,11 @@ struct AdaptationHistoryView: View {
     }
 
     private var overlays: [AppliedProgramOverlay] {
-        allOverlays
-            .filter { $0.programRun?.id == run.id }
-            .sorted { $0.appliedAt > $1.appliedAt }
+        snapshot.overlays
     }
 
     private var events: [AdaptationEventHistory] {
-        allEvents
-            .filter { $0.programRun?.id == run.id }
-            .sorted { $0.timestamp > $1.timestamp }
+        snapshot.events
     }
 
     var body: some View {
@@ -106,6 +84,9 @@ struct AdaptationHistoryView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Adaptation History")
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: run.id) {
+            snapshot = ReadQueryRepository.adaptationHistorySnapshot(for: run, context: modelContext)
+        }
     }
 
     // MARK: Sections

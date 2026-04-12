@@ -30,11 +30,9 @@ enum ProgramOverlayResolutionService {
         guard !baseRows.isEmpty else { return [] }
 
         var resolvedRows = baseRows.map(cloneRow)
-        let overlays = (try? context.fetch(FetchDescriptor<AppliedProgramOverlay>())) ?? []
+        let overlays = ReadQueryRepository.activeOverlays(for: run, context: context)
         let applicableAdjustments = overlays
             .filter { overlay in
-                guard overlay.programRun?.id == run.id else { return false }
-                guard overlay.overlayStatus == .active else { return false }
                 guard overlay.effectiveWeekStart <= week else { return false }
                 if let weekEnd = overlay.effectiveWeekEnd, weekEnd < week { return false }
                 return true
