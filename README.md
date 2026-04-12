@@ -1851,6 +1851,60 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 6 [Today Plan Engine, Confidence, and Adherence Rescue] — 2026-04-12
+
+- Introduced `TodayPlanEngine` — a single, surface-agnostic orchestration entry point that assembles a `TodayPlan` from all available coaching signals (check-in, active program, weekly analysis, HealthKit, pending proposals). Replaces the direct `DailyCoachRecommendationService.generate()` call in `DailyCoachView` with a single `TodayPlanEngine.buildPlan()` call.
+- Added new value types in `Services/Adaptive/TodayPlanTypes.swift`:
+  - `TodayPlanConfidence` — deterministic `.high` / `.medium` / `.low` confidence band
+  - `TodayPlanSourceAttribution` — explicit per-source influence descriptions (manual readiness, HealthKit, program prescription, adaptive overlays, training history)
+  - `AdherenceStatus` — `.onTrack`, `.slightlyBehind(sessionsBehind:)`, `.significantlyBehind(sessionsBehind:)`, `.noProgramActive`
+  - `AdherenceGuidanceType` — `.continueNormalSequence`, `.trimAndResume`, `.conservativeResume`
+  - `AdherenceRescue` — adherence-aware rescue guidance struct with headline, details, and sessions-behind count
+  - `TodayPlan` — complete plan output wrapping all above fields alongside the existing `DailyCoachRecommendation`
+- Added `AdherenceRescueService` in `Services/Adaptive/AdherenceRescueService.swift`:
+  - detects sessions-behind based on elapsed calendar days since `ProgramRun.startDate` vs. expected pace (`sessionsPerWeek`)
+  - caps behind count at total program sessions to avoid over-reporting on completed programs
+  - generates trim-and-resume guidance for 1 session behind; conservative-resume guidance for 2+ sessions behind
+  - non-destructive — no program mutations, no overlay creation
+- Added explicit confidence scoring in `TodayPlanEngine.computeConfidence`:
+  - high: active program + program history (≥1 linked workout) + today check-in; OR active program + weekly analysis + today check-in
+  - medium: new program run with no history + check-in; standalone with check-in + ≥3 recent workouts; program + analysis but no check-in
+  - low: no check-in + no analysis; no check-in + fewer than 3 recent workouts
+- Added explicit source attribution in `TodayPlanEngine.buildAttribution`:
+  - per-source influence text for all five signal sources
+  - `activeSourceLabels` list for compact UI display (replaces previous `[DailyCoachRecommendationSource]` pills)
+- Added `whyToday` and `whatChangedToday` explainability outputs in `TodayPlanEngine`:
+  - `whyToday` — paragraph explaining the core logic for today's plan, always populated
+  - `whatChangedToday` — highlights notable departures from neutral baseline (pain flag, low/strong readiness, HealthKit caution, adherence alert, pending proposals); empty string when today is a normal session
+- Updated `DailyCoachView` to use `TodayPlanEngine.buildPlan()` with minimal UI additions:
+  - confidence badge (High/Medium/Low) in the recommendation card header
+  - "What changed today" banner in the recommendation card (only shown when non-empty)
+  - "Why Today" and "Confidence rationale" sections in the expanded recommendation detail
+  - adherence rescue card surfaced below the recommendation card when the user is behind schedule
+  - source pills now driven by `attribution.activeSourceLabels` (string-based, no breaking change to existing `DailyCoachRecommendation`)
+- Behavioral constraints preserved:
+  - HealthKit influence remains medium — nudges conservative, cannot override manual readiness
+  - pain/discomfort flag remains the highest-priority override
+  - adherence rescue is non-destructive — no program mutations or overlay creation
+  - `DailyCoachRecommendationService` is unchanged and all existing signal rules are intact
+- Added 32-test coverage in `SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests.swift`:
+  - confidence classification (high/medium/low) for all signal combinations
+  - source attribution field population (check-in, pain flag, program, proposals, HealthKit)
+  - adherence rescue outputs (onTrack, slightlyBehind, significantlyBehind, nil-when-no-program, cap-at-total-sessions)
+  - `computeSessionsBehind` determinism (on-pace, behind, ahead, 200-day cap)
+  - explanation generation (whyToday for pain/strong/low/HealthKit; whatChangedToday for neutral/pain/behind/proposals)
+  - `TodayPlanEngine.buildPlan` integration (sparset case, never-surfaces-on-track, surfaces-when-behind, determinism)
+  - `AdherenceStatus` equatability checks
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests` (32/32 pass)
+  - broader regression slice:
+    - `Feature7ValidationTests` (pass)
+    - `Feature10Prompt5CoachAwareFusionTests` (pass)
+    - `Feature9RecommendationEngineValidationTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
 ---
 
 ## Project Setup

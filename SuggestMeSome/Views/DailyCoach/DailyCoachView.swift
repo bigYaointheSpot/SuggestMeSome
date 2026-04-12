@@ -60,14 +60,20 @@ struct DailyCoachView: View {
 
     private var latestReview: DailyCoachWeeklyReview? { weeklyReviews.first }
 
-    private var todayRecommendation: DailyCoachRecommendation {
-        DailyCoachRecommendationService.generate(
+    private var completedWorkoutCountForRun: Int {
+        guard let run = focusRun else { return 0 }
+        return TrainingContextQueryService.completedWorkoutCount(for: run, in: Array(recentWorkouts))
+    }
+
+    private var todayPlan: TodayPlan {
+        TodayPlanEngine.buildPlan(
             checkIn: todayCheckIn,
             activeRun: focusRun,
             latestAnalysis: latestAnalysis,
             pendingProposalCount: pendingProposals.count,
             recentWorkouts: TrainingContextQueryService.recentWorkouts(from: recentWorkouts, limit: 20),
-            objectiveRecoveryInsight: objectiveRecoveryInsight
+            objectiveRecoveryInsight: objectiveRecoveryInsight,
+            completedWorkoutCountForRun: completedWorkoutCountForRun
         )
     }
 
@@ -104,6 +110,9 @@ struct DailyCoachView: View {
                     todayTrainingCard
                     readinessCard
                     coachRecommendationCard
+                    if let rescue = todayPlan.adherenceRescue {
+                        adherenceRescueCard(rescue: rescue)
+                    }
                     if !pendingProposals.isEmpty {
                         pendingProposalsRow
                     }
@@ -138,7 +147,7 @@ struct DailyCoachView: View {
             if let draft = pendingDraft {
                 DraftReviewSheet(
                     draft: draft,
-                    sessionLabel: nextSessionLabel(for: todayRecommendation.nextProgramSession)
+                    sessionLabel: nextSessionLabel(for: todayPlan.recommendation.nextProgramSession)
                 ) {
                     confirmedDraftLaunch = true
                     showingDraftReview = false
@@ -280,7 +289,8 @@ struct DailyCoachView: View {
     // MARK: - Coach Recommendation Card
 
     private var coachRecommendationCard: some View {
-        let rec = todayRecommendation
+        let plan = todayPlan
+        let rec = plan.recommendation
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label("Coach Recommendation", systemImage: "brain.head.profile")
@@ -291,6 +301,7 @@ struct DailyCoachView: View {
                         .foregroundStyle(.orange)
                         .font(.subheadline)
                 }
+                confidenceBadge(plan.confidence)
                 readinessTierBadge(rec.readinessTier)
             }
 
@@ -300,12 +311,29 @@ struct DailyCoachView: View {
                 objectiveRecoveryRow(insight)
             }
 
-            recommendationSourcesRow(rec.recommendationSources)
+            recommendationSourcesRow(plan.attribution.activeSourceLabels)
 
             // Compact summary
             Text(rec.compactSummary)
                 .font(.subheadline.weight(.medium))
                 .fixedSize(horizontal: false, vertical: true)
+
+            // "What changed today" banner — only shown when noteworthy
+            if !plan.whatChangedToday.isEmpty {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "bell.badge")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                    Text(plan.whatChangedToday)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color.orange.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
 
             // Primary suggestion chip
             HStack(spacing: 6) {
@@ -338,12 +366,31 @@ struct DailyCoachView: View {
             if recommendationExpanded {
                 Divider()
 
+                // Why Today
+                if !plan.whyToday.isEmpty {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Why Today")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text(plan.whyToday)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
                 Text(rec.expandedDetails)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(rec.sourceAttributionDetails)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // Confidence rationale
+                Text("Confidence (\(plan.confidence.rawValue)): \(plan.confidenceRationale)")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -436,14 +483,14 @@ struct DailyCoachView: View {
             .clipShape(Capsule())
     }
 
-    private func recommendationSourcesRow(_ sources: [DailyCoachRecommendationSource]) -> some View {
+    private func recommendationSourcesRow(_ labels: [String]) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Recommendation Sources")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             HStack(spacing: 6) {
-                ForEach(sources, id: \.rawValue) { source in
-                    sourcePill(source.rawValue)
+                ForEach(labels, id: \.self) { label in
+                    sourcePill(label)
                 }
                 Spacer()
             }
@@ -457,6 +504,58 @@ struct DailyCoachView: View {
             .padding(.vertical, 4)
             .background(Color(.tertiarySystemBackground))
             .clipShape(Capsule())
+    }
+
+    private func confidenceBadge(_ confidence: TodayPlanConfidence) -> some View {
+        let (label, color): (String, Color) = switch confidence {
+        case .high:   ("High Confidence", .green)
+        case .medium: ("Medium Confidence", .blue)
+        case .low:    ("Low Confidence", .secondary)
+        }
+        return Text(label)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12))
+            .foregroundStyle(color)
+            .clipShape(Capsule())
+    }
+
+    // MARK: - Adherence Rescue Card
+
+    private func adherenceRescueCard(rescue: AdherenceRescue) -> some View {
+        let (icon, accentColor): (String, Color) = switch rescue.guidanceType {
+        case .continueNormalSequence: ("checkmark.circle", .green)
+        case .trimAndResume:          ("calendar.badge.exclamationmark", .orange)
+        case .conservativeResume:     ("exclamationmark.triangle", .red)
+        }
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundStyle(accentColor)
+                Text("Adherence")
+                    .font(.headline)
+                Spacer()
+                Text(rescue.guidanceType.rawValue)
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(accentColor.opacity(0.12))
+                    .foregroundStyle(accentColor)
+                    .clipShape(Capsule())
+            }
+            Divider()
+            Text(rescue.headline)
+                .font(.subheadline.weight(.medium))
+            Text(rescue.details)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private func readinessTierBadge(_ tier: ReadinessTier) -> some View {
@@ -707,7 +806,7 @@ struct DailyCoachView: View {
 
     private func launchAsPlanned() {
         guard let run = focusRun,
-              let session = todayRecommendation.nextProgramSession else { return }
+              let session = todayPlan.recommendation.nextProgramSession else { return }
         let exercises = ProgramOverlayResolutionService.resolvedExercises(
             for: run, week: session.weekNumber, session: session.sessionNumber, context: modelContext
         )
@@ -723,13 +822,13 @@ struct DailyCoachView: View {
 
     private func prepareReviewSheet() {
         guard let run = focusRun,
-              let session = todayRecommendation.nextProgramSession else { return }
+              let session = todayPlan.recommendation.nextProgramSession else { return }
         let exercises = ProgramOverlayResolutionService.resolvedExercises(
             for: run, week: session.weekNumber, session: session.sessionNumber, context: modelContext
         )
         let draft = DailyCoachWorkoutPreparationService.prepare(
             exercises: exercises,
-            suggestionType: todayRecommendation.primarySuggestion.type
+            suggestionType: todayPlan.recommendation.primarySuggestion.type
         )
         pendingProgramWorkout = ProgramWorkoutContext(
             programRun: run,
