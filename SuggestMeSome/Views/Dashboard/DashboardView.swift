@@ -189,16 +189,16 @@ struct DashboardView: View {
             Text("Start Workout")
                 .font(.title3.weight(.bold))
             HStack(spacing: 10) {
-                quickStartButton(icon: "play.fill", label: "Empty", color: .blue) {
+                quickStartButton(icon: "play.fill", label: "Empty", color: .indigo) {
                     viewModel.navigateToEmptyWorkout = true
                 }
-                quickStartButton(icon: "wand.and.stars", label: "Suggest", color: .purple) {
+                quickStartButton(icon: "wand.and.stars", label: "Suggest", color: .indigo) {
                     viewModel.showingGeneratorSheet = true
                 }
                 quickStartButton(
                     icon: "list.clipboard.fill",
                     label: "Program",
-                    color: .orange,
+                    color: .indigo,
                     badge: viewModel.pendingProposals.isEmpty ? nil : "\(viewModel.pendingProposals.count)"
                 ) {
                     if viewModel.activeProgramRuns.isEmpty {
@@ -280,6 +280,8 @@ struct DashboardView: View {
         .padding(16)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.indigo.opacity(0.4), lineWidth: 1.5))
+        .shadow(color: Color.indigo.opacity(0.12), radius: 10, x: 0, y: 2)
     }
 
     private func fatigueStatusTile(_ analysis: WeeklyTrainingAnalysis) -> some View {
@@ -389,13 +391,13 @@ struct DashboardView: View {
         HStack(spacing: 12) {
             StatCard(
                 icon: "figure.strengthtraining.traditional",
-                iconColor: .blue,
+                iconColor: .indigo,
                 value: "\(viewModel.workoutCount)",
                 label: "Workouts"
             )
             StatCard(
                 icon: "clock.fill",
-                iconColor: .blue,
+                iconColor: .indigo,
                 value: viewModel.timeTrainedLabel,
                 label: "Time Trained"
             )
@@ -461,7 +463,7 @@ struct DashboardView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: "chart.line.uptrend.xyaxis")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.indigo)
                 Text("Strength Trends")
                     .font(.headline.weight(.bold))
             }
@@ -558,7 +560,7 @@ struct DashboardView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: "calendar")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.indigo)
                 Text("Workout Frequency")
                     .font(.headline.weight(.bold))
             }
@@ -577,18 +579,18 @@ struct DashboardView: View {
                         )
                         .foregroundStyle(
                             Double(bucket.count) >= target
-                                ? Color.blue
-                                : Color.blue.opacity(0.4)
+                                ? Color.indigo
+                                : Color.indigo.opacity(0.4)
                         )
                         .cornerRadius(4)
                     }
                     RuleMark(y: .value("Target", target))
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4]))
-                        .foregroundStyle(Color.blue.opacity(0.7))
+                        .foregroundStyle(Color.indigo.opacity(0.7))
                         .annotation(position: .top, alignment: .leading) {
                             Text("Target")
                                 .font(.caption2)
-                                .foregroundStyle(Color.blue.opacity(0.8))
+                                .foregroundStyle(Color.indigo.opacity(0.8))
                         }
                 }
                 .chartXAxis {
@@ -624,7 +626,7 @@ struct DashboardView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: "figure.arms.open")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.indigo)
                 Text("Volume by Muscle Group")
                     .font(.headline.weight(.bold))
             }
@@ -677,7 +679,7 @@ struct DashboardView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: "list.clipboard")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.indigo)
                 Text("Active Program")
                     .font(.headline)
             }
@@ -780,10 +782,10 @@ private struct ActiveProgramCard: View {
             HStack(spacing: 16) {
                 ZStack {
                     Circle()
-                        .stroke(Color.blue.opacity(0.2), lineWidth: 8)
+                        .stroke(Color.indigo.opacity(0.2), lineWidth: 8)
                     Circle()
                         .trim(from: 0, to: progress)
-                        .stroke(Color.blue, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .stroke(Color.indigo, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                     Text("\(Int(progress * 100))%")
                         .font(.caption.weight(.semibold))
@@ -843,7 +845,7 @@ private struct ActiveProgramCard: View {
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Color.blue)
+                        .background(Color.indigo)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
@@ -918,8 +920,8 @@ private struct PRFeedRow: View {
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.15))
-                        .foregroundStyle(.blue)
+                        .background(Color.yellow.opacity(0.2))
+                        .foregroundStyle(Color.orange)
                         .clipShape(Capsule())
                 }
             }
@@ -928,6 +930,8 @@ private struct PRFeedRow: View {
         .padding(.horizontal, 12)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.yellow.opacity(0.5), lineWidth: 1.5))
+        .shadow(color: Color.yellow.opacity(0.08), radius: 6, x: 0, y: 1)
     }
 }
 
@@ -939,15 +943,26 @@ private struct StatCard: View {
     let value: String
     let label: String
 
+    @State private var displayedInt: Int = 0
+
+    private var targetInt: Int? { Int(value) }
+
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(iconColor)
-            Text(value)
-                .font(.title2.weight(.bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+            Group {
+                if targetInt != nil {
+                    Text("\(displayedInt)")
+                } else {
+                    Text(value)
+                }
+            }
+            .font(.title2.weight(.bold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .contentTransition(.numericText())
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -959,5 +974,31 @@ private struct StatCard: View {
         .padding(.horizontal, 6)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .onAppear {
+            if let target = targetInt {
+                animateCount(to: target)
+            }
+        }
+        .onChange(of: value) { _, _ in
+            if let target = targetInt {
+                animateCount(to: target)
+            }
+        }
+    }
+
+    private func animateCount(to target: Int) {
+        displayedInt = 0
+        guard target > 0 else { return }
+        let steps = min(target, 24)
+        let duration = 0.8
+        for i in 1...steps {
+            let delay = duration * Double(i) / Double(steps)
+            let stepValue = Int(Double(target) * Double(i) / Double(steps))
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                withAnimation(.easeOut(duration: 0.05)) {
+                    displayedInt = stepValue
+                }
+            }
+        }
     }
 }

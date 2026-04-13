@@ -32,6 +32,7 @@ struct CheckInFormView: View {
     @State private var availableTimeMinutes: Int = 60
     @State private var hasPainOrDiscomfort: Bool = false
     @State private var painNotes: String = ""
+    @State private var showSavedConfirmation = false
 
     private let timeOptions = [30, 45, 60, 75, 90, 120]
 
@@ -73,7 +74,28 @@ struct CheckInFormView: View {
                         .fontWeight(.semibold)
                 }
             }
+            .overlay {
+                if showSavedConfirmation {
+                    savedConfirmationOverlay
+                }
+            }
         }
+    }
+
+    private var savedConfirmationOverlay: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(.indigo)
+            Text("Checked In")
+                .font(.headline)
+                .foregroundStyle(.primary)
+        }
+        .padding(32)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .shadow(color: .black.opacity(0.12), radius: 16)
+        .transition(.scale(scale: 0.85).combined(with: .opacity))
     }
 
     // MARK: - Scale Section
@@ -143,7 +165,18 @@ struct CheckInFormView: View {
             )
             modelContext.insert(checkIn)
         }
-        dismiss()
+
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+            showSavedConfirmation = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            withAnimation(.easeOut(duration: 0.25)) {
+                showSavedConfirmation = false
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                dismiss()
+            }
+        }
     }
 }
 

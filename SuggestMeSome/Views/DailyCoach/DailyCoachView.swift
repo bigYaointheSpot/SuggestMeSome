@@ -432,6 +432,8 @@ struct DailyCoachView: View {
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.indigo.opacity(0.4), lineWidth: 1.5))
+        .shadow(color: Color.indigo.opacity(0.12), radius: 10, x: 0, y: 2)
     }
 
     private func recommendationDetailRow(_ item: DailyCoachSuggestionItem) -> some View {
@@ -470,7 +472,7 @@ struct DailyCoachView: View {
     private func objectiveRecoveryBadge(_ status: ObjectiveRecoveryStatus) -> some View {
         let (label, color): (String, Color) = switch status {
         case .good: ("Good", .green)
-        case .neutral: ("Neutral", .blue)
+        case .neutral: ("Neutral", .indigo)
         case .caution: ("Caution", .orange)
         }
 
@@ -509,7 +511,7 @@ struct DailyCoachView: View {
     private func confidenceBadge(_ confidence: TodayPlanConfidence) -> some View {
         let (label, color): (String, Color) = switch confidence {
         case .high:   ("High Confidence", .green)
-        case .medium: ("Medium Confidence", .blue)
+        case .medium: ("Medium Confidence", .indigo)
         case .low:    ("Low Confidence", .secondary)
         }
         return Text(label)
@@ -594,7 +596,7 @@ struct DailyCoachView: View {
         case .reduceWorkingLoadsSlightly:    return .orange
         case .suggestManualVariationSwap:    return .red
         case .standaloneRecoverySession:     return .teal
-        case .standaloneShortStrengthSession:return .blue
+        case .standaloneShortStrengthSession:return .indigo
         }
     }
 
@@ -731,8 +733,8 @@ struct DailyCoachView: View {
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.2))
-                        .foregroundStyle(.blue)
+                        .background(Color.indigo.opacity(0.2))
+                        .foregroundStyle(.indigo)
                         .clipShape(Capsule())
                 }
             }

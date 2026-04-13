@@ -46,6 +46,7 @@ struct ContentView: View {
                 }
                 .tag(4)
         }
+        .tint(.indigo)
         .preferredColorScheme(preferredColorScheme)
     }
 }
@@ -204,7 +205,7 @@ struct WorkoutsTab: View {
                     .minimumScaleFactor(0.75)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(Color.blue)
+                    .background(Color.indigo)
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
@@ -218,7 +219,7 @@ struct WorkoutsTab: View {
                     .minimumScaleFactor(0.75)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(Color.purple)
+                    .background(Color.indigo)
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
@@ -233,7 +234,7 @@ struct WorkoutsTab: View {
                         .minimumScaleFactor(0.75)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.orange)
+                        .background(Color.indigo)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
@@ -274,8 +275,8 @@ struct WorkoutsTab: View {
                     .font(.subheadline)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .background(exerciseFilterActive ? Color.blue.opacity(0.25) : Color(.secondarySystemBackground))
-                    .foregroundStyle(exerciseFilterActive ? Color.blue : Color.primary)
+                    .background(exerciseFilterActive ? Color.indigo.opacity(0.25) : Color(.secondarySystemBackground))
+                    .foregroundStyle(exerciseFilterActive ? Color.indigo : Color.primary)
                     .clipShape(Capsule())
                 }
 
@@ -314,7 +315,7 @@ struct WorkoutsTab: View {
         label: String,
         systemImage: String,
         isActive: Bool,
-        tint: Color = .blue,
+        tint: Color = .indigo,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -430,7 +431,7 @@ struct ExerciseFilterSheet: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: groupSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(groupSelected ? .blue : Color(.systemGray3))
+                        .foregroundStyle(groupSelected ? .indigo : Color(.systemGray3))
                         .font(.title3)
                     Text(group.name)
                         .font(.headline)
@@ -476,7 +477,7 @@ struct ExerciseFilterSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? .blue : Color(.systemGray3))
+                    .foregroundStyle(isSelected ? .indigo : Color(.systemGray3))
                     .font(.title3)
                 Text(exercise.name)
                     .foregroundStyle(.primary)

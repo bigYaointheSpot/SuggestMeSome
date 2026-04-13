@@ -2058,6 +2058,20 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+### UI Polish — Indigo Brand, Premium Moments, Micro-animations
+
+- **Priority 1 — Single dominant accent:** All primary CTA buttons, tab bar, active filters, and interactive controls now use a single indigo brand color. Blue and purple are retired from brand usage; semantic colors (green/red/orange/yellow) are unchanged. Applied via `.tint(.indigo)` on ContentView plus targeted replacements across Dashboard, Workouts tab, DailyCoach, and all filter chips.
+
+- **Priority 2 — Premium moment differentiation:** AI coaching cards (Dashboard coaching section, DailyCoach recommendation card) now display an indigo stroke border with a soft glow shadow, visually distinguishing them from standard data cards. PR feed rows receive a gold stroke ring, reinforcing the achievement identity.
+
+- **Priority 3 — Smooth premium micro-animations:**
+  - *Stat cards* count up from zero on appear using a staggered timer (0.8s ease-out), with SwiftUI `.contentTransition(.numericText())` for smooth digit changes.
+  - *PR celebration overlay* — when a workout is saved and contains new PRs, a fullscreen celebration overlay springs in (star + count + "Tap to continue") before auto-dismissing and popping the view. Replaces the previous instant dismiss.
+  - *Star glow on PR unlock* — `SetEntryRow` animates the star to 1.6× scale with a yellow shadow when `isPR` toggles true.
+  - *Check-in confirmation* — saving a daily check-in shows a spring-in "Checked In" confirmation badge before the sheet dismisses with a soft fade.
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

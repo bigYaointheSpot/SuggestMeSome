@@ -39,6 +39,11 @@ struct WorkoutView: View {
     @State private var showingExercisePicker = false
     @State private var showingEndConfirmation = false
 
+    // PR celebration
+    @State private var showPRCelebration = false
+    @State private var newPRCount = 0
+    @State private var celebrationScale: CGFloat = 0.5
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -52,6 +57,11 @@ struct WorkoutView: View {
                 endWorkoutButton
             }
             .padding(.vertical)
+        }
+        .overlay {
+            if showPRCelebration {
+                prCelebrationOverlay
+            }
         }
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Log Workout")
@@ -292,9 +302,59 @@ struct WorkoutView: View {
             healthKitEnabled: healthKitEnabled,
             healthKitWritebackEnabled: writeAppWorkoutsToHealthKit
         )
-        _ = coordinator.saveWorkout(using: request)
+        let savedWorkout = coordinator.saveWorkout(using: request)
 
-        dismiss()
+        let prCount = savedWorkout.exerciseEntries.flatMap(\.sets).filter(\.isPR).count
+        if prCount > 0 {
+            newPRCount = prCount
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.65)) {
+                showPRCelebration = true
+                celebrationScale = 1.0
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                dismissCelebration()
+            }
+        } else {
+            dismiss()
+        }
+    }
+
+    private func dismissCelebration() {
+        withAnimation(.easeOut(duration: 0.3)) {
+            celebrationScale = 0.5
+            showPRCelebration = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            dismiss()
+        }
+    }
+
+    // MARK: - PR Celebration Overlay
+
+    private var prCelebrationOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+                .onTapGesture { dismissCelebration() }
+
+            VStack(spacing: 20) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.yellow)
+                    .shadow(color: .yellow.opacity(0.7), radius: 24)
+
+                VStack(spacing: 8) {
+                    Text(newPRCount == 1 ? "New Personal Record!" : "\(newPRCount) Personal Records!")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.white)
+
+                    Text("Tap to continue")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+            }
+            .scaleEffect(celebrationScale)
+        }
     }
 }
 
@@ -549,6 +609,9 @@ private extension WorkoutEffortFeedback {
 struct SetEntryRow: View {
     @Binding var set: DraftSet
 
+    @State private var starScale: CGFloat = 1.0
+    @State private var starGlowRadius: CGFloat = 0
+
     var body: some View {
         HStack(spacing: 8) {
             Text(set.isWarmup ? "W\(set.setNumber)" : "\(set.setNumber)")
@@ -578,6 +641,19 @@ struct SetEntryRow: View {
                 .foregroundStyle(set.isPR ? .yellow : Color(.systemGray3))
                 .frame(width: 22)
                 .opacity(set.isWarmup ? 0 : 1)
+                .scaleEffect(starScale)
+                .shadow(color: Color.yellow.opacity(starGlowRadius > 0 ? 0.8 : 0), radius: starGlowRadius)
+                .onChange(of: set.isPR) { _, newValue in
+                    guard newValue else { return }
+                    withAnimation(.easeOut(duration: 0.5)) {
+                        starScale = 1.6
+                        starGlowRadius = 12
+                    }
+                    withAnimation(.easeOut(duration: 0.4).delay(0.35)) {
+                        starScale = 1.0
+                        starGlowRadius = 0
+                    }
+                }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
