@@ -2306,12 +2306,13 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - no destructive navigation rewrites, no tab additions/removals, no reordering of existing tabs
   - Dashboard's analytics sections (quick start, coaching tiles, stats, PR feed, charts, program section) are unchanged — they remain utility-first summaries and do not duplicate Today Plan's recommendation surface
   - Daily Coach (Today Plan) continues to be the authoritative today-action surface
-- Compile validation: Xcode build is handled in Xcode (per repo workflow); no `xcodebuild` invocation was run from the shell for this prompt.
 - Verification runs for this prompt:
   - targeted:
-    - `Feature11Prompt6DashboardRenameTests` (run in Xcode)
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests` (pass)
   - broader regression slice:
-    - `Feature11Prompt2TodayPlanExecutionFlowTests`, `Feature11Prompt3StandaloneContinuityTests`, `Feature11Prompt5WatchContinuityTests`, `Feature10Prompt6TodayPlanEngineTests`, `Feature7ValidationTests` (run in Xcode)
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature11Prompt2TodayPlanExecutionFlowTests -only-testing:SuggestMeSomeTests/Feature11Prompt3StandaloneContinuityTests -only-testing:SuggestMeSomeTests/Feature11Prompt5WatchContinuityTests -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests -only-testing:SuggestMeSomeTests/Feature7ValidationTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
 ---
 
