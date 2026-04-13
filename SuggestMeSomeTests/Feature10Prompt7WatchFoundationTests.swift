@@ -345,7 +345,7 @@ struct Feature10Prompt7WatchFoundationTests {
         #expect(context.sessionPlanKind == .planned)
     }
 
-    @Test func currentSessionContextSupportsCoachAdjustedKind() {
+    @Test func currentSessionContextSupportsRuntimeAdjustedKind() {
         var entry = makeEmptyEntry(name: "Squat", orderIndex: 0, sets: 3)
         entry.prescribedTargetReps = 5
         entry.prescribedWeight = 225
@@ -353,10 +353,10 @@ struct Feature10Prompt7WatchFoundationTests {
         let ctx = WatchPayloadMapper.makeCurrentSessionContext(
             workoutID: UUID(),
             entries: [entry],
-            sessionPlanKind: .coachAdjusted
+            sessionPlanKind: .runtimeAdjusted
         )
         let context = try! unwrap(ctx)
-        #expect(context.sessionPlanKind == .coachAdjusted)
+        #expect(context.sessionPlanKind == .runtimeAdjusted)
         #expect(context.currentSetNumber == 1)
         #expect(context.currentSetTargetSummary == "5 reps @ 225 lbs")
     }
@@ -748,6 +748,7 @@ final class MockWatchCompanionBridge: WatchCompanionBridge {
     var todayPlanSnapshots: [WatchTodayPlanSnapshot] = []
     var liveSnapshots: [WatchLiveWorkoutSnapshot] = []
     var sessionContexts: [WatchCurrentSessionContext] = []
+    var sessionCompletions: [WatchSessionCompletionPayload] = []
 
     func refreshStatus() async -> WatchCompanionStatus {
         latestStatus
@@ -771,5 +772,9 @@ final class MockWatchCompanionBridge: WatchCompanionBridge {
 
     func sendCurrentSessionContext(_ context: WatchCurrentSessionContext) async {
         sessionContexts.append(context)
+    }
+
+    func sendSessionCompletion(_ payload: WatchSessionCompletionPayload) async {
+        sessionCompletions.append(payload)
     }
 }

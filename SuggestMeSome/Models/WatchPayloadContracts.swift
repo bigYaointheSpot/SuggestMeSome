@@ -37,6 +37,7 @@ enum WatchPayloadKind: String, Codable {
     case todayPlanSnapshot
     case currentSessionContext
     case liveWorkoutSnapshot
+    case sessionCompletion
 }
 
 // MARK: - Execution Interaction Types
@@ -47,10 +48,13 @@ enum WatchExecutionInteractionModel: String, Codable, Equatable {
 }
 
 /// Origin classification for today's session so watch rendering can stay
-/// compatible with planned sessions and coach-adjusted runtime drafts.
+/// compatible with planned sessions, approved-overlay versions, and runtime
+/// Daily Coach adjustments. Mirrors `TodayPlanLaunchPath` on the iPhone so
+/// source-of-truth attribution flows cleanly through the bridge.
 enum WatchSessionPlanKind: String, Codable, Equatable {
     case planned
-    case coachAdjusted
+    case overlayAdjusted
+    case runtimeAdjusted
 }
 
 // MARK: - Envelope
@@ -128,6 +132,14 @@ struct WatchCurrentSessionContext: Codable, Equatable {
     var quickCompleteEnabled: Bool? = nil
     var preferredInteractionModel: WatchExecutionInteractionModel? = nil
     var sessionPlanKind: WatchSessionPlanKind? = nil
+    /// Flat, ordered list of active source labels (e.g. "Manual Check-In",
+    /// "Program", "Adaptive Overlay") so watch rendering can surface source
+    /// provenance without re-deriving attribution.
+    var sessionSourceLabels: [String]? = nil
+    /// Stable identifier for the session version being executed. Used by watch
+    /// tests and future companion app to detect when the phone swapped
+    /// planned → runtime-adjusted mid-session.
+    var sessionVersionStableID: String? = nil
     var capturedAt: Date
 }
 
@@ -149,5 +161,29 @@ struct WatchLiveWorkoutSnapshot: Codable, Equatable {
     var programRunStableID: String?
     var programWeekNumber: Int?
     var programSessionNumber: Int?
+    var sessionPlanKind: WatchSessionPlanKind? = nil
+    var sessionSourceLabels: [String]? = nil
+    var sessionVersionStableID: String? = nil
     var capturedAt: Date
+}
+
+// MARK: - Session Completion Handoff
+
+/// Terminal handoff sent when an in-progress workout has been saved. Lets the
+/// watch surface wrap up its live execution state and celebrate completion
+/// without requerying the iPhone. Remains additive + versioned so future
+/// companion builds can ignore fields they don't understand.
+struct WatchSessionCompletionPayload: Codable, Equatable {
+    var workoutID: UUID
+    var completedAt: Date
+    var totalElapsedSeconds: Int
+    var completedExercises: Int
+    var totalExercises: Int
+    var completedSets: Int
+    var totalSets: Int
+    var sessionLabel: String
+    var sessionPlanKind: WatchSessionPlanKind?
+    var sessionSourceLabels: [String]?
+    var sessionVersionStableID: String?
+    var newPersonalRecordCount: Int
 }

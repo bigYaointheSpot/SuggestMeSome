@@ -137,6 +137,10 @@ struct DailyCoachView: View {
     @State private var stagedProposalDecision: StagedTodayPlanProposalDecision?
     @State private var proposalActionErrorMessage: String?
 
+    // Watch continuity — lazily initialised on first launch broadcast to keep
+    // `DefaultWatchCompanionBridge` off the view's init path.
+    @State private var watchSessionCoordinator: WatchSessionCoordinator?
+
     // MARK: Body
 
     var body: some View {
@@ -1208,6 +1212,62 @@ struct DailyCoachView: View {
             showingDraftReview = true
         } else {
             navigatingToWorkout = true
+        }
+        broadcastWatchLaunch(resolution: resolution, run: run, session: session)
+    }
+
+    /// Prompt 5 — publish a watch-safe launch snapshot so a paired companion
+    /// app immediately reflects which version of the session the user is
+    /// executing (planned vs approved-overlay vs runtime-adjusted). Swallows
+    /// all transport errors; the iPhone remains authoritative if the watch is
+    /// offline or uninstalled.
+    private func broadcastWatchLaunch(
+        resolution: TodayPlanLaunchResolution,
+        run: ProgramRun,
+        session: NextProgramSessionInfo
+    ) {
+        let coordinator = watchSessionCoordinator ?? WatchSessionCoordinator()
+        watchSessionCoordinator = coordinator
+        let plan = todayPlan
+        let kind = TodayPlanActionCoordinator.watchSessionPlanKind(for: resolution.path)
+        let sessionVersionStableID = TodayPlanActionCoordinator.watchSessionVersionStableID(
+            runStableID: run.syncStableID,
+            path: resolution.path,
+            weekNumber: session.weekNumber,
+            sessionNumber: session.sessionNumber
+        )
+        let launchID = UUID()
+        let startedAt = Date()
+        let sourceLabels = plan.attribution.activeSourceLabels
+        let sessionLabel = nextSessionLabel(for: session)
+        Task { @MainActor in
+            await coordinator.broadcastWorkoutLaunch(
+                workoutID: launchID,
+                startedAt: startedAt,
+                programRunID: run.id,
+                programWeekNumber: session.weekNumber,
+                programSessionNumber: session.sessionNumber,
+                sessionPlanKind: kind,
+                sessionSourceLabels: sourceLabels,
+                sessionVersionStableID: sessionVersionStableID
+            )
+            await coordinator.broadcastTodayPlan(
+                plan,
+                programName: run.program?.name,
+                programRunStableID: run.syncStableID
+            )
+            await coordinator.broadcastLiveWorkout(
+                workoutID: launchID,
+                elapsedSeconds: 0,
+                entries: [],
+                sessionLabel: sessionLabel,
+                programRunStableID: run.syncStableID,
+                programWeekNumber: session.weekNumber,
+                programSessionNumber: session.sessionNumber,
+                sessionPlanKind: kind,
+                sessionSourceLabels: sourceLabels,
+                sessionVersionStableID: sessionVersionStableID
+            )
         }
     }
 

@@ -2056,6 +2056,19 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 9 UI Polish — Indigo Brand, Premium Moments, Micro-animations
+
+- **Priority 1 — Single dominant accent:** All primary CTA buttons, tab bar, active filters, and interactive controls now use a single indigo brand color. Blue and purple are retired from brand usage; semantic colors (green/red/orange/yellow) are unchanged. Applied via `.tint(.indigo)` on ContentView plus targeted replacements across Dashboard, Workouts tab, DailyCoach, and all filter chips.
+
+- **Priority 2 — Premium moment differentiation:** AI coaching cards (Dashboard coaching section, DailyCoach recommendation card) now display an indigo stroke border with a soft glow shadow, visually distinguishing them from standard data cards. PR feed rows receive a gold stroke ring, reinforcing the achievement identity.
+
+- **Priority 3 — Smooth premium micro-animations:**
+  - *Stat cards* count up from zero on appear using a staggered timer (0.8s ease-out), with SwiftUI `.contentTransition(.numericText())` for smooth digit changes.
+  - *PR celebration overlay* — when a workout is saved and contains new PRs, a fullscreen celebration overlay springs in (star + count + "Tap to continue") before auto-dismissing and popping the view. Replaces the previous instant dismiss.
+  - *Star glow on PR unlock* — `SetEntryRow` animates the star to 1.6× scale with a yellow shadow when `isPR` toggles true.
+  - *Check-in confirmation* — saving a daily check-in shows a spring-in "Checked In" confirmation badge before the sheet dismisses with a soft fade.
+
+---
 ---
 
 ### Feature 11 — Today Plan Polish and Execution Flow
@@ -2229,21 +2242,45 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 5 [Watch-to-Phone Continuity and Adjusted Session Execution] — 2026-04-13
+
+- Closed the continuity gap between Today Plan launch on iPhone and session execution on Apple Watch so planned / approved-overlay / runtime-adjusted versions flow cleanly to watch state with correct source attribution.
+- Extended shared watch-safe transport contracts in `SuggestMeSome/Models/WatchPayloadContracts.swift` and `SuggestMeSome/Models/WatchCompanionTypes.swift` (all additive / optional for sync compatibility):
+  - rewrote `WatchSessionPlanKind` to `{ planned, overlayAdjusted, runtimeAdjusted }` so watch classification mirrors `TodayPlanLaunchPath` one-for-one
+  - added `sessionSourceLabels` + `sessionVersionStableID` to `WatchCurrentSessionContext`, `WatchLiveWorkoutSnapshot`, and `WatchWorkoutLaunchPayload`
+  - added `WatchSessionCompletionPayload` (counts, PR attribution, plan kind, source labels, stable version id) and wired it through `WatchPayloadKind.sessionCompletion`
+- Extended `WatchPayloadMapper` + `WatchSessionCoordinator` in `SuggestMeSome/Services/Watch/WatchSessionCoordinator.swift`:
+  - `makeLaunchPayload`, `makeLiveWorkoutSnapshot`, `makeCurrentSessionContext` now carry `sessionPlanKind` / `sessionSourceLabels` / `sessionVersionStableID`
+  - new `makeSessionCompletionPayload(...)` with correct completed vs total counts (strength + cardio), negative-elapsed clamping, and PR count passthrough
+  - `normalizeSourceLabels` helper trims blanks and collapses empty lists to `nil`
+  - added `broadcastSessionCompletion(...)` to the coordinator façade; added `sendSessionCompletion(_:)` to `WatchCompanionBridge` using `transferUserInfo`
+- Added pure, deterministic mapping helpers in `SuggestMeSome/Services/Adaptive/TodayPlanActionCoordinator.swift`:
+  - `watchSessionPlanKind(for:)` — single call site owning planned / overlay / runtime classification
+  - `watchSessionVersionStableID(runStableID:path:weekNumber:sessionNumber:)` — deterministic `run::wXsY::planned|overlay|runtime` stable id so watch can detect mid-session version swaps, with a standalone/free fallback when no program run is active
+- Wired the first real UI consumer in `SuggestMeSome/Views/DailyCoach/DailyCoachView.swift`:
+  - Today Plan launch now fires `WatchSessionCoordinator.broadcastWorkoutLaunch` + `broadcastTodayPlan` + `broadcastLiveWorkout` with the mapped plan kind, source labels, and stable session version id, so watch state reflects the exact version the iPhone launched
+- Guardrails preserved:
+  - no backend/cloud sync implementation
+  - no destructive `TrainingProgram` mutation path changes
+  - watch contracts remain additive and sync-safe
+  - coaching source-of-truth logic lives on iPhone only; watch payloads are derived projections
+  - local-first architecture and Today Plan proposal/approval flow untouched
+- Added focused tests:
+  - `SuggestMeSomeTests/Feature11Prompt5WatchContinuityTests.swift`
+    - launch-path ↔ watch plan kind mapping (planned / overlayAdjusted / runtimeAdjusted)
+    - `sessionVersionStableID` differentiation across launch paths + standalone fallback
+    - launch payload + live snapshot + current session context continuity fields
+    - source label normalization (blanks → `nil`)
+    - session completion counts (strength + cardio) and negative-elapsed clamping
+    - `WatchPayloadEnvelope` round-trip for session completion payload
+    - end-to-end coordinator broadcast for planned and runtime-adjusted launches
+  - updated `SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests.swift` to the renamed `runtimeAdjusted` kind and added `sessionCompletion` support in the mock bridge
+- Verification runs for this prompt:
+  - xcodebuild runs were skipped per saved user preference (user builds/runs in Xcode); please run the targeted + regression slices in Xcode before shipping.
+
 ---
 
-### UI Polish — Indigo Brand, Premium Moments, Micro-animations
 
-- **Priority 1 — Single dominant accent:** All primary CTA buttons, tab bar, active filters, and interactive controls now use a single indigo brand color. Blue and purple are retired from brand usage; semantic colors (green/red/orange/yellow) are unchanged. Applied via `.tint(.indigo)` on ContentView plus targeted replacements across Dashboard, Workouts tab, DailyCoach, and all filter chips.
-
-- **Priority 2 — Premium moment differentiation:** AI coaching cards (Dashboard coaching section, DailyCoach recommendation card) now display an indigo stroke border with a soft glow shadow, visually distinguishing them from standard data cards. PR feed rows receive a gold stroke ring, reinforcing the achievement identity.
-
-- **Priority 3 — Smooth premium micro-animations:**
-  - *Stat cards* count up from zero on appear using a staggered timer (0.8s ease-out), with SwiftUI `.contentTransition(.numericText())` for smooth digit changes.
-  - *PR celebration overlay* — when a workout is saved and contains new PRs, a fullscreen celebration overlay springs in (star + count + "Tap to continue") before auto-dismissing and popping the view. Replaces the previous instant dismiss.
-  - *Star glow on PR unlock* — `SetEntryRow` animates the star to 1.6× scale with a yellow shadow when `isPR` toggles true.
-  - *Check-in confirmation* — saving a daily check-in shows a spring-in "Checked In" confirmation badge before the sheet dismisses with a soft fade.
-
----
 
 ## Project Setup
 

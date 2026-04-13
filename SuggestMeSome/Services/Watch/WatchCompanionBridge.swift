@@ -19,6 +19,7 @@ protocol WatchCompanionBridge {
     func sendTodayPlanSnapshot(_ snapshot: WatchTodayPlanSnapshot) async
     func sendLiveWorkoutSnapshot(_ snapshot: WatchLiveWorkoutSnapshot) async
     func sendCurrentSessionContext(_ context: WatchCurrentSessionContext) async
+    func sendSessionCompletion(_ payload: WatchSessionCompletionPayload) async
 }
 
 @MainActor
@@ -113,6 +114,16 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         try? session.updateApplicationContext(message)
 #else
         _ = context
+#endif
+    }
+
+    func sendSessionCompletion(_ payload: WatchSessionCompletionPayload) async {
+#if canImport(WatchConnectivity)
+        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let message = Self.makeTransferMessage(kind: .sessionCompletion, payload: payload) else { return }
+        session.transferUserInfo(message)
+#else
+        _ = payload
 #endif
     }
 }

@@ -163,6 +163,44 @@ enum TodayPlanActionCoordinator {
         }
     }
 
+    /// Pure mapping from an iPhone `TodayPlanLaunchPath` to the watch-safe
+    /// `WatchSessionPlanKind`. Kept alongside `resolveLaunch` so a single
+    /// call site owns the planned/overlay/runtime classification.
+    static func watchSessionPlanKind(for path: TodayPlanLaunchPath) -> WatchSessionPlanKind {
+        switch path {
+        case .planned: return .planned
+        case .approvedOverlayAdjusted: return .overlayAdjusted
+        case .runtimeAdjusted: return .runtimeAdjusted
+        }
+    }
+
+    /// Stable session-version label used across watch payloads so the watch
+    /// never shows the wrong attribution when the iPhone launches a planned
+    /// vs overlay vs runtime-adjusted version. Deterministic and side-effect
+    /// free so it can be unit-tested directly.
+    static func watchSessionVersionStableID(
+        runStableID: String?,
+        path: TodayPlanLaunchPath,
+        weekNumber: Int?,
+        sessionNumber: Int?
+    ) -> String {
+        let runSegment = runStableID ?? "standalone"
+        let coord: String = {
+            if let weekNumber, let sessionNumber {
+                return "w\(weekNumber)s\(sessionNumber)"
+            }
+            return "free"
+        }()
+        let suffix: String = {
+            switch path {
+            case .planned: return "planned"
+            case .approvedOverlayAdjusted: return "overlay"
+            case .runtimeAdjusted: return "runtime"
+            }
+        }()
+        return "\(runSegment)::\(coord)::\(suffix)"
+    }
+
     static func sourceDescription(
         source: TodayPlanChangeSource,
         hasRelevantPendingProposal: Bool

@@ -13,6 +13,29 @@ struct WatchWorkoutLaunchPayload: Codable, Equatable {
     let programRunID: UUID?
     let programWeekNumber: Int?
     let programSessionNumber: Int?
+    let sessionPlanKind: WatchSessionPlanKind?
+    let sessionSourceLabels: [String]?
+    let sessionVersionStableID: String?
+
+    init(
+        workoutID: UUID,
+        startedAt: Date,
+        programRunID: UUID? = nil,
+        programWeekNumber: Int? = nil,
+        programSessionNumber: Int? = nil,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil
+    ) {
+        self.workoutID = workoutID
+        self.startedAt = startedAt
+        self.programRunID = programRunID
+        self.programWeekNumber = programWeekNumber
+        self.programSessionNumber = programSessionNumber
+        self.sessionPlanKind = sessionPlanKind
+        self.sessionSourceLabels = sessionSourceLabels
+        self.sessionVersionStableID = sessionVersionStableID
+    }
 }
 
 struct WatchWorkoutProgressSnapshot: Codable, Equatable {

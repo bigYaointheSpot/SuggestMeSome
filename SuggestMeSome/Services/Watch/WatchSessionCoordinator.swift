@@ -100,20 +100,29 @@ enum WatchPayloadMapper {
     // MARK: Launch Payload
 
     /// Build a workout launch payload, preserving the existing Feature 8
-    /// wire shape while accepting richer source inputs.
+    /// wire shape while accepting richer source inputs. Prompt 5 adds
+    /// `sessionPlanKind`, `sessionSourceLabels`, and `sessionVersionStableID`
+    /// so the watch surface can render "Planned" vs "Adjusted" sessions
+    /// without re-deriving attribution.
     static func makeLaunchPayload(
         workoutID: UUID,
         startedAt: Date,
         programRunID: UUID? = nil,
         programWeekNumber: Int? = nil,
-        programSessionNumber: Int? = nil
+        programSessionNumber: Int? = nil,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil
     ) -> WatchWorkoutLaunchPayload {
         WatchWorkoutLaunchPayload(
             workoutID: workoutID,
             startedAt: startedAt,
             programRunID: programRunID,
             programWeekNumber: programWeekNumber,
-            programSessionNumber: programSessionNumber
+            programSessionNumber: programSessionNumber,
+            sessionPlanKind: sessionPlanKind,
+            sessionSourceLabels: normalizeSourceLabels(sessionSourceLabels),
+            sessionVersionStableID: sessionVersionStableID
         )
     }
 
@@ -128,6 +137,8 @@ enum WatchPayloadMapper {
         entries: [DraftExerciseEntry],
         cursor: Int? = nil,
         sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil,
         crownWeightStepOverride: Double? = nil,
         capturedAt: Date = Date()
     ) -> WatchCurrentSessionContext? {
@@ -180,13 +191,17 @@ enum WatchPayloadMapper {
             quickCompleteEnabled: entry.isCardio ? nil : nextSetIdx != nil,
             preferredInteractionModel: entry.isCardio ? nil : .digitalCrownFirst,
             sessionPlanKind: sessionPlanKind,
+            sessionSourceLabels: normalizeSourceLabels(sessionSourceLabels),
+            sessionVersionStableID: sessionVersionStableID,
             capturedAt: capturedAt
         )
     }
 
     // MARK: Live Workout Snapshot
 
-    /// Build a richer live workout snapshot from an in-progress draft.
+    /// Build a richer live workout snapshot from an in-progress draft. Prompt 5
+    /// attaches the live session-plan-kind and source labels so the watch
+    /// reflects planned/overlay/runtime attribution as progress streams.
     static func makeLiveWorkoutSnapshot(
         workoutID: UUID,
         elapsedSeconds: Int,
@@ -195,6 +210,9 @@ enum WatchPayloadMapper {
         programRunStableID: String? = nil,
         programWeekNumber: Int? = nil,
         programSessionNumber: Int? = nil,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil,
         capturedAt: Date = Date()
     ) -> WatchLiveWorkoutSnapshot {
         let totalExercises = entries.count
@@ -216,7 +234,54 @@ enum WatchPayloadMapper {
             programRunStableID: programRunStableID,
             programWeekNumber: programWeekNumber,
             programSessionNumber: programSessionNumber,
+            sessionPlanKind: sessionPlanKind,
+            sessionSourceLabels: normalizeSourceLabels(sessionSourceLabels),
+            sessionVersionStableID: sessionVersionStableID,
             capturedAt: capturedAt
+        )
+    }
+
+    // MARK: Session Completion Payload
+
+    /// Build the terminal "session completed" payload from a finished draft.
+    /// All counts are derived directly from the final draft list so the watch
+    /// handoff agrees with the iPhone's saved workout.
+    static func makeSessionCompletionPayload(
+        workoutID: UUID,
+        completedAt: Date,
+        totalElapsedSeconds: Int,
+        entries: [DraftExerciseEntry],
+        sessionLabel: String,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil,
+        newPersonalRecordCount: Int = 0
+    ) -> WatchSessionCompletionPayload {
+        let totalExercises = entries.count
+        let completedExercises = entries.filter { isExerciseComplete($0) }.count
+        let totalSets = entries.reduce(into: 0) { running, entry in
+            running += entry.isCardio ? 0 : entry.sets.count
+        }
+        let completedSets = entries.reduce(into: 0) { running, entry in
+            if entry.isCardio {
+                running += isExerciseComplete(entry) ? 1 : 0
+            } else {
+                running += entry.sets.filter { isSetLogged($0) }.count
+            }
+        }
+        return WatchSessionCompletionPayload(
+            workoutID: workoutID,
+            completedAt: completedAt,
+            totalElapsedSeconds: max(0, totalElapsedSeconds),
+            completedExercises: completedExercises,
+            totalExercises: totalExercises,
+            completedSets: completedSets,
+            totalSets: totalSets,
+            sessionLabel: sessionLabel,
+            sessionPlanKind: sessionPlanKind,
+            sessionSourceLabels: normalizeSourceLabels(sessionSourceLabels),
+            sessionVersionStableID: sessionVersionStableID,
+            newPersonalRecordCount: max(0, newPersonalRecordCount)
         )
     }
 
@@ -376,6 +441,16 @@ enum WatchPayloadMapper {
         return String(format: "%.1f", value)
     }
 
+    /// Trim + drop empty entries so source-attribution arrays stay compact
+    /// and watch rendering never shows a dangling " · ".
+    static func normalizeSourceLabels(_ labels: [String]?) -> [String]? {
+        guard let labels else { return nil }
+        let cleaned = labels
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
     private static func makeTargetSummary(
         reps: Int?,
         weight: Double?,
@@ -443,14 +518,20 @@ final class WatchSessionCoordinator {
         startedAt: Date,
         programRunID: UUID? = nil,
         programWeekNumber: Int? = nil,
-        programSessionNumber: Int? = nil
+        programSessionNumber: Int? = nil,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil
     ) async {
         let payload = WatchPayloadMapper.makeLaunchPayload(
             workoutID: workoutID,
             startedAt: startedAt,
             programRunID: programRunID,
             programWeekNumber: programWeekNumber,
-            programSessionNumber: programSessionNumber
+            programSessionNumber: programSessionNumber,
+            sessionPlanKind: sessionPlanKind,
+            sessionSourceLabels: sessionSourceLabels,
+            sessionVersionStableID: sessionVersionStableID
         )
         await bridge.sendWorkoutLaunch(payload)
     }
@@ -465,6 +546,9 @@ final class WatchSessionCoordinator {
         programRunStableID: String? = nil,
         programWeekNumber: Int? = nil,
         programSessionNumber: Int? = nil,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil,
         capturedAt: Date = Date()
     ) async {
         let compact = WatchPayloadMapper.makeProgressSnapshot(
@@ -483,6 +567,9 @@ final class WatchSessionCoordinator {
             programRunStableID: programRunStableID,
             programWeekNumber: programWeekNumber,
             programSessionNumber: programSessionNumber,
+            sessionPlanKind: sessionPlanKind,
+            sessionSourceLabels: sessionSourceLabels,
+            sessionVersionStableID: sessionVersionStableID,
             capturedAt: capturedAt
         )
         await bridge.sendLiveWorkoutSnapshot(live)
@@ -494,14 +581,50 @@ final class WatchSessionCoordinator {
         workoutID: UUID,
         entries: [DraftExerciseEntry],
         cursor: Int? = nil,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil,
         capturedAt: Date = Date()
     ) async {
         guard let context = WatchPayloadMapper.makeCurrentSessionContext(
             workoutID: workoutID,
             entries: entries,
             cursor: cursor,
+            sessionPlanKind: sessionPlanKind,
+            sessionSourceLabels: sessionSourceLabels,
+            sessionVersionStableID: sessionVersionStableID,
             capturedAt: capturedAt
         ) else { return }
         await bridge.sendCurrentSessionContext(context)
+    }
+
+    // MARK: Session Completion Handoff
+
+    /// Terminal broadcast sent after a workout is saved. Lets watch execution
+    /// close its live screen and celebrate PRs while staying fully decoupled
+    /// from any SwiftData lifecycle.
+    func broadcastSessionCompletion(
+        workoutID: UUID,
+        completedAt: Date,
+        totalElapsedSeconds: Int,
+        entries: [DraftExerciseEntry],
+        sessionLabel: String,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil,
+        newPersonalRecordCount: Int = 0
+    ) async {
+        let payload = WatchPayloadMapper.makeSessionCompletionPayload(
+            workoutID: workoutID,
+            completedAt: completedAt,
+            totalElapsedSeconds: totalElapsedSeconds,
+            entries: entries,
+            sessionLabel: sessionLabel,
+            sessionPlanKind: sessionPlanKind,
+            sessionSourceLabels: sessionSourceLabels,
+            sessionVersionStableID: sessionVersionStableID,
+            newPersonalRecordCount: newPersonalRecordCount
+        )
+        await bridge.sendSessionCompletion(payload)
     }
 }
