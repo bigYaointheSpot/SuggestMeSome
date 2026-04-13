@@ -70,7 +70,7 @@ struct Feature10Prompt6TodayPlanEngineTests {
             name: "Test Program", lengthInWeeks: 8, sessionsPerWeek: 3, createdDate: Date(), source: .aiGenerated
         )
         context.insert(program)
-        let run = ProgramRun(startDate: daysAgo(7))
+        let run = ProgramRun(startDate: Date())
         run.program = program
         context.insert(run)
 
@@ -239,9 +239,11 @@ struct Feature10Prompt6TodayPlanEngineTests {
             name: "Squat Focus 8wk", lengthInWeeks: 8, sessionsPerWeek: 3, createdDate: Date(), source: .aiGenerated
         )
         context.insert(program)
-        let run = ProgramRun(startDate: daysAgo(7))
+        let run = ProgramRun(startDate: Date())
         run.program = program
         context.insert(run)
+        let checkIn = makeCheckIn()
+        context.insert(checkIn)
 
         let attribution = TodayPlanEngine.buildAttribution(
             checkIn: nil,
@@ -286,6 +288,56 @@ struct Feature10Prompt6TodayPlanEngineTests {
 
         #expect(attribution.healthKitInfluence.lowercased().contains("caution"), "Attribution must note HealthKit caution")
         #expect(attribution.activeSourceLabels.contains("Health Data"), "Source labels must include Health Data when insight is available")
+    }
+
+    @Test func attributionFlagsMarkProgramOverlayProposalAndHealthInfluence() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let program = TrainingProgram(
+            name: "Flag Test Program", lengthInWeeks: 8, sessionsPerWeek: 3, createdDate: Date(), source: .aiGenerated
+        )
+        context.insert(program)
+        let checkIn = makeCheckIn(sleepQuality: 1, soreness: 5, energy: 1, stress: 5)
+        context.insert(checkIn)
+        let run = ProgramRun(startDate: Date())
+        run.program = program
+        context.insert(run)
+
+        let proposal = makeProposal(
+            run: run,
+            type: .decreaseVolume,
+            targetWeekStart: 2,
+            targetSessionNumber: 2
+        )
+        context.insert(proposal)
+
+        let overlay = makeOverlay(run: run, weekStart: 1, sessionNumber: 1)
+        context.insert(overlay)
+
+        let insight = ObjectiveRecoveryInsight(
+            status: .caution,
+            compactSummary: "HRV below baseline",
+            detailSummary: "HRV 15% below 30-day average",
+            evaluatedMetricsCount: 2
+        )
+
+        let plan = TodayPlanEngine.buildPlan(
+            checkIn: checkIn,
+            activeRun: run,
+            latestAnalysis: nil,
+            pendingProposalCount: 1,
+            pendingProposals: [proposal],
+            activeOverlays: [overlay],
+            recentWorkouts: [],
+            objectiveRecoveryInsight: insight
+        )
+
+        #expect(plan.attribution.influenceFlags.usedActiveProgramContext)
+        #expect(plan.attribution.influenceFlags.usedApprovedOverlayContext)
+        #expect(plan.attribution.influenceFlags.usedPendingProposalContext)
+        #expect(plan.attribution.influenceFlags.usedRuntimeCoachAdjustment)
+        #expect(plan.attribution.influenceFlags.usedHealthKitRecoveryNudge)
     }
 
     // MARK: - Adherence Rescue
@@ -441,7 +493,7 @@ struct Feature10Prompt6TodayPlanEngineTests {
         )
         context.insert(program)
         // 7 days → expected 3 sessions; logged 5 (ahead of pace)
-        let run = ProgramRun(startDate: daysAgo(7))
+        let run = ProgramRun(startDate: Date())
         run.program = program
         context.insert(run)
 
@@ -609,6 +661,171 @@ struct Feature10Prompt6TodayPlanEngineTests {
         #expect(plan.whatChangedToday.contains("2"), "whatChangedToday must mention the proposal count")
     }
 
+    @Test func whatChangedTodayClassifiesRuntimeOnlyAdjustment() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let checkIn = makeCheckIn(sleepQuality: 1, soreness: 5, energy: 1, stress: 5)
+        context.insert(checkIn)
+
+        let plan = TodayPlanEngine.buildPlan(
+            checkIn: checkIn,
+            activeRun: nil,
+            latestAnalysis: nil,
+            pendingProposalCount: 0,
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
+        )
+        #expect(plan.changeSummary.changeType == .runtimeOnlyAdjustment)
+    }
+
+    @Test func whatChangedTodayClassifiesApprovedOverlayInfluence() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let program = TrainingProgram(
+            name: "Overlay Test", lengthInWeeks: 8, sessionsPerWeek: 3, createdDate: Date(), source: .aiGenerated
+        )
+        context.insert(program)
+        let run = ProgramRun(startDate: Date())
+        run.program = program
+        context.insert(run)
+
+        let overlay = makeOverlay(run: run, weekStart: 1, sessionNumber: 1)
+        context.insert(overlay)
+
+        let plan = TodayPlanEngine.buildPlan(
+            checkIn: nil,
+            activeRun: run,
+            latestAnalysis: nil,
+            pendingProposalCount: 0,
+            pendingProposals: [],
+            activeOverlays: [overlay],
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
+        )
+        #expect(plan.changeSummary.changeType == .approvedOverlayInfluence)
+    }
+
+    @Test func whatChangedTodayClassifiesPendingProposalRelevance() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let program = TrainingProgram(
+            name: "Proposal Test", lengthInWeeks: 8, sessionsPerWeek: 3, createdDate: Date(), source: .aiGenerated
+        )
+        context.insert(program)
+        let run = ProgramRun(startDate: Date())
+        run.program = program
+        context.insert(run)
+        let checkIn = makeCheckIn()
+        context.insert(checkIn)
+
+        let proposal = makeProposal(
+            run: run,
+            type: .decreaseVolume,
+            targetWeekStart: 4,
+            targetSessionNumber: 1
+        )
+        context.insert(proposal)
+
+        let plan = TodayPlanEngine.buildPlan(
+            checkIn: checkIn,
+            activeRun: run,
+            latestAnalysis: nil,
+            pendingProposalCount: 1,
+            pendingProposals: [proposal],
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
+        )
+        #expect(plan.changeSummary.changeType == .pendingProposalRelevance)
+    }
+
+    @Test func proposalAwarenessClassifiesTodayUpcomingAndLongHorizon() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let program = TrainingProgram(
+            name: "Awareness Program", lengthInWeeks: 8, sessionsPerWeek: 3, createdDate: Date(), source: .aiGenerated
+        )
+        context.insert(program)
+        let run = ProgramRun(startDate: daysAgo(7))
+        run.program = program
+        context.insert(run)
+
+        let todayProposal = makeProposal(
+            run: run,
+            type: .decreaseLoad,
+            targetWeekStart: 1,
+            targetSessionNumber: 1,
+            summary: "Today-targeted proposal"
+        )
+        let upcomingProposal = makeProposal(
+            run: run,
+            type: .increaseVolume,
+            targetWeekStart: 2,
+            targetSessionNumber: 2,
+            summary: "Upcoming-session proposal"
+        )
+        let longProposal = makeProposal(
+            run: run,
+            type: .deload,
+            targetWeekStart: 6,
+            targetSessionNumber: nil,
+            summary: "Long-horizon proposal"
+        )
+        context.insert(todayProposal)
+        context.insert(upcomingProposal)
+        context.insert(longProposal)
+
+        let plan = TodayPlanEngine.buildPlan(
+            checkIn: nil,
+            activeRun: run,
+            latestAnalysis: nil,
+            pendingProposalCount: 3,
+            pendingProposals: [todayProposal, upcomingProposal, longProposal],
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
+        )
+
+        let bySummary = Dictionary(uniqueKeysWithValues: plan.proposalAwareness.map { ($0.summaryText, $0.impact) })
+        #expect(bySummary["Today-targeted proposal"] == .affectsToday)
+        #expect(bySummary["Upcoming-session proposal"] == .affectsUpcomingSession)
+        #expect(bySummary["Long-horizon proposal"] == .affectsLongHorizonProgramming)
+    }
+
+    @Test func whyTodayUsesProgramPathWhenProgramActiveAndStandalonePathOtherwise() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let program = TrainingProgram(
+            name: "Path Test", lengthInWeeks: 8, sessionsPerWeek: 3, createdDate: Date(), source: .aiGenerated
+        )
+        context.insert(program)
+        let run = ProgramRun(startDate: daysAgo(7))
+        run.program = program
+        context.insert(run)
+
+        let programPlan = TodayPlanEngine.buildPlan(
+            checkIn: nil,
+            activeRun: run,
+            latestAnalysis: nil,
+            pendingProposalCount: 0,
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
+        )
+        #expect(programPlan.whyToday.lowercased().contains("active program"), "Program path should mention active program context")
+
+        let standalonePlan = TodayPlanEngine.buildPlan(
+            checkIn: nil,
+            activeRun: nil,
+            latestAnalysis: nil,
+            pendingProposalCount: 0,
+            recentWorkouts: [],
+            objectiveRecoveryInsight: nil
+        )
+        #expect(standalonePlan.whyToday.lowercased().contains("no active program"), "Standalone path should mention no active program")
+    }
+
     // MARK: - TodayPlanEngine Integration
 
     @Test func buildPlanReturnsValidPlanForSparsestCase() {
@@ -752,6 +969,60 @@ struct Feature10Prompt6TodayPlanEngineTests {
             availableTimeMinutes: availableTimeMinutes,
             hasPainOrDiscomfort: hasPainOrDiscomfort
         )
+    }
+
+    private func makeProposal(
+        run: ProgramRun?,
+        type: ProposalType,
+        targetWeekStart: Int,
+        targetSessionNumber: Int?,
+        summary: String = "Pending adaptation proposal"
+    ) -> AdaptationProposal {
+        AdaptationProposal(
+            programRun: run,
+            trainingProgram: run?.program,
+            proposalType: type,
+            proposalStatus: .pendingUserConfirmation,
+            requiresUserConfirmation: true,
+            autoApplyEligible: false,
+            confidenceScore: 0.7,
+            priority: 75,
+            targetWeekStart: targetWeekStart,
+            targetWeekEnd: targetWeekStart,
+            targetSessionNumber: targetSessionNumber,
+            adjustmentReason: .programSignalPriority,
+            summaryText: summary
+        )
+    }
+
+    private func makeOverlay(
+        run: ProgramRun,
+        weekStart: Int,
+        sessionNumber: Int?
+    ) -> AppliedProgramOverlay {
+        let overlay = AppliedProgramOverlay(
+            programRun: run,
+            trainingProgram: run.program,
+            effectiveWeekStart: weekStart,
+            effectiveWeekEnd: weekStart,
+            overlayStatus: .active,
+            appliedByUserConfirmation: true,
+            adjustmentReason: .programSignalPriority,
+            summaryText: "Approved overlay"
+        )
+        if let sessionNumber {
+            let adjustment = AppliedOverlayAdjustment(
+                overlay: overlay,
+                sequence: 0,
+                targetWeekNumber: weekStart,
+                targetSessionNumber: sessionNumber,
+                adjustmentType: .load,
+                loadPercentDelta: -0.05,
+                adjustmentReason: .programSignalPriority
+            )
+            overlay.adjustments = [adjustment]
+        }
+        return overlay
     }
 
     private func makeInMemoryContainer() throws -> ModelContainer {

@@ -42,6 +42,63 @@ struct TodayPlanSourceAttribution {
 
     /// Ordered list of source labels for compact display in the UI.
     let activeSourceLabels: [String]
+    /// Machine-readable influence flags for deterministic UI + tests.
+    let influenceFlags: TodayPlanInfluenceFlags
+}
+
+// MARK: - TodayPlanInfluenceFlags
+
+/// Boolean source flags used to make attribution and change messaging explicit.
+struct TodayPlanInfluenceFlags {
+    let usedActiveProgramContext: Bool
+    let usedApprovedOverlayContext: Bool
+    let usedPendingProposalContext: Bool
+    let usedRuntimeCoachAdjustment: Bool
+    let usedRecentHistoryContext: Bool
+    let usedHealthKitRecoveryNudge: Bool
+}
+
+// MARK: - TodayPlanChangeType
+
+/// High-level category for "What Changed Today".
+enum TodayPlanChangeType: String {
+    case noChanges = "No Changes"
+    case runtimeOnlyAdjustment = "Runtime Adjustment"
+    case approvedOverlayInfluence = "Approved Overlay Influence"
+    case pendingProposalRelevance = "Pending Proposal Relevance"
+    case combinedInfluence = "Combined Influence"
+}
+
+// MARK: - TodayPlanChangeSummary
+
+/// Structured "What Changed Today" output designed for compact UI sections.
+struct TodayPlanChangeSummary {
+    let changeType: TodayPlanChangeType
+    let headline: String
+    let details: [String]
+
+    var compactText: String {
+        details.joined(separator: " ")
+    }
+}
+
+// MARK: - TodayPlanProposalImpact
+
+/// Horizon classification for pending adaptation proposals.
+enum TodayPlanProposalImpact: String {
+    case affectsToday = "Affects Today"
+    case affectsUpcomingSession = "Affects Upcoming Session"
+    case affectsLongHorizonProgramming = "Longer-Horizon Programming"
+}
+
+// MARK: - TodayPlanProposalAwarenessItem
+
+/// View-friendly pending proposal summary with impact horizon classification.
+struct TodayPlanProposalAwarenessItem {
+    let proposalID: UUID
+    let summaryText: String
+    let impact: TodayPlanProposalImpact
+    let targetDescription: String
 }
 
 // MARK: - AdherenceStatus
@@ -110,4 +167,8 @@ struct TodayPlan {
     /// "What changed today?" — notes significant departures from neutral/baseline.
     /// Empty string when today is a normal session with no noteworthy signals.
     let whatChangedToday: String
+    /// Structured "What changed today?" output used by richer UI blocks.
+    let changeSummary: TodayPlanChangeSummary
+    /// Pending proposal awareness with explicit impact horizon classification.
+    let proposalAwareness: [TodayPlanProposalAwarenessItem]
 }

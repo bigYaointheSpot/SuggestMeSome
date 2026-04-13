@@ -588,7 +588,20 @@ struct Feature10Prompt7WatchFoundationTests {
             programPrescriptionInfluence: "",
             adaptiveOverlayInfluence: "",
             recentHistoryInfluence: "",
-            activeSourceLabels: activeSourceLabels
+            activeSourceLabels: activeSourceLabels,
+            influenceFlags: TodayPlanInfluenceFlags(
+                usedActiveProgramContext: nextProgramSession != nil,
+                usedApprovedOverlayContext: false,
+                usedPendingProposalContext: pendingProposalCount > 0,
+                usedRuntimeCoachAdjustment: false,
+                usedRecentHistoryContext: true,
+                usedHealthKitRecoveryNudge: false
+            )
+        )
+        let changeSummary = TodayPlanChangeSummary(
+            changeType: whatChanged.isEmpty ? .noChanges : .runtimeOnlyAdjustment,
+            headline: whatChanged.isEmpty ? "No notable changes from baseline." : "Runtime Daily Coach adjustments are active.",
+            details: whatChanged.isEmpty ? [] : [whatChanged]
         )
         return TodayPlan(
             recommendation: recommendation,
@@ -597,7 +610,9 @@ struct Feature10Prompt7WatchFoundationTests {
             attribution: attribution,
             adherenceRescue: adherenceRescue,
             whyToday: "Why",
-            whatChangedToday: whatChanged
+            whatChangedToday: whatChanged,
+            changeSummary: changeSummary,
+            proposalAwareness: []
         )
     }
 }

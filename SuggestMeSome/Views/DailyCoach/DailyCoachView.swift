@@ -31,6 +31,9 @@ struct DailyCoachView: View {
     @Query(sort: \AdaptationProposal.priority, order: .reverse)
     private var allProposals: [AdaptationProposal]
 
+    @Query(sort: \AppliedProgramOverlay.appliedAt, order: .reverse)
+    private var allOverlays: [AppliedProgramOverlay]
+
     @Query(sort: \DailyCoachCheckIn.date, order: .reverse)
     private var checkIns: [DailyCoachCheckIn]
 
@@ -60,6 +63,11 @@ struct DailyCoachView: View {
 
     private var latestReview: DailyCoachWeeklyReview? { weeklyReviews.first }
 
+    private var activeOverlaysForRun: [AppliedProgramOverlay] {
+        guard let run = focusRun else { return [] }
+        return allOverlays.filter { $0.programRun?.id == run.id && $0.overlayStatus == .active }
+    }
+
     private var completedWorkoutCountForRun: Int {
         guard let run = focusRun else { return 0 }
         return TrainingContextQueryService.completedWorkoutCount(for: run, in: Array(recentWorkouts))
@@ -71,6 +79,8 @@ struct DailyCoachView: View {
             activeRun: focusRun,
             latestAnalysis: latestAnalysis,
             pendingProposalCount: pendingProposals.count,
+            pendingProposals: pendingProposals,
+            activeOverlays: activeOverlaysForRun,
             recentWorkouts: TrainingContextQueryService.recentWorkouts(from: recentWorkouts, limit: 20),
             objectiveRecoveryInsight: objectiveRecoveryInsight,
             completedWorkoutCountForRun: completedWorkoutCountForRun
@@ -113,8 +123,8 @@ struct DailyCoachView: View {
                     if let rescue = todayPlan.adherenceRescue {
                         adherenceRescueCard(rescue: rescue)
                     }
-                    if !pendingProposals.isEmpty {
-                        pendingProposalsRow
+                    if !todayPlan.proposalAwareness.isEmpty {
+                        proposalAwarenessCard(plan: todayPlan)
                     }
                     latestSessionSummaryCard
                     latestWeeklyReviewCard
@@ -318,22 +328,7 @@ struct DailyCoachView: View {
                 .font(.subheadline.weight(.medium))
                 .fixedSize(horizontal: false, vertical: true)
 
-            // "What changed today" banner — only shown when noteworthy
-            if !plan.whatChangedToday.isEmpty {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "bell.badge")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                    Text(plan.whatChangedToday)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(Color.orange.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
+            whatChangedTodaySection(plan.changeSummary)
 
             // Primary suggestion chip
             HStack(spacing: 6) {
@@ -384,10 +379,7 @@ struct DailyCoachView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(rec.sourceAttributionDetails)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
+                attributionSection(plan.attribution)
 
                 // Confidence rationale
                 Text("Confidence (\(plan.confidence.rawValue)): \(plan.confidenceRationale)")
@@ -499,6 +491,69 @@ struct DailyCoachView: View {
         }
     }
 
+    private func whatChangedTodaySection(_ summary: TodayPlanChangeSummary) -> some View {
+        let hasDetails = !summary.details.isEmpty
+        let accent: Color = hasDetails ? .orange : .secondary
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: hasDetails ? "arrow.triangle.2.circlepath.circle.fill" : "checkmark.circle")
+                    .font(.caption2)
+                    .foregroundStyle(accent)
+                Text("What Changed Today")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(summary.changeType.rawValue)
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(accent.opacity(0.12))
+                    .foregroundStyle(accent)
+                    .clipShape(Capsule())
+            }
+            Text(summary.headline)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if hasDetails {
+                ForEach(summary.details, id: \.self) { detail in
+                    Text("- \(detail)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background((hasDetails ? Color.orange : Color(.tertiarySystemBackground)).opacity(hasDetails ? 0.08 : 1))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func attributionSection(_ attribution: TodayPlanSourceAttribution) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Attribution")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            attributionRow("Manual Readiness", attribution.manualReadinessInfluence)
+            attributionRow("Program / Session", attribution.programPrescriptionInfluence)
+            attributionRow("Overlays / Proposals", attribution.adaptiveOverlayInfluence)
+            attributionRow("Recent History", attribution.recentHistoryInfluence)
+            attributionRow("HealthKit", attribution.healthKitInfluence)
+        }
+    }
+
+    private func attributionRow(_ label: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private func sourcePill(_ label: String) -> some View {
         Text(label)
             .font(.caption2.weight(.medium))
@@ -600,23 +655,64 @@ struct DailyCoachView: View {
         }
     }
 
-    // MARK: - Pending Proposals Row
+    // MARK: - Proposal Awareness
 
-    private var pendingProposalsRow: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "bell.badge")
-                .foregroundStyle(.orange)
-            Text("\(pendingProposals.count) pending proposal\(pendingProposals.count == 1 ? "" : "s")")
-                .font(.subheadline)
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    private func proposalAwarenessCard(plan: TodayPlan) -> some View {
+        let todayCount = plan.proposalAwareness.filter { $0.impact == .affectsToday }.count
+        let upcomingCount = plan.proposalAwareness.filter { $0.impact == .affectsUpcomingSession }.count
+        let longCount = plan.proposalAwareness.filter { $0.impact == .affectsLongHorizonProgramming }.count
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Proposal Awareness", systemImage: "bell.badge")
+                    .font(.headline)
+                Spacer()
+                Text("\(plan.proposalAwareness.count) pending")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+            }
+            Divider()
+            HStack(spacing: 6) {
+                proposalImpactBadge("Today: \(todayCount)", color: todayCount > 0 ? .orange : .secondary)
+                proposalImpactBadge("Upcoming: \(upcomingCount)", color: upcomingCount > 0 ? .indigo : .secondary)
+                proposalImpactBadge("Long Horizon: \(longCount)", color: longCount > 0 ? .secondary : .gray)
+                Spacer()
+            }
+            ForEach(Array(plan.proposalAwareness.prefix(3)), id: \.proposalID) { item in
+                HStack(alignment: .top, spacing: 8) {
+                    Text(item.impact.rawValue)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(item.impact == .affectsToday ? 0.16 : 0.08))
+                        .foregroundStyle(item.impact == .affectsToday ? .orange : .secondary)
+                        .clipShape(Capsule())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.summaryText)
+                            .font(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(item.targetDescription)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color.orange.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.4), lineWidth: 1))
+    }
+
+    private func proposalImpactBadge(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12))
+            .foregroundStyle(color)
+            .clipShape(Capsule())
     }
 
     // MARK: - Latest Session Summary Card

@@ -2058,6 +2058,59 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+### Feature 11 — Today Plan Polish and Execution Flow
+
+**Status:** Complete
+
+#### Prompt 1 [Today Plan Explanation and Proposal Awareness Polish] — 2026-04-12
+
+- Polished the Daily Coach Today Plan surface to make daily intent, change attribution, and proposal impact clearer without changing core recommendation behavior.
+- Added a dedicated explanation assembly layer in `Services/Adaptive/TodayPlanExplanationAssembler.swift` to separate source attribution and explainability text generation from `DailyCoachRecommendationService` logic:
+  - explicit source attribution builder with machine-readable influence flags
+  - structured "Why Today" composition for active-program and standalone paths
+  - structured "What Changed Today" classification (`noChanges`, `runtimeOnlyAdjustment`, `approvedOverlayInfluence`, `pendingProposalRelevance`, `combinedInfluence`)
+  - pending proposal impact-horizon classification (`affectsToday`, `affectsUpcomingSession`, `affectsLongHorizonProgramming`)
+  - overlay influence context resolution (active overlays vs overlays applying to today's target session)
+- Extended `TodayPlan` value types in `Services/Adaptive/TodayPlanTypes.swift`:
+  - `TodayPlanInfluenceFlags`
+  - `TodayPlanChangeType`
+  - `TodayPlanChangeSummary`
+  - `TodayPlanProposalImpact`
+  - `TodayPlanProposalAwarenessItem`
+  - Added `changeSummary` + `proposalAwareness` to `TodayPlan`
+- Updated `TodayPlanEngine` orchestration in `Services/Adaptive/TodayPlanEngine.swift`:
+  - accepts optional `pendingProposals` and `activeOverlays` inputs for richer explanation fidelity
+  - uses `TodayPlanExplanationAssembler` for attribution, why-today, change-summary, and proposal-awareness assembly
+  - preserves existing recommendation and confidence logic
+  - keeps backward-compatible helper overloads where existing tests call legacy signatures
+- Updated `DailyCoachView` Today Plan presentation in `Views/DailyCoach/DailyCoachView.swift`:
+  - added structured "What Changed Today" block with explicit change type and concise detail lines
+  - replaced plain attribution paragraph with a compact source-attribution section by source domain
+  - replaced the old pending-proposals banner with a stronger `Proposal Awareness` card showing:
+    - count by impact horizon (today / upcoming / long-horizon)
+    - top pending proposal summaries with target window labels
+  - wired active overlays into `TodayPlanEngine` so approved overlay influence is surfaced accurately
+- Updated watch test plan factory in `SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests.swift` for new `TodayPlan` fields.
+- Expanded focused Today Plan validation in `SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests.swift`:
+  - source attribution flags correctness for program/overlay/proposal/runtime/HealthKit
+  - change-summary type generation for runtime-only, approved-overlay, and pending-proposal-only scenarios
+  - proposal-awareness impact classification (today/upcoming/long-horizon)
+  - explicit standalone vs active-program why-today path checks
+- Behavioral guardrails preserved:
+  - no backend/cloud changes
+  - no destructive program mutations
+  - HealthKit remains medium influence and never overrides manual readiness priority rules
+  - recommendation generation logic remains unchanged; only explanation/source assembly and presentation are refined
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests` (pass)
+  - broader regression slice:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature7ValidationTests -only-testing:SuggestMeSomeTests/Feature10Prompt5CoachAwareFusionTests -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests -only-testing:SuggestMeSomeTests/Feature10Prompt8IntegrationHardeningTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
+---
+
 ### UI Polish — Indigo Brand, Premium Moments, Micro-animations
 
 - **Priority 1 — Single dominant accent:** All primary CTA buttons, tab bar, active filters, and interactive controls now use a single indigo brand color. Blue and purple are retired from brand usage; semantic colors (green/red/orange/yellow) are unchanged. Applied via `.tint(.indigo)` on ContentView plus targeted replacements across Dashboard, Workouts tab, DailyCoach, and all filter chips.
