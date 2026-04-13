@@ -2283,6 +2283,36 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 6 [Dashboard Rename and Navigation Clarity Pass] — 2026-04-13
+
+- Renamed the Home tab to Dashboard so the primary tab bar reflects the post–Feature 11 reality where Daily Coach / Today Plan is the central daily action surface.
+- Introduced a `MainTab` enum in `SuggestMeSome/ContentView.swift` as the single source of truth for the root tab bar:
+  - `dailyCoach` (tag 0), `dashboard` (tag 1), `workouts` (tag 2), `programs` (tag 3), `settings` (tag 4)
+  - each case owns its user-facing `label` and SF Symbol `systemImage`
+  - `ContentView`'s `TabView` now binds every `tabItem` / `tag` to `MainTab`, eliminating magic numbers and string literals at the root navigation level
+- Updated `DashboardView` (`SuggestMeSome/Views/Dashboard/DashboardView.swift`):
+  - `navigationTitle("Home")` → `navigationTitle("Dashboard")`
+  - tab icon updated to `square.grid.2x2.fill` so it reads as an analytics/overview surface and stops competing visually with the brain-icon Daily Coach tab
+- Fixed a latent navigation bug surfaced by the clarity pass:
+  - Dashboard's "Program" quick-start and "Browse Programs" fallback button both used a hard-coded `selectedTab = 2`, which originally pointed at Training Programs but silently shifted to the Workouts tab after `Daily Coach` was added as the new first tab.
+  - both call sites now route through `MainTab.programs.rawValue`, restoring the intended destination.
+- Added focused regression coverage in `SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests.swift`:
+  - `MainTab.dashboard.label` is `"Dashboard"` and never `"Home"`
+  - full label/icon/index snapshot for all five main tabs
+  - Daily Coach remains tag 0 (asserting Today Plan centrality)
+  - `MainTab.programs.rawValue == 3` and `MainTab.workouts.rawValue == 2` to pin the tab-index drift fix
+  - uniqueness guarantees on labels, icons, and indexes
+- Tab IA guardrails preserved:
+  - no destructive navigation rewrites, no tab additions/removals, no reordering of existing tabs
+  - Dashboard's analytics sections (quick start, coaching tiles, stats, PR feed, charts, program section) are unchanged — they remain utility-first summaries and do not duplicate Today Plan's recommendation surface
+  - Daily Coach (Today Plan) continues to be the authoritative today-action surface
+- Compile validation: Xcode build is handled in Xcode (per repo workflow); no `xcodebuild` invocation was run from the shell for this prompt.
+- Verification runs for this prompt:
+  - targeted:
+    - `Feature11Prompt6DashboardRenameTests` (run in Xcode)
+  - broader regression slice:
+    - `Feature11Prompt2TodayPlanExecutionFlowTests`, `Feature11Prompt3StandaloneContinuityTests`, `Feature11Prompt5WatchContinuityTests`, `Feature10Prompt6TodayPlanEngineTests`, `Feature7ValidationTests` (run in Xcode)
+
 ---
 
 

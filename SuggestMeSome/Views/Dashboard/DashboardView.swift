@@ -121,7 +121,7 @@ struct DashboardView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 24)
             }
-            .navigationTitle("Home")
+            .navigationTitle("Dashboard")
             .navigationBarTitleDisplayMode(.large)
             .navigationDestination(isPresented: $viewModel.navigateToEmptyWorkout) {
                 WorkoutView()
@@ -202,7 +202,7 @@ struct DashboardView: View {
                     badge: viewModel.pendingProposals.isEmpty ? nil : "\(viewModel.pendingProposals.count)"
                 ) {
                     if viewModel.activeProgramRuns.isEmpty {
-                        selectedTab = 2
+                        selectedTab = MainTab.programs.rawValue
                     } else {
                         viewModel.showingCompleteProgramSheet = true
                     }
@@ -705,7 +705,7 @@ struct DashboardView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Browse Programs") {
-                        selectedTab = 2
+                        selectedTab = MainTab.programs.rawValue
                     }
                     .font(.subheadline)
                     .buttonStyle(.bordered)

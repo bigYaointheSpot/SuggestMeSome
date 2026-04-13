@@ -8,10 +8,43 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - Main Tab Identity
+
+/// Single source of truth for the root tab bar. Keeping identity, labels, and
+/// icons here lets tests validate tab copy without instantiating SwiftUI views
+/// and keeps `ContentView` free of magic numbers.
+enum MainTab: Int, CaseIterable {
+    case dailyCoach = 0
+    case dashboard  = 1
+    case workouts   = 2
+    case programs   = 3
+    case settings   = 4
+
+    var label: String {
+        switch self {
+        case .dailyCoach: return "Daily Coach"
+        case .dashboard:  return "Dashboard"
+        case .workouts:   return "Workouts"
+        case .programs:   return "Training Programs"
+        case .settings:   return "Settings"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .dailyCoach: return "brain.head.profile"
+        case .dashboard:  return "square.grid.2x2.fill"
+        case .workouts:   return "dumbbell"
+        case .programs:   return "list.clipboard"
+        case .settings:   return "gear"
+        }
+    }
+}
+
 // MARK: - ContentView
 
 struct ContentView: View {
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int = MainTab.dailyCoach.rawValue
     @AppStorage("appColorScheme") private var appColorScheme: String = "system"
 
     private var preferredColorScheme: ColorScheme? {
@@ -22,29 +55,29 @@ struct ContentView: View {
         TabView(selection: $selectedTab) {
             DailyCoachView()
                 .tabItem {
-                    Label("Daily Coach", systemImage: "brain.head.profile")
+                    Label(MainTab.dailyCoach.label, systemImage: MainTab.dailyCoach.systemImage)
                 }
-                .tag(0)
+                .tag(MainTab.dailyCoach.rawValue)
             DashboardView(selectedTab: $selectedTab)
                 .tabItem {
-                    Label("Home", systemImage: "house.fill")
+                    Label(MainTab.dashboard.label, systemImage: MainTab.dashboard.systemImage)
                 }
-                .tag(1)
+                .tag(MainTab.dashboard.rawValue)
             WorkoutsTab()
                 .tabItem {
-                    Label("Workouts", systemImage: "dumbbell")
+                    Label(MainTab.workouts.label, systemImage: MainTab.workouts.systemImage)
                 }
-                .tag(2)
+                .tag(MainTab.workouts.rawValue)
             TrainingProgramsTab()
                 .tabItem {
-                    Label("Training Programs", systemImage: "list.clipboard")
+                    Label(MainTab.programs.label, systemImage: MainTab.programs.systemImage)
                 }
-                .tag(3)
+                .tag(MainTab.programs.rawValue)
             SettingsTab()
                 .tabItem {
-                    Label("Settings", systemImage: "gear")
+                    Label(MainTab.settings.label, systemImage: MainTab.settings.systemImage)
                 }
-                .tag(4)
+                .tag(MainTab.settings.rawValue)
         }
         .tint(.indigo)
         .preferredColorScheme(preferredColorScheme)
