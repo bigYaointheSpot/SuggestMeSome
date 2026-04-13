@@ -50,17 +50,17 @@ struct TrainingProgramsTab: View {
             NavigationLink {
                 CreateProgramView()
             } label: {
-                programButtonLabel("Create Your Own Program", color: .blue)
+                programButtonLabel("Create Program", systemImage: "plus.rectangle")
             }
 
             NavigationLink {
                 SelectProgramView()
             } label: {
-                programButtonLabel("Use Existing Program", color: .purple)
+                programButtonLabel("Use Template", systemImage: "list.bullet.rectangle")
             }
 
             Button(action: { showingAIGenerator = true }) {
-                programButtonLabel("Generate AI Program", color: .teal)
+                programButtonLabel("AI Generate", systemImage: "wand.and.stars")
             }
         }
         .padding(.horizontal)
@@ -68,17 +68,23 @@ struct TrainingProgramsTab: View {
         .padding(.bottom, 8)
     }
 
-    private func programButtonLabel(_ title: String, color: Color) -> some View {
-        Text(title)
-            .font(.subheadline.weight(.semibold))
-            .multilineTextAlignment(.center)
-            .lineLimit(2)
-            .minimumScaleFactor(0.8)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(color)
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+    private func programButtonLabel(_ title: String, systemImage: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.title3.weight(.semibold))
+                .frame(height: 24)
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .frame(maxHeight: .infinity)
+        .background(Color.indigo.gradient)
+        .foregroundStyle(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder

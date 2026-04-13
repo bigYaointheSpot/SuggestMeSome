@@ -223,11 +223,13 @@ struct DashboardView: View {
                 VStack(spacing: 7) {
                     Image(systemName: icon)
                         .font(.title2.weight(.semibold))
+                        .frame(height: 26)
                     Text(label)
                         .font(.caption.weight(.semibold))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
+                .frame(maxHeight: .infinity)
                 .background(color.gradient)
                 .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
