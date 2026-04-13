@@ -39,6 +39,20 @@ enum WatchPayloadKind: String, Codable {
     case liveWorkoutSnapshot
 }
 
+// MARK: - Execution Interaction Types
+
+/// Preferred logging interaction model for the current watch execution screen.
+enum WatchExecutionInteractionModel: String, Codable, Equatable {
+    case digitalCrownFirst
+}
+
+/// Origin classification for today's session so watch rendering can stay
+/// compatible with planned sessions and coach-adjusted runtime drafts.
+enum WatchSessionPlanKind: String, Codable, Equatable {
+    case planned
+    case coachAdjusted
+}
+
 // MARK: - Envelope
 
 /// Versioned wrapper used when bridging any watch payload over WatchConnectivity.
@@ -106,6 +120,14 @@ struct WatchCurrentSessionContext: Codable, Equatable {
     var nextPrescribedWeightUnit: String?
     var isCardio: Bool
     var cardioTargetSeconds: Int?
+    var currentSetNumber: Int? = nil
+    var currentSetTargetSummary: String? = nil
+    var currentSetCompletedWeight: Double? = nil
+    var currentSetCompletedReps: Int? = nil
+    var crownWeightStep: Double? = nil
+    var quickCompleteEnabled: Bool? = nil
+    var preferredInteractionModel: WatchExecutionInteractionModel? = nil
+    var sessionPlanKind: WatchSessionPlanKind? = nil
     var capturedAt: Date
 }
 

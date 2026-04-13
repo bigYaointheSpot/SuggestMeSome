@@ -2197,6 +2197,38 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 4 [Apple Watch Current Set Entry and Crown-First Logging] — 2026-04-13
+
+- Advanced the watch execution foundation toward a real set-by-set companion flow by extending shared watch-safe state contracts and mapper logic around the default "current set entry" interaction.
+- Updated `WatchCurrentSessionContext` in `SuggestMeSome/Models/WatchPayloadContracts.swift` with additive execution-focused fields (backward-compatible optional additions):
+  - current set number + target summary
+  - most recent completed set reps/weight snapshot
+  - crown weight step hint + quick-complete flag
+  - preferred interaction model (`digitalCrownFirst`)
+  - session plan kind (`planned` / `coachAdjusted`)
+- Extended `WatchPayloadMapper` in `SuggestMeSome/Services/Watch/WatchSessionCoordinator.swift` for crown-first execution behavior:
+  - richer `makeCurrentSessionContext(...)` mapping to keep current exercise/set clear at a glance
+  - deterministic digital-crown weight tick handling (`applyCrownTicksToWeight`, `applyCrownTicksToCurrentSet`) with unit-aware defaults and optional step override
+  - one-tap set completion + advance transition helper (`completeCurrentSetAndAdvance`) returning updated draft entries and next set/exercise coordinates for fast watch progression
+  - maintained shared source-of-truth behavior: watch state continues to derive from `DraftExerciseEntry` session drafts, avoiding watch-only decision logic
+- Expanded focused coverage in `SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests.swift` for:
+  - current-set payload/state generation (summary, completed set snapshot, crown defaults, quick-complete affordance)
+  - crown-oriented weight-entry updates
+  - set completion and advance behavior (same exercise, next exercise, session completion)
+  - planned vs coach-adjusted session compatibility in current context payload mapping
+- Guardrails preserved:
+  - no backend/cloud sync implementation
+  - no complex watch-side structural editing/reordering flows
+  - watch mapping remains additive and sync-safe via shared transport contracts
+  - project build/test integrity preserved
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests` (pass)
+  - broader regression slice:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests -only-testing:SuggestMeSomeTests/Feature10Prompt8IntegrationHardeningTests -only-testing:SuggestMeSomeTests/Feature11Prompt2TodayPlanExecutionFlowTests -only-testing:SuggestMeSomeTests/Feature7ValidationTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
 ---
 
 ### UI Polish — Indigo Brand, Premium Moments, Micro-animations

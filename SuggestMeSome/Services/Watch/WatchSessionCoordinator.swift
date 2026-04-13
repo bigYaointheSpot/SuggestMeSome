@@ -19,6 +19,16 @@
 
 import Foundation
 
+struct WatchSetCompletionAdvanceResult {
+    var updatedEntries: [DraftExerciseEntry]
+    var completedExerciseIndex: Int
+    var completedSetNumber: Int
+    var nextExerciseIndex: Int?
+    var nextSetNumber: Int?
+    var didAdvanceExercise: Bool
+    var isSessionComplete: Bool
+}
+
 // MARK: - WatchPayloadMapper
 
 /// Pure, deterministic mapping layer. All functions are side-effect free so
@@ -117,17 +127,12 @@ enum WatchPayloadMapper {
         workoutID: UUID,
         entries: [DraftExerciseEntry],
         cursor: Int? = nil,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        crownWeightStepOverride: Double? = nil,
         capturedAt: Date = Date()
     ) -> WatchCurrentSessionContext? {
         guard !entries.isEmpty else { return nil }
-        let index: Int
-        if let cursor, entries.indices.contains(cursor) {
-            index = cursor
-        } else if let firstIncomplete = entries.firstIndex(where: { !isExerciseComplete($0) }) {
-            index = firstIncomplete
-        } else {
-            index = max(0, entries.count - 1)
-        }
+        let index = resolveCurrentExerciseIndex(entries: entries, cursor: cursor)
 
         let entry = entries[index]
         let totalSets = entry.sets.count
@@ -143,6 +148,16 @@ enum WatchPayloadMapper {
             guard let idx = nextSetIdx else { return nil }
             return Double(entry.sets[idx].weightText)
         }()
+        let lastCompletedSet = entry.sets.last(where: { isSetLogged($0) })
+
+        let crownWeightStep = crownWeightStepOverride ?? preferredCrownWeightStep(unitLabel: entry.prescribedWeightUnit ?? entry.unit.rawValue)
+        let nextTargetSummary = makeTargetSummary(
+            reps: reps ?? entry.prescribedTargetReps,
+            weight: weight ?? entry.prescribedWeight,
+            unit: entry.prescribedWeightUnit ?? entry.unit.rawValue,
+            isCardio: entry.isCardio,
+            cardioTargetSeconds: entry.cardioDurationSeconds
+        )
 
         return WatchCurrentSessionContext(
             workoutID: workoutID,
@@ -157,6 +172,14 @@ enum WatchPayloadMapper {
             nextPrescribedWeightUnit: entry.prescribedWeightUnit ?? entry.unit.rawValue,
             isCardio: entry.isCardio,
             cardioTargetSeconds: entry.isCardio ? entry.cardioDurationSeconds : nil,
+            currentSetNumber: nextSetNumber,
+            currentSetTargetSummary: nextTargetSummary,
+            currentSetCompletedWeight: lastCompletedSet.flatMap { Double($0.weightText) },
+            currentSetCompletedReps: lastCompletedSet.flatMap { Int($0.repsText) },
+            crownWeightStep: entry.isCardio ? nil : crownWeightStep,
+            quickCompleteEnabled: entry.isCardio ? nil : nextSetIdx != nil,
+            preferredInteractionModel: entry.isCardio ? nil : .digitalCrownFirst,
+            sessionPlanKind: sessionPlanKind,
             capturedAt: capturedAt
         )
     }
@@ -218,6 +241,97 @@ enum WatchPayloadMapper {
         )
     }
 
+    // MARK: Crown-first Weight Entry Helpers
+
+    /// Applies digital-crown ticks to a weight value. Keeps deterministic,
+    /// snap-to-step behavior so watch-side interactions stay fast and stable.
+    static func applyCrownTicksToWeight(
+        currentWeight: Double?,
+        ticks: Int,
+        unitLabel: String?,
+        stepOverride: Double? = nil,
+        minWeight: Double = 0,
+        maxWeight: Double = 1_000
+    ) -> Double {
+        let step = max(0.1, stepOverride ?? preferredCrownWeightStep(unitLabel: unitLabel))
+        let base = max(minWeight, currentWeight ?? 0)
+        let adjusted = base + (Double(ticks) * step)
+        let clamped = min(maxWeight, max(minWeight, adjusted))
+        return snappedWeight(clamped, step: step)
+    }
+
+    /// Applies crown ticks to the current in-progress set on the selected
+    /// exercise and returns updated draft entries.
+    static func applyCrownTicksToCurrentSet(
+        entries: [DraftExerciseEntry],
+        cursor: Int? = nil,
+        ticks: Int,
+        stepOverride: Double? = nil
+    ) -> [DraftExerciseEntry] {
+        guard !entries.isEmpty else { return entries }
+        var updated = entries
+        let exerciseIndex = resolveCurrentExerciseIndex(entries: entries, cursor: cursor)
+        guard updated.indices.contains(exerciseIndex) else { return entries }
+        guard !updated[exerciseIndex].isCardio else { return entries }
+        guard let setIndex = updated[exerciseIndex].sets.firstIndex(where: { !isSetLogged($0) }) else { return entries }
+
+        let entry = updated[exerciseIndex]
+        let existingWeight = Double(entry.sets[setIndex].weightText) ?? entry.prescribedWeight
+        let adjusted = applyCrownTicksToWeight(
+            currentWeight: existingWeight,
+            ticks: ticks,
+            unitLabel: entry.prescribedWeightUnit ?? entry.unit.rawValue,
+            stepOverride: stepOverride
+        )
+        updated[exerciseIndex].sets[setIndex].weightText = formatWeight(adjusted)
+        return updated
+    }
+
+    // MARK: Set Completion + Advance
+
+    /// Completes the current set and returns the updated draft plus next cursor
+    /// coordinates, enabling one-tap "complete + advance" watch behavior.
+    static func completeCurrentSetAndAdvance(
+        entries: [DraftExerciseEntry],
+        cursor: Int? = nil,
+        completedWeight: Double? = nil,
+        completedReps: Int? = nil
+    ) -> WatchSetCompletionAdvanceResult? {
+        guard !entries.isEmpty else { return nil }
+        var updated = entries
+        let exerciseIndex = resolveCurrentExerciseIndex(entries: entries, cursor: cursor)
+        guard updated.indices.contains(exerciseIndex) else { return nil }
+        guard !updated[exerciseIndex].isCardio else { return nil }
+        guard let setIndex = updated[exerciseIndex].sets.firstIndex(where: { !isSetLogged($0) }) else { return nil }
+
+        let entry = updated[exerciseIndex]
+        let setNumber = entry.sets[setIndex].setNumber
+        let reps = completedReps ?? Int(entry.sets[setIndex].repsText) ?? entry.prescribedTargetReps ?? 0
+        let weight = completedWeight
+            ?? Double(entry.sets[setIndex].weightText)
+            ?? entry.prescribedWeight
+            ?? 0
+
+        updated[exerciseIndex].sets[setIndex].repsText = reps > 0 ? "\(reps)" : ""
+        updated[exerciseIndex].sets[setIndex].weightText = weight > 0 ? formatWeight(weight) : ""
+
+        let nextExerciseIndex = updated.firstIndex(where: { !isExerciseComplete($0) })
+        let nextSetNumber: Int? = {
+            guard let idx = nextExerciseIndex else { return nil }
+            return updated[idx].sets.first(where: { !isSetLogged($0) })?.setNumber
+        }()
+
+        return WatchSetCompletionAdvanceResult(
+            updatedEntries: updated,
+            completedExerciseIndex: exerciseIndex,
+            completedSetNumber: setNumber,
+            nextExerciseIndex: nextExerciseIndex,
+            nextSetNumber: nextSetNumber,
+            didAdvanceExercise: nextExerciseIndex != nil && nextExerciseIndex != exerciseIndex,
+            isSessionComplete: nextExerciseIndex == nil
+        )
+    }
+
     // MARK: Draft Completion Helpers
 
     static func isExerciseComplete(_ entry: DraftExerciseEntry) -> Bool {
@@ -230,6 +344,65 @@ enum WatchPayloadMapper {
 
     static func isSetLogged(_ set: DraftSet) -> Bool {
         !set.repsText.isEmpty && !set.weightText.isEmpty
+    }
+
+    private static func resolveCurrentExerciseIndex(entries: [DraftExerciseEntry], cursor: Int?) -> Int {
+        if let cursor, entries.indices.contains(cursor) {
+            return cursor
+        }
+        if let firstIncomplete = entries.firstIndex(where: { !isExerciseComplete($0) }) {
+            return firstIncomplete
+        }
+        return max(0, entries.count - 1)
+    }
+
+    private static func preferredCrownWeightStep(unitLabel: String?) -> Double {
+        let label = (unitLabel ?? "").lowercased()
+        if label == "kg" || label == "kgs" || label == "kilogram" || label == "kilograms" {
+            return 2.5
+        }
+        return 5.0
+    }
+
+    private static func snappedWeight(_ value: Double, step: Double) -> Double {
+        guard step > 0 else { return value }
+        return (value / step).rounded() * step
+    }
+
+    private static func formatWeight(_ value: Double) -> String {
+        if value.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(Int(value))
+        }
+        return String(format: "%.1f", value)
+    }
+
+    private static func makeTargetSummary(
+        reps: Int?,
+        weight: Double?,
+        unit: String?,
+        isCardio: Bool,
+        cardioTargetSeconds: Int
+    ) -> String? {
+        if isCardio {
+            guard cardioTargetSeconds > 0 else { return nil }
+            let minutes = cardioTargetSeconds / 60
+            let seconds = cardioTargetSeconds % 60
+            return seconds == 0 ? "\(minutes)m cardio target" : "\(minutes)m \(seconds)s cardio target"
+        }
+
+        guard reps != nil || weight != nil else { return nil }
+        var parts: [String] = []
+        if let reps {
+            parts.append("\(reps) reps")
+        }
+        if let weight {
+            if let unit, !unit.isEmpty {
+                parts.append("@ \(formatWeight(weight)) \(unit)")
+            } else {
+                parts.append("@ \(formatWeight(weight))")
+            }
+        }
+        return parts.joined(separator: " ")
     }
 }
 

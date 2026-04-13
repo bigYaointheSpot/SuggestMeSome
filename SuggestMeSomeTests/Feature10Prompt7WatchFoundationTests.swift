@@ -324,6 +324,43 @@ struct Feature10Prompt7WatchFoundationTests {
         #expect(context.nextPrescribedWeightUnit == "lbs")
     }
 
+    @Test func currentSessionContextIncludesCurrentSetSummaryAndCrownDefaults() {
+        var entry = makePartialEntry(name: "Bench", orderIndex: 0, totalSets: 3, loggedSets: 1)
+        entry.prescribedTargetReps = 6
+        entry.prescribedWeight = 185
+        entry.prescribedWeightUnit = "lbs"
+        let ctx = WatchPayloadMapper.makeCurrentSessionContext(
+            workoutID: UUID(),
+            entries: [entry],
+            sessionPlanKind: .planned
+        )
+        let context = try! unwrap(ctx)
+        #expect(context.currentSetNumber == 2)
+        #expect(context.currentSetTargetSummary == "6 reps @ 185 lbs")
+        #expect(context.currentSetCompletedWeight == 135)
+        #expect(context.currentSetCompletedReps == 5)
+        #expect(context.crownWeightStep == 5.0)
+        #expect(context.quickCompleteEnabled == true)
+        #expect(context.preferredInteractionModel == .digitalCrownFirst)
+        #expect(context.sessionPlanKind == .planned)
+    }
+
+    @Test func currentSessionContextSupportsCoachAdjustedKind() {
+        var entry = makeEmptyEntry(name: "Squat", orderIndex: 0, sets: 3)
+        entry.prescribedTargetReps = 5
+        entry.prescribedWeight = 225
+        entry.prescribedWeightUnit = "lbs"
+        let ctx = WatchPayloadMapper.makeCurrentSessionContext(
+            workoutID: UUID(),
+            entries: [entry],
+            sessionPlanKind: .coachAdjusted
+        )
+        let context = try! unwrap(ctx)
+        #expect(context.sessionPlanKind == .coachAdjusted)
+        #expect(context.currentSetNumber == 1)
+        #expect(context.currentSetTargetSummary == "5 reps @ 225 lbs")
+    }
+
     @Test func currentSessionContextFallsBackToLastEntryWhenAllComplete() {
         let entries: [DraftExerciseEntry] = [
             makeCompletedEntry(name: "Squat", orderIndex: 0, sets: 3),
@@ -338,6 +375,79 @@ struct Feature10Prompt7WatchFoundationTests {
         #expect(context.exerciseName == "Bench")
         #expect(context.nextSetNumber == nil)
         #expect(context.loggedSetsInExercise == 3)
+    }
+
+    // MARK: - Crown-first Weight Entry
+
+    @Test func crownTicksAdjustCurrentSetWeightUsingDefaultLbsStep() {
+        let entries: [DraftExerciseEntry] = [makeEmptyEntry(name: "Bench", orderIndex: 0, sets: 3)]
+        let updated = WatchPayloadMapper.applyCrownTicksToCurrentSet(
+            entries: entries,
+            ticks: 2
+        )
+        #expect(updated[0].sets[0].weightText == "10")
+    }
+
+    @Test func crownTicksUseKgStepOverrideWhenRequested() {
+        let adjusted = WatchPayloadMapper.applyCrownTicksToWeight(
+            currentWeight: 100,
+            ticks: 3,
+            unitLabel: "kg",
+            stepOverride: 1.25
+        )
+        #expect(adjusted == 103.75)
+    }
+
+    // MARK: - Completion + Advance
+
+    @Test func completeCurrentSetAdvancesWithinSameExerciseWhenSetsRemain() {
+        let entries: [DraftExerciseEntry] = [makeEmptyEntry(name: "Bench", orderIndex: 0, sets: 3)]
+        let result = WatchPayloadMapper.completeCurrentSetAndAdvance(
+            entries: entries,
+            completedWeight: 145,
+            completedReps: 6
+        )
+        let advance = try! unwrap(result)
+        #expect(advance.completedExerciseIndex == 0)
+        #expect(advance.completedSetNumber == 1)
+        #expect(advance.didAdvanceExercise == false)
+        #expect(advance.nextExerciseIndex == 0)
+        #expect(advance.nextSetNumber == 2)
+        #expect(advance.isSessionComplete == false)
+        #expect(advance.updatedEntries[0].sets[0].weightText == "145")
+        #expect(advance.updatedEntries[0].sets[0].repsText == "6")
+    }
+
+    @Test func completeCurrentSetAdvancesToNextExerciseWhenCurrentExerciseFinishes() {
+        let entries: [DraftExerciseEntry] = [
+            makePartialEntry(name: "Bench", orderIndex: 0, totalSets: 2, loggedSets: 1),
+            makeEmptyEntry(name: "Row", orderIndex: 1, sets: 2)
+        ]
+        let result = WatchPayloadMapper.completeCurrentSetAndAdvance(
+            entries: entries,
+            completedWeight: 155,
+            completedReps: 5
+        )
+        let advance = try! unwrap(result)
+        #expect(advance.completedExerciseIndex == 0)
+        #expect(advance.completedSetNumber == 2)
+        #expect(advance.didAdvanceExercise == true)
+        #expect(advance.nextExerciseIndex == 1)
+        #expect(advance.nextSetNumber == 1)
+        #expect(advance.isSessionComplete == false)
+    }
+
+    @Test func completeCurrentSetMarksSessionCompleteWhenLastSetIsLogged() {
+        let entries: [DraftExerciseEntry] = [makePartialEntry(name: "Bench", orderIndex: 0, totalSets: 1, loggedSets: 0)]
+        let result = WatchPayloadMapper.completeCurrentSetAndAdvance(
+            entries: entries,
+            completedWeight: 135,
+            completedReps: 5
+        )
+        let advance = try! unwrap(result)
+        #expect(advance.nextExerciseIndex == nil)
+        #expect(advance.nextSetNumber == nil)
+        #expect(advance.isSessionComplete == true)
     }
 
     // MARK: - Live Workout Snapshot Mapping
