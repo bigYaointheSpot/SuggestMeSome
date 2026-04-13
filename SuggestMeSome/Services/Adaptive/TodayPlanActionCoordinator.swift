@@ -118,13 +118,6 @@ enum TodayPlanActionCoordinator {
     ) -> TodayPlanLaunchResolution {
         switch request {
         case .startAsPlanned:
-            if hasOverlayAffectingToday || hasApprovedProposalAppliedForToday {
-                return TodayPlanLaunchResolution(
-                    path: .planned,
-                    source: .approvedOverlay,
-                    usesPreparedDraft: false
-                )
-            }
             return TodayPlanLaunchResolution(
                 path: .planned,
                 source: .plannedPrescription,
@@ -161,6 +154,32 @@ enum TodayPlanActionCoordinator {
                 hasApprovedProposalAppliedForToday: hasApprovedProposalAppliedForToday
             )
         }
+    }
+
+    static func executionSourceLabels(
+        plan: TodayPlan,
+        resolution: TodayPlanLaunchResolution,
+        hasRelevantPendingProposal: Bool
+    ) -> [String] {
+        var labels = plan.attribution.activeSourceLabels.filter {
+            $0 != "Approved Overlays" && $0 != "Proposals"
+        }
+
+        switch resolution.source {
+        case .plannedPrescription:
+            labels.append(plan.attribution.influenceFlags.usedActiveProgramContext ? "Base Program" : "Base Plan")
+            if hasRelevantPendingProposal {
+                labels.append("Pending Proposal Not Applied")
+            }
+        case .approvedOverlay:
+            labels.append("Approved Overlay")
+        case .runtimeCoachOnly:
+            labels.append("Daily Coach Runtime")
+        case .pendingProposal:
+            labels.append("Pending Proposal")
+        }
+
+        return dedupedLabels(labels)
     }
 
     /// Pure mapping from an iPhone `TodayPlanLaunchPath` to the watch-safe
@@ -225,6 +244,16 @@ enum TodayPlanActionCoordinator {
         case .affectsToday: return 0
         case .affectsUpcomingSession: return 1
         case .affectsLongHorizonProgramming: return 2
+        }
+    }
+
+    private static func dedupedLabels(_ labels: [String]) -> [String] {
+        var seen: Set<String> = []
+        return labels.compactMap { raw in
+            let label = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !label.isEmpty, !seen.contains(label) else { return nil }
+            seen.insert(label)
+            return label
         }
     }
 }

@@ -28,6 +28,26 @@ enum TrainingContextQueryService {
         runScopedWorkouts(for: run, in: workouts).count
     }
 
+    static func latestWeeklyAnalysis(
+        for run: ProgramRun?,
+        in analyses: [WeeklyTrainingAnalysis]
+    ) -> WeeklyTrainingAnalysis? {
+        let sorted = analyses.sorted {
+            if $0.weekStartDate != $1.weekStartDate {
+                return $0.weekStartDate > $1.weekStartDate
+            }
+            return $0.createdAt > $1.createdAt
+        }
+
+        if let run {
+            return sorted.first { $0.programRun?.id == run.id && $0.isFinalized }
+                ?? sorted.first { $0.programRun?.id == run.id }
+        }
+
+        return sorted.first { $0.programRun == nil && $0.isFinalized }
+            ?? sorted.first { $0.programRun == nil }
+    }
+
     static func completedWorkoutCount(for run: ProgramRun, context: ModelContext) throws -> Int {
         let runID = run.id
         let descriptor = FetchDescriptor<Workout>(

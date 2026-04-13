@@ -12,11 +12,10 @@ import SwiftData
 /// Base `TrainingProgram` templates stay unchanged; overlay effects are materialized at runtime.
 @MainActor
 enum ProgramOverlayResolutionService {
-    static func resolvedExercises(
+    static func baseExercises(
         for run: ProgramRun,
         week: Int,
-        session: Int,
-        context: ModelContext
+        session: Int
     ) -> [ProgramSessionExercise] {
         guard
             let program = run.program,
@@ -26,10 +25,21 @@ enum ProgramOverlayResolutionService {
             return []
         }
 
-        let baseRows = sessionTemplate.exercises.sorted { $0.orderIndex < $1.orderIndex }
+        return sessionTemplate.exercises
+            .sorted { $0.orderIndex < $1.orderIndex }
+            .map(cloneRow)
+    }
+
+    static func resolvedExercises(
+        for run: ProgramRun,
+        week: Int,
+        session: Int,
+        context: ModelContext
+    ) -> [ProgramSessionExercise] {
+        let baseRows = baseExercises(for: run, week: week, session: session)
         guard !baseRows.isEmpty else { return [] }
 
-        var resolvedRows = baseRows.map(cloneRow)
+        var resolvedRows = baseRows
         let overlays = ReadQueryRepository.activeOverlays(for: run, context: context)
         let applicableAdjustments = overlays
             .filter { overlay in
@@ -293,6 +303,9 @@ enum ProgramOverlayResolutionService {
     private static func cloneRow(_ source: ProgramSessionExercise) -> ProgramSessionExercise {
         ProgramSessionExercise(
             id: source.id,
+            syncStableID: source.syncStableID,
+            syncVersion: source.syncVersion,
+            syncLastModifiedAt: source.syncLastModifiedAt,
             exerciseName: source.exerciseName,
             orderIndex: source.orderIndex,
             targetSets: source.targetSets,
@@ -312,7 +325,9 @@ enum ProgramOverlayResolutionService {
             usedMappedSourceLift: source.usedMappedSourceLift,
             progressionPhase: source.progressionPhase,
             estimatedFatigueScore: source.estimatedFatigueScore,
-            topBackoffGroupID: source.topBackoffGroupID
+            topBackoffGroupID: source.topBackoffGroupID,
+            explainabilityPurpose: source.explainabilityPurpose,
+            explainabilitySelectionReason: source.explainabilitySelectionReason
         )
     }
 

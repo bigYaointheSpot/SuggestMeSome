@@ -2314,6 +2314,47 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 7 [Feature 11 Integration Hardening and Regression Pass] — 2026-04-13
+
+- Completed a final Feature 11 integration hardening pass across Today Plan explanation flow, proposal-aware launch semantics, standalone continuity, watch execution payloads, and Dashboard/tab clarity.
+- Tightened Today Plan continuity:
+  - `DailyCoachView` now passes run-scoped completed session keys into `TodayPlanEngine`, so the next-session recommendation does not drift when recent-workout display limits omit older completed program sessions.
+  - latest weekly analysis selection now routes through `TrainingContextQueryService.latestWeeklyAnalysis(for:in:)`, keeping active-program fatigue/readiness context scoped to the active run and standalone context scoped to standalone analyses.
+- Hardened adjusted-session launch integrity:
+  - added `ProgramOverlayResolutionService.baseExercises(for:week:session:)` so "Start As Planned" can launch base prescription rows while "Start Approved Version" launches overlay-resolved rows.
+  - `TodayPlanActionCoordinator.resolveLaunch` now keeps `.startAsPlanned` classified as `.planned` / `.plannedPrescription` even when an approved overlay exists; approved overlays are only classified as `.approvedOverlayAdjusted` when the user chooses the approved version path.
+  - runtime Daily Coach draft review no longer broadcasts a watch launch when the user only opens the review sheet; the watch launch is sent after the user confirms "Start Suggested Session."
+- Hardened source attribution:
+  - added `TodayPlanActionCoordinator.executionSourceLabels(...)` to separate plan-level awareness from execution-level provenance.
+  - watch execution labels now distinguish `Base Program`, `Approved Overlay`, `Daily Coach Runtime`, and `Pending Proposal Not Applied` instead of reusing broad Today Plan source labels that could imply a proposal or overlay was applied when it was only visible.
+- Improved watch execution parity:
+  - Today Plan launch now broadcasts launch + Today Plan snapshot + live workout snapshot + current-session context using the actual draft entries that the phone is launching.
+  - initial watch live/current-set state now carries the same plan kind, source labels, and stable session-version id as the launch payload.
+- Removed integration drift in overlay row cloning:
+  - overlay resolution now preserves `syncStableID`, `syncVersion`, `syncLastModifiedAt`, `explainabilityPurpose`, and `explainabilitySelectionReason` when cloning program rows for non-destructive resolution.
+  - this keeps Daily Coach draft preparation and accessory trimming aligned with generator explainability metadata.
+- Guardrails preserved:
+  - no backend/cloud implementation
+  - no broad UI redesign
+  - no destructive base-program mutation
+  - HealthKit remains a medium, behind-the-scenes nudge surfaced through attribution only
+  - standalone behavior remains supported through shared Today Plan orchestration rather than a forked path
+- Added focused regression coverage in `SuggestMeSomeTests/Feature11Prompt7IntegrationHardeningTests.swift`:
+  - planned vs approved-overlay launch classification when overlays are active
+  - execution source labels for base-plan, pending-proposal-not-applied, and approved-overlay paths
+  - base rows remain unchanged while overlay-resolved rows apply adjustments
+  - overlay row cloning preserves sync and explainability metadata
+  - completed-session keys drive Today Plan next-session continuity
+  - weekly analysis selection does not bleed across active-program and standalone contexts
+  - watch launch/live/current-context payloads carry the same execution version id and current-set truth
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature11Prompt7IntegrationHardeningTests` (pass)
+  - broader regression slice:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature11Prompt7IntegrationHardeningTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature11Prompt5WatchContinuityTests -only-testing:SuggestMeSomeTests/Feature11Prompt3StandaloneContinuityTests -only-testing:SuggestMeSomeTests/Feature11Prompt2TodayPlanExecutionFlowTests -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests -only-testing:SuggestMeSomeTests/Feature10Prompt8IntegrationHardeningTests -only-testing:SuggestMeSomeTests/Feature7ValidationTests -only-testing:SuggestMeSomeTests/Feature6ValidationTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
 ---
 
 

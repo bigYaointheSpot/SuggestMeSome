@@ -63,7 +63,12 @@ struct DailyCoachView: View {
         .filter { AdaptationProposalConfirmationService.isPendingUserProposal($0) }
     }
 
-    private var latestAnalysis: WeeklyTrainingAnalysis? { weeklyAnalyses.first }
+    private var latestAnalysis: WeeklyTrainingAnalysis? {
+        TrainingContextQueryService.latestWeeklyAnalysis(
+            for: focusRun,
+            in: Array(weeklyAnalyses)
+        )
+    }
 
     private var latestReview: DailyCoachWeeklyReview? { weeklyReviews.first }
 
@@ -77,6 +82,14 @@ struct DailyCoachView: View {
         return TrainingContextQueryService.completedWorkoutCount(for: run, in: Array(recentWorkouts))
     }
 
+    private var completedSessionKeysForRun: Set<ProgramSessionCompletionKey>? {
+        guard let run = focusRun else { return nil }
+        return TrainingContextQueryService.completedSessionKeys(
+            for: run,
+            context: modelContext
+        )
+    }
+
     private var todayPlan: TodayPlan {
         TodayPlanEngine.buildPlan(
             checkIn: todayCheckIn,
@@ -87,6 +100,7 @@ struct DailyCoachView: View {
             activeOverlays: activeOverlaysForRun,
             recentWorkouts: TrainingContextQueryService.recentWorkouts(from: recentWorkouts, limit: 20),
             objectiveRecoveryInsight: objectiveRecoveryInsight,
+            completedSessions: completedSessionKeysForRun,
             completedWorkoutCountForRun: completedWorkoutCountForRun
         )
     }
@@ -129,6 +143,7 @@ struct DailyCoachView: View {
     @State private var navigatingToWorkout = false
     @State private var pendingProgramWorkout: ProgramWorkoutContext?
     @State private var pendingDraft: PreparedWorkoutDraft?
+    @State private var pendingLaunchResolution: TodayPlanLaunchResolution?
     @State private var showingDraftReview = false
     @State private var confirmedDraftLaunch = false
 
@@ -177,6 +192,14 @@ struct DailyCoachView: View {
         .sheet(isPresented: $showingDraftReview, onDismiss: {
             if confirmedDraftLaunch {
                 confirmedDraftLaunch = false
+                if let resolution = pendingLaunchResolution,
+                   let context = pendingProgramWorkout {
+                    broadcastWatchLaunch(
+                        resolution: resolution,
+                        context: context,
+                        entries: pendingDraft?.entries ?? draftEntries(for: context.exercises)
+                    )
+                }
                 DeferredNavigationService.launchAfterSheetDismissIfNeeded(
                     hasPendingDestination: true
                 ) {
@@ -1193,8 +1216,11 @@ struct DailyCoachView: View {
             recommendation: todayPlan.recommendation,
             hasOverlayAffectingToday: overlaysAffectTodaySession
         )
-        let exercises = ProgramOverlayResolutionService.resolvedExercises(
-            for: run, week: session.weekNumber, session: session.sessionNumber, context: modelContext
+        let exercises = launchExercises(
+            for: run,
+            week: session.weekNumber,
+            session: session.sessionNumber,
+            resolution: resolution
         )
         pendingProgramWorkout = ProgramWorkoutContext(
             programRun: run,
@@ -1203,6 +1229,7 @@ struct DailyCoachView: View {
             exercises: exercises
         )
         pendingDraft = nil
+        pendingLaunchResolution = resolution
         if resolution.usesPreparedDraft {
             let draft = DailyCoachWorkoutPreparationService.prepare(
                 exercises: exercises,
@@ -1212,8 +1239,36 @@ struct DailyCoachView: View {
             showingDraftReview = true
         } else {
             navigatingToWorkout = true
+            broadcastWatchLaunch(
+                resolution: resolution,
+                run: run,
+                session: session,
+                entries: draftEntries(for: exercises)
+            )
         }
-        broadcastWatchLaunch(resolution: resolution, run: run, session: session)
+    }
+
+    private func launchExercises(
+        for run: ProgramRun,
+        week: Int,
+        session: Int,
+        resolution: TodayPlanLaunchResolution
+    ) -> [ProgramSessionExercise] {
+        switch resolution.path {
+        case .approvedOverlayAdjusted:
+            return ProgramOverlayResolutionService.resolvedExercises(
+                for: run,
+                week: week,
+                session: session,
+                context: modelContext
+            )
+        case .planned, .runtimeAdjusted:
+            return ProgramOverlayResolutionService.baseExercises(
+                for: run,
+                week: week,
+                session: session
+            )
+        }
     }
 
     /// Prompt 5 — publish a watch-safe launch snapshot so a paired companion
@@ -1224,7 +1279,8 @@ struct DailyCoachView: View {
     private func broadcastWatchLaunch(
         resolution: TodayPlanLaunchResolution,
         run: ProgramRun,
-        session: NextProgramSessionInfo
+        session: NextProgramSessionInfo,
+        entries: [DraftExerciseEntry]
     ) {
         let coordinator = watchSessionCoordinator ?? WatchSessionCoordinator()
         watchSessionCoordinator = coordinator
@@ -1238,7 +1294,11 @@ struct DailyCoachView: View {
         )
         let launchID = UUID()
         let startedAt = Date()
-        let sourceLabels = plan.attribution.activeSourceLabels
+        let sourceLabels = TodayPlanActionCoordinator.executionSourceLabels(
+            plan: plan,
+            resolution: resolution,
+            hasRelevantPendingProposal: relevantProposalForTodayPlan != nil
+        )
         let sessionLabel = nextSessionLabel(for: session)
         Task { @MainActor in
             await coordinator.broadcastWorkoutLaunch(
@@ -1259,7 +1319,7 @@ struct DailyCoachView: View {
             await coordinator.broadcastLiveWorkout(
                 workoutID: launchID,
                 elapsedSeconds: 0,
-                entries: [],
+                entries: entries,
                 sessionLabel: sessionLabel,
                 programRunStableID: run.syncStableID,
                 programWeekNumber: session.weekNumber,
@@ -1267,6 +1327,43 @@ struct DailyCoachView: View {
                 sessionPlanKind: kind,
                 sessionSourceLabels: sourceLabels,
                 sessionVersionStableID: sessionVersionStableID
+            )
+            await coordinator.broadcastCurrentSessionContext(
+                workoutID: launchID,
+                entries: entries,
+                sessionPlanKind: kind,
+                sessionSourceLabels: sourceLabels,
+                sessionVersionStableID: sessionVersionStableID
+            )
+        }
+    }
+
+    private func broadcastWatchLaunch(
+        resolution: TodayPlanLaunchResolution,
+        context: ProgramWorkoutContext,
+        entries: [DraftExerciseEntry]
+    ) {
+        let currentSession = todayPlan.recommendation.nextProgramSession
+        let session = NextProgramSessionInfo(
+            weekNumber: context.weekNumber,
+            sessionNumber: context.sessionNumber,
+            sessionName: currentSession?.sessionName,
+            programName: context.programRun.program?.name ?? currentSession?.programName ?? "Program"
+        )
+        broadcastWatchLaunch(
+            resolution: resolution,
+            run: context.programRun,
+            session: session,
+            entries: entries
+        )
+    }
+
+    private func draftEntries(for exercises: [ProgramSessionExercise]) -> [DraftExerciseEntry] {
+        let allPersonalRecords = TrainingContextQueryService.fetchPersonalRecords(context: modelContext)
+        return ProgramWorkoutDraftBuilder.buildEntries(from: exercises) { anchor in
+            TrainingContextQueryService.preferredUnit(
+                for: anchor.exerciseName,
+                in: allPersonalRecords
             )
         }
     }
