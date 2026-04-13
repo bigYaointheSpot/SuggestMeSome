@@ -2109,6 +2109,47 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 2 [Today Plan Review, Proposal Confirmation, and Launch Flow] — 2026-04-13
+
+- Expanded Today Plan into a decision-and-action surface so users can inspect relevant proposals, confirm approval/rejection with a compact confirmation step, and launch planned/adjusted sessions from the same card.
+- Added `TodayPlanActionCoordinator` (`SuggestMeSome/Services/Adaptive/TodayPlanActionCoordinator.swift`) to keep execution logic out of raw view code:
+  - run-scoped relevant-proposal selection using existing Today Plan proposal-awareness classification (today/upcoming prioritized)
+  - staged (two-step) proposal decisions (`stageDecision` then `commitStagedDecision`) so approval/rejection is never single-tap
+  - launch-path resolution for planned vs runtime-adjusted vs approved-overlay-adjusted session starts
+  - explicit source-of-change labeling (`plannedPrescription`, `pendingProposal`, `approvedOverlay`, `runtimeCoachOnly`)
+- Added `AdaptationProposalPresentationService` (`SuggestMeSome/Services/Adaptive/AdaptationProposalPresentationService.swift`) and reused it in multiple surfaces:
+  - centralized proposal title/window/change/reason/detail mapping
+  - removed duplicate proposal-display formatting logic from `AdaptationProposalReviewView`
+- Updated `DailyCoachView` (`SuggestMeSome/Views/DailyCoach/DailyCoachView.swift`) for Today Plan execution flow:
+  - pending proposals are now run-scoped and filtered through `AdaptationProposalConfirmationService.isPendingUserProposal`
+  - added compact proposal review sheet directly from Today Plan (`TodayPlanProposalReviewSheet`)
+  - added explicit confirm dialog before approve/reject commit
+  - proposal decisions reuse existing `AdaptationProposalConfirmationService` (overlay-authoritative, non-destructive persistence unchanged)
+  - launch actions now support same-surface paths:
+    - `Start As Planned`
+    - `Review Proposal` (when relevant pending proposal exists)
+    - `Start Approved Version` (when an approved overlay is active for today's target session)
+    - `Review Suggested Version` (runtime Daily Coach adjustment path)
+  - added a compact `Change Layer` row clarifying whether today is driven by pending proposal, approved overlay, runtime-only adjustment, or base program prescription
+- Added focused tests in `SuggestMeSomeTests/Feature11Prompt2TodayPlanExecutionFlowTests.swift`:
+  - proposal relevance selection for Today Plan (today/upcoming/long-horizon prioritization)
+  - compact staged confirmation behavior (no mutation before commit)
+  - approve/reject action handling through confirmation service + overlay creation check
+  - launch-path selection correctness
+  - clear distinction coverage for planned/proposal/overlay/runtime source labeling
+- Behavioral and architectural guardrails preserved:
+  - no destructive mutation of `TrainingProgram` or base session templates
+  - approved persistent adaptations still flow through overlays as authoritative runtime layer
+  - runtime Daily Coach modifications remain draft-only and non-persistent
+  - no backend/cloud changes
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature11Prompt2TodayPlanExecutionFlowTests` (pass)
+  - broader regression slice:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature7ValidationTests -only-testing:SuggestMeSomeTests/Feature6ValidationTests -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests -only-testing:SuggestMeSomeTests/Feature10Prompt2RepositoryQueryHardeningTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
 ---
 
 ### UI Polish — Indigo Brand, Premium Moments, Micro-animations

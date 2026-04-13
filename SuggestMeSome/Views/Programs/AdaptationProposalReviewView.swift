@@ -78,26 +78,30 @@ struct AdaptationProposalReviewView: View {
 
     @ViewBuilder
     private func proposalCard(for proposal: AdaptationProposal) -> some View {
+        let summary = AdaptationProposalPresentationService.makeDisplaySummary(
+            for: proposal,
+            program: run.program
+        )
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
-                Text(title(for: proposal))
+                Text(summary.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Spacer(minLength: 8)
-                Text(affectedWindowText(for: proposal))
+                Text(summary.affectedWindowText)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.blue)
             }
 
-            Text(changeSummary(for: proposal))
+            Text(summary.changeSummary)
                 .font(.subheadline)
                 .foregroundStyle(.primary)
 
-            Text("Why: \(reasonText(for: proposal.adjustmentReason))")
+            Text("Why: \(summary.reasonText)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if let detail = proposal.detailText, !detail.isEmpty {
+            if let detail = summary.detailText, !detail.isEmpty {
                 Text(detail)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -170,105 +174,6 @@ struct AdaptationProposalReviewView: View {
 
     private func isBusy(with proposalID: UUID) -> Bool {
         inFlightProposalID == proposalID
-    }
-
-    private func title(for proposal: AdaptationProposal) -> String {
-        switch proposal.proposalType {
-        case .increaseVolume: return "Volume Increase"
-        case .decreaseVolume: return "Volume Decrease"
-        case .deload: return "Deload Week"
-        case .decreaseLoad: return "Downshift"
-        default: return "Adaptive Proposal"
-        }
-    }
-
-    private func affectedWindowText(for proposal: AdaptationProposal) -> String {
-        let start = proposal.targetWeekStart
-        let end = max(start, proposal.targetWeekEnd ?? start)
-        if start == end {
-            if let session = proposal.targetSessionNumber {
-                return "Week \(start), S\(session)"
-            }
-            return "Week \(start)"
-        }
-        return "Weeks \(start)-\(end)"
-    }
-
-    private func changeSummary(for proposal: AdaptationProposal) -> String {
-        switch proposal.proposalType {
-        case .increaseVolume, .decreaseVolume:
-            let delta = proposal.proposedSetDelta ?? 0
-            let deltaText = delta > 0 ? "+\(delta)" : "\(delta)"
-            let exerciseName = targetExerciseName(for: proposal) ?? "target accessory work"
-            return "Adjust sets by \(deltaText) for \(exerciseName)."
-
-        case .deload:
-            var parts: [String] = ["Apply a recovery-focused deload."]
-            if let loadDelta = proposal.proposedLoadPercentDelta {
-                parts.append("Load \(percentText(loadDelta)).")
-            }
-            if let setDelta = proposal.proposedSetDelta {
-                let setText = setDelta > 0 ? "+\(setDelta)" : "\(setDelta)"
-                parts.append("Sets \(setText).")
-            }
-            if let factor = proposal.proposedDeloadFactor {
-                parts.append("Deload factor \(percentText(factor - 1)).")
-            }
-            return parts.joined(separator: " ")
-
-        case .decreaseLoad:
-            var parts: [String] = ["Apply a conservative downshift."]
-            if let loadDelta = proposal.proposedLoadPercentDelta {
-                parts.append("Load \(percentText(loadDelta)).")
-            }
-            if let setDelta = proposal.proposedSetDelta {
-                let setText = setDelta > 0 ? "+\(setDelta)" : "\(setDelta)"
-                parts.append("Sets \(setText).")
-            }
-            return parts.joined(separator: " ")
-
-        default:
-            return proposal.summaryText
-        }
-    }
-
-    private func targetExerciseName(for proposal: AdaptationProposal) -> String? {
-        guard let targetID = proposal.targetProgramSessionExerciseID else { return nil }
-        guard let program = run.program else { return nil }
-
-        for week in program.weeks {
-            for session in week.sessions {
-                if let match = session.exercises.first(where: { $0.id == targetID }) {
-                    return match.exerciseName
-                }
-            }
-        }
-        return nil
-    }
-
-    private func reasonText(for reason: AdjustmentReason) -> String {
-        switch reason {
-        case .topSetBeatTarget: return "Top-set performance exceeded target"
-        case .topSetMissedTarget: return "Top-set performance missed target"
-        case .accessoryOutperformance: return "Accessory performance is ahead"
-        case .accessoryUnderperformance: return "Accessory performance is behind"
-        case .fatigueAccumulation: return "Fatigue has accumulated across the week"
-        case .fatigueResolved: return "Fatigue appears resolved"
-        case .positiveLiftTrend: return "Lift-family trend is improving"
-        case .negativeLiftTrend: return "Lift-family trend is declining"
-        case .plateauDetected: return "Trend indicates a plateau"
-        case .lowAdherence: return "Session adherence was low"
-        case .standaloneTrendSupport: return "Standalone sessions support this trend"
-        case .programSignalPriority: return "Program-linked signals had higher confidence"
-        }
-    }
-
-    private func percentText(_ value: Double) -> String {
-        let percent = value * 100
-        if percent >= 0 {
-            return String(format: "+%.0f%%", percent)
-        }
-        return String(format: "%.0f%%", percent)
     }
 
     private func reloadPendingProposals() {

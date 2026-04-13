@@ -56,7 +56,11 @@ struct DailyCoachView: View {
     }
 
     private var pendingProposals: [AdaptationProposal] {
-        TrainingContextQueryService.pendingUserProposals(proposals: allProposals)
+        TrainingContextQueryService.pendingUserProposals(
+            for: focusRun,
+            proposals: allProposals
+        )
+        .filter { AdaptationProposalConfirmationService.isPendingUserProposal($0) }
     }
 
     private var latestAnalysis: WeeklyTrainingAnalysis? { weeklyAnalyses.first }
@@ -87,6 +91,23 @@ struct DailyCoachView: View {
         )
     }
 
+    private var relevantProposalForTodayPlan: AdaptationProposal? {
+        TodayPlanActionCoordinator.relevantProposalForTodayPlan(
+            pendingProposals: pendingProposals,
+            plan: todayPlan
+        )
+    }
+
+    private var overlaysAffectTodaySession: Bool {
+        guard let session = todayPlan.recommendation.nextProgramSession else { return false }
+        let context = TodayPlanExplanationAssembler.overlayContext(
+            activeRun: focusRun,
+            activeOverlays: activeOverlaysForRun,
+            nextSession: session
+        )
+        return context.overlaysAffectingTodayCount > 0
+    }
+
     private var objectiveRecoveryInsight: ObjectiveRecoveryInsight? {
         guard healthKitEnabled, useHealthKitInDailyCoach else { return nil }
         return HealthKitRecoveryInsightService.computeInsight(
@@ -110,6 +131,11 @@ struct DailyCoachView: View {
     @State private var pendingDraft: PreparedWorkoutDraft?
     @State private var showingDraftReview = false
     @State private var confirmedDraftLaunch = false
+
+    // Proposal review/confirmation
+    @State private var showingProposalReview = false
+    @State private var stagedProposalDecision: StagedTodayPlanProposalDecision?
+    @State private var proposalActionErrorMessage: String?
 
     // MARK: Body
 
@@ -163,6 +189,63 @@ struct DailyCoachView: View {
                     showingDraftReview = false
                 }
             }
+        }
+        .sheet(isPresented: $showingProposalReview) {
+            if let proposal = relevantProposalForTodayPlan {
+                TodayPlanProposalReviewSheet(
+                    proposal: proposal,
+                    program: focusRun?.program,
+                    onApprove: {
+                        showingProposalReview = false
+                        stagedProposalDecision = TodayPlanActionCoordinator.stageDecision(
+                            action: .approve,
+                            proposal: proposal
+                        )
+                    },
+                    onReject: {
+                        showingProposalReview = false
+                        stagedProposalDecision = TodayPlanActionCoordinator.stageDecision(
+                            action: .reject,
+                            proposal: proposal
+                        )
+                    }
+                )
+            }
+        }
+        .confirmationDialog(
+            stagedProposalDecision?.title ?? "Confirm Decision",
+            isPresented: Binding(
+                get: { stagedProposalDecision != nil },
+                set: { if !$0 { stagedProposalDecision = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let staged = stagedProposalDecision {
+                switch staged.action {
+                case .approve:
+                    Button("Confirm Approve") {
+                        commitStagedProposalDecision(staged)
+                    }
+                case .reject:
+                    Button("Confirm Reject", role: .destructive) {
+                        commitStagedProposalDecision(staged)
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(stagedProposalDecision?.message ?? "")
+        }
+        .alert(
+            "Couldn’t Update Proposal",
+            isPresented: Binding(
+                get: { proposalActionErrorMessage != nil },
+                set: { if !$0 { proposalActionErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(proposalActionErrorMessage ?? "Unknown error")
         }
     }
 
@@ -340,6 +423,11 @@ struct DailyCoachView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            launchSourceRow(
+                source: currentLaunchSource(for: rec),
+                hasRelevantPendingProposal: relevantProposalForTodayPlan != nil
+            )
 
             // Expand / collapse toggle
             Button {
@@ -715,6 +803,59 @@ struct DailyCoachView: View {
             .clipShape(Capsule())
     }
 
+    private func currentLaunchSource(for rec: DailyCoachRecommendation) -> TodayPlanChangeSource {
+        if relevantProposalForTodayPlan != nil {
+            return .pendingProposal
+        }
+        if overlaysAffectTodaySession {
+            return .approvedOverlay
+        }
+        if rec.primarySuggestion.type != .runAsPlanned {
+            return .runtimeCoachOnly
+        }
+        return .plannedPrescription
+    }
+
+    private func launchSourceRow(
+        source: TodayPlanChangeSource,
+        hasRelevantPendingProposal: Bool
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: sourceIcon(source))
+                .font(.caption)
+                .foregroundStyle(sourceColor(source))
+            Text("Change Layer:")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(TodayPlanActionCoordinator.sourceDescription(
+                source: source,
+                hasRelevantPendingProposal: hasRelevantPendingProposal
+            ))
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+    }
+
+    private func sourceIcon(_ source: TodayPlanChangeSource) -> String {
+        switch source {
+        case .pendingProposal: return "clock.badge.exclamationmark"
+        case .approvedOverlay: return "checkmark.seal.fill"
+        case .runtimeCoachOnly: return "bolt.heart"
+        case .plannedPrescription: return "list.bullet.clipboard"
+        }
+    }
+
+    private func sourceColor(_ source: TodayPlanChangeSource) -> Color {
+        switch source {
+        case .pendingProposal: return .orange
+        case .approvedOverlay: return .green
+        case .runtimeCoachOnly: return .indigo
+        case .plannedPrescription: return .secondary
+        }
+    }
+
     // MARK: - Latest Session Summary Card
 
     private var latestSummary: SessionSummary? {
@@ -862,8 +1003,70 @@ struct DailyCoachView: View {
 
     @ViewBuilder
     private func sessionLaunchButtons(rec: DailyCoachRecommendation) -> some View {
-        let canPrepareDraft = rec.primarySuggestion.type != .runAsPlanned
-        if canPrepareDraft {
+        let hasRuntimeAdjustment = rec.primarySuggestion.type != .runAsPlanned
+        let hasRelevantProposal = relevantProposalForTodayPlan != nil
+        let hasApprovedOverlayPath = overlaysAffectTodaySession
+
+        if hasRelevantProposal {
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    Button("Start As Planned") {
+                        launchAsPlanned()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color(.tertiarySystemBackground))
+                    .foregroundStyle(.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                    .buttonStyle(.plain)
+
+                    Button("Review Proposal") {
+                        showingProposalReview = true
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.orange)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                    .buttonStyle(.plain)
+                }
+                if hasApprovedOverlayPath {
+                    Button("Start Approved Version") {
+                        launchApprovedVersion()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.green)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                    .buttonStyle(.plain)
+                }
+            }
+            .font(.subheadline.weight(.medium))
+        } else if hasApprovedOverlayPath {
+            HStack(spacing: 10) {
+                Button("Start As Planned") {
+                    launchAsPlanned()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(Color(.tertiarySystemBackground))
+                .foregroundStyle(.primary)
+                .clipShape(RoundedRectangle(cornerRadius: 9))
+                .buttonStyle(.plain)
+
+                Button("Start Approved Version") {
+                    launchApprovedVersion()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(Color.green)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 9))
+                .buttonStyle(.plain)
+            }
+            .font(.subheadline.weight(.medium))
+        } else if hasRuntimeAdjustment {
             HStack(spacing: 10) {
                 Button("Start As Planned") {
                     launchAsPlanned()
@@ -902,9 +1105,22 @@ struct DailyCoachView: View {
 
     // MARK: - Session Launch Helpers
 
+    private func launchApprovedVersion() {
+        launch(request: .startApprovedVersion)
+    }
+
     private func launchAsPlanned() {
+        launch(request: .startAsPlanned)
+    }
+
+    private func launch(request: TodayPlanLaunchRequest) {
         guard let run = focusRun,
               let session = todayPlan.recommendation.nextProgramSession else { return }
+        let resolution = TodayPlanActionCoordinator.resolveLaunch(
+            request: request,
+            recommendation: todayPlan.recommendation,
+            hasOverlayAffectingToday: overlaysAffectTodaySession
+        )
         let exercises = ProgramOverlayResolutionService.resolvedExercises(
             for: run, week: session.weekNumber, session: session.sessionNumber, context: modelContext
         )
@@ -915,27 +1131,34 @@ struct DailyCoachView: View {
             exercises: exercises
         )
         pendingDraft = nil
-        navigatingToWorkout = true
+        if resolution.usesPreparedDraft {
+            let draft = DailyCoachWorkoutPreparationService.prepare(
+                exercises: exercises,
+                suggestionType: todayPlan.recommendation.primarySuggestion.type
+            )
+            pendingDraft = draft
+            showingDraftReview = true
+        } else {
+            navigatingToWorkout = true
+        }
     }
 
     private func prepareReviewSheet() {
-        guard let run = focusRun,
-              let session = todayPlan.recommendation.nextProgramSession else { return }
-        let exercises = ProgramOverlayResolutionService.resolvedExercises(
-            for: run, week: session.weekNumber, session: session.sessionNumber, context: modelContext
-        )
-        let draft = DailyCoachWorkoutPreparationService.prepare(
-            exercises: exercises,
-            suggestionType: todayPlan.recommendation.primarySuggestion.type
-        )
-        pendingProgramWorkout = ProgramWorkoutContext(
-            programRun: run,
-            weekNumber: session.weekNumber,
-            sessionNumber: session.sessionNumber,
-            exercises: exercises
-        )
-        pendingDraft = draft
-        showingDraftReview = true
+        launch(request: .startRuntimeAdjusted)
+    }
+
+    private func commitStagedProposalDecision(_ staged: StagedTodayPlanProposalDecision) {
+        guard let proposal = relevantProposalForTodayPlan else { return }
+        do {
+            try TodayPlanActionCoordinator.commitStagedDecision(
+                staged,
+                proposal: proposal,
+                context: modelContext
+            )
+            stagedProposalDecision = nil
+        } catch {
+            proposalActionErrorMessage = error.localizedDescription
+        }
     }
 
     private func nextSessionLabel(for session: NextProgramSessionInfo?) -> String {
@@ -954,6 +1177,72 @@ struct DailyCoachView: View {
         case .elevated:   return .yellow
         case .high:       return .orange
         case .critical:   return .red
+        }
+    }
+}
+
+// MARK: - TodayPlanProposalReviewSheet
+
+private struct TodayPlanProposalReviewSheet: View {
+    let proposal: AdaptationProposal
+    let program: TrainingProgram?
+    let onApprove: () -> Void
+    let onReject: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let summary = AdaptationProposalPresentationService.makeDisplaySummary(
+            for: proposal,
+            program: program
+        )
+        NavigationStack {
+            List {
+                Section("Proposal") {
+                    Text(summary.title)
+                        .font(.subheadline.weight(.semibold))
+                    Text(summary.changeSummary)
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(summary.affectedWindowText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Why") {
+                    Text(summary.reasonText)
+                        .font(.subheadline)
+                    if let detail = summary.detailText, !detail.isEmpty {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Section {
+                    Text("Approve/reject requires one more confirmation. Base program rows are never mutated.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Review Proposal")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+                ToolbarItemGroup(placement: .confirmationAction) {
+                    Button("Reject", role: .destructive) {
+                        onReject()
+                    }
+                    Button("Approve") {
+                        onApprove()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
         }
     }
 }
