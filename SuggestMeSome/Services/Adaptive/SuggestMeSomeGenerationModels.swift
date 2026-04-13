@@ -142,6 +142,10 @@ struct SuggestMeSomeSessionRecommendation {
     let wasRedirected: Bool
     let mode: SuggestMeSomeSessionMode
     let goal: SuggestMeSomeGenerationGoal
+    /// Follow-through explanation connecting recent training context to this recommendation.
+    let continuitySummary: String
+    /// Clear "what to do next" guidance for this recommendation.
+    let nextActionGuidance: String
     let recommendedMovementPriorities: [String]
     let candidateExerciseFamilies: [String]
     let candidateAnchorLifts: [String]

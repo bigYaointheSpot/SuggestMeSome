@@ -165,6 +165,8 @@ struct SuggestMeSomeRecommendationStepView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            continuitySection(recommendation)
+
             // Redirect notice — shown only when mode was adjusted
             if recommendation.wasRedirected {
                 redirectNotice(recommendation)
@@ -179,6 +181,22 @@ struct SuggestMeSomeRecommendationStepView: View {
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func continuitySection(_ recommendation: SuggestMeSomeSessionRecommendation) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("CONTINUITY")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+            Text(recommendation.continuitySummary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Next: \(recommendation.nextActionGuidance)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func reasonChip(_ text: String) -> some View {

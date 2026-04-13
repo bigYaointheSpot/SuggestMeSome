@@ -207,7 +207,12 @@ struct Feature11Prompt2TodayPlanExecutionFlowTests {
                 headline: "test",
                 details: []
             ),
-            proposalAwareness: awareness
+            proposalAwareness: awareness,
+            nextStepGuidance: TodayPlanNextStepGuidance(
+                contextMode: .activeProgram,
+                headline: "test",
+                actions: []
+            )
         )
     }
 

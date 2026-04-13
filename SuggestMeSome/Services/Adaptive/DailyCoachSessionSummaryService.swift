@@ -21,6 +21,8 @@ struct SessionSummary {
     let tooEasyCount: Int
     let onTargetCount: Int
     let tooHardCount: Int
+    /// Utility-first guidance for what to do next after the summarized session.
+    let nextStepText: String
 }
 
 // MARK: - DailyCoachSessionSummaryService
@@ -45,7 +47,8 @@ enum DailyCoachSessionSummaryService {
                 hasEffortData: false,
                 tooEasyCount: 0,
                 onTargetCount: 0,
-                tooHardCount: 0
+                tooHardCount: 0,
+                nextStepText: fallbackNextStepText(for: workout)
             )
         }
 
@@ -69,7 +72,14 @@ enum DailyCoachSessionSummaryService {
             hasEffortData: true,
             tooEasyCount: tooEasyCount,
             onTargetCount: onTargetCount,
-            tooHardCount: tooHardCount
+            tooHardCount: tooHardCount,
+            nextStepText: deriveNextStepText(
+                total: total,
+                tooEasyCount: tooEasyCount,
+                onTargetCount: onTargetCount,
+                tooHardCount: tooHardCount,
+                workout: workout
+            )
         )
     }
 
@@ -125,5 +135,48 @@ enum DailyCoachSessionSummaryService {
         }
 
         return "Session had mixed effort across exercises."
+    }
+
+    private static func deriveNextStepText(
+        total: Int,
+        tooEasyCount: Int,
+        onTargetCount: Int,
+        tooHardCount: Int,
+        workout: Workout
+    ) -> String {
+        let isStandalone = workout.programRun == nil
+        let hoursSinceWorkout = max(0, Int(Date().timeIntervalSince(workout.date) / 3600))
+        let modePrefix = isStandalone ? "Standalone next step:" : "Program next step:"
+
+        if tooHardCount > total / 2 {
+            return "\(modePrefix) reduce load or total volume slightly on your next session."
+        }
+
+        if tooEasyCount > total / 2 {
+            return "\(modePrefix) progress one variable next time (load, reps, or one extra set)."
+        }
+
+        if onTargetCount >= (total + 1) / 2 {
+            if isStandalone {
+                return "\(modePrefix) repeat this pattern or use SuggestMeSome to rotate to a complementary split."
+            }
+            return "\(modePrefix) continue to the next programmed session as prescribed."
+        }
+
+        if hoursSinceWorkout < 24 {
+            return "\(modePrefix) consider a lighter or non-overlapping session if you train again today."
+        }
+
+        if isStandalone {
+            return "\(modePrefix) use a moderate, balanced session and log effort feedback for stronger continuity."
+        }
+        return "\(modePrefix) resume the next session and keep effort notes accurate."
+    }
+
+    private static func fallbackNextStepText(for workout: Workout) -> String {
+        if workout.programRun == nil {
+            return "Standalone next step: log effort feedback in your next session so recommendations can adapt intentionally."
+        }
+        return "Program next step: continue to the next session and add effort feedback for clearer adjustments."
     }
 }

@@ -258,6 +258,53 @@ enum TodayPlanExplanationAssembler {
         return TodayPlanChangeSummary(changeType: type, headline: headline, details: details)
     }
 
+    static func buildNextStepGuidance(
+        recommendation: DailyCoachRecommendation,
+        confidence: TodayPlanConfidence,
+        checkIn: DailyCoachCheckIn?,
+        activeRun: ProgramRun?,
+        recentWorkouts: [Workout]
+    ) -> TodayPlanNextStepGuidance {
+        if activeRun?.program != nil {
+            return TodayPlanNextStepGuidance(
+                contextMode: .activeProgram,
+                headline: "Program session guidance is available for today.",
+                actions: [
+                    "Run the next programmed session and keep effort feedback accurate.",
+                    "If today's recommendation feels off, review the suggested version before starting.",
+                    "Complete a daily check-in before the next session to keep confidence high."
+                ]
+            )
+        }
+
+        let hasStrongStandaloneSignal = confidence != .low
+            || checkIn != nil
+            || recentWorkouts.count >= 3
+
+        if hasStrongStandaloneSignal {
+            let sessionLabel = recommendation.standaloneSessionType?.rawValue ?? "Standalone"
+            return TodayPlanNextStepGuidance(
+                contextMode: .standaloneHistoryInformed,
+                headline: "No active program. Today's \(sessionLabel.lowercased()) recommendation is history-informed.",
+                actions: [
+                    "Use SuggestMeSome with today's mode/intensity to keep session continuity.",
+                    "Log effort feedback so the next standalone recommendation can progress or downshift intentionally.",
+                    "Check in before your next session to improve readiness-based adjustments."
+                ]
+            )
+        }
+
+        return TodayPlanNextStepGuidance(
+            contextMode: .standaloneLowConfidence,
+            headline: "No active program and sparse inputs. Today's recommendation is a conservative baseline guess.",
+            actions: [
+                "Complete a daily check-in before training to improve recommendation quality.",
+                "Keep this session moderate and log the result to establish history.",
+                "After 2-3 logged sessions, expect more specific standalone guidance."
+            ]
+        )
+    }
+
     static func overlayContext(
         activeRun: ProgramRun?,
         activeOverlays: [AppliedProgramOverlay],

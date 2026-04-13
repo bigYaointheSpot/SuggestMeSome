@@ -69,6 +69,24 @@ enum TodayPlanChangeType: String {
     case combinedInfluence = "Combined Influence"
 }
 
+// MARK: - TodayPlanContextMode
+
+/// Explicit context mode for today's plan, used to distinguish standalone intent from confidence.
+enum TodayPlanContextMode: String {
+    case activeProgram = "Active Program"
+    case standaloneHistoryInformed = "Standalone (History-Informed)"
+    case standaloneLowConfidence = "Standalone (Low-Confidence)"
+}
+
+// MARK: - TodayPlanNextStepGuidance
+
+/// Utility-first next-step guidance attached to every Today Plan.
+struct TodayPlanNextStepGuidance {
+    let contextMode: TodayPlanContextMode
+    let headline: String
+    let actions: [String]
+}
+
 // MARK: - TodayPlanChangeSummary
 
 /// Structured "What Changed Today" output designed for compact UI sections.
@@ -171,4 +189,6 @@ struct TodayPlan {
     let changeSummary: TodayPlanChangeSummary
     /// Pending proposal awareness with explicit impact horizon classification.
     let proposalAwareness: [TodayPlanProposalAwarenessItem]
+    /// Utility-first next-step actions for today's context.
+    let nextStepGuidance: TodayPlanNextStepGuidance
 }

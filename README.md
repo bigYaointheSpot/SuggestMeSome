@@ -2150,6 +2150,53 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - compile validation:
     - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
+#### Prompt 3 [Standalone Today Plan and SuggestMeSome Continuity Improvements] — 2026-04-13
+
+- Improved standalone Daily Coach guidance through shared `TodayPlanEngine` orchestration (no forked product path):
+  - added `TodayPlanContextMode` and `TodayPlanNextStepGuidance` in `Services/Adaptive/TodayPlanTypes.swift`
+  - added `TodayPlanExplanationAssembler.buildNextStepGuidance(...)` to classify:
+    - `Active Program`
+    - `Standalone (History-Informed)`
+    - `Standalone (Low-Confidence)`
+  - wired `TodayPlanEngine.buildPlan(...)` to always attach utility-first next actions, making the distinction between "no active program" and "low-confidence baseline guess" explicit and testable.
+- Updated `DailyCoachView` (`Views/DailyCoach/DailyCoachView.swift`) to surface standalone intent more clearly without changing recommendation authority:
+  - standalone state now shows explicit context mode badge + context headline
+  - recommendation card now includes a structured `What Next` section with actionable next steps
+  - session summary card now includes `What Next` guidance derived from last session outcome.
+- Improved standalone session-summary continuity in `DailyCoachSessionSummaryService`:
+  - extended `SessionSummary` with `nextStepText`
+  - added deterministic next-step guidance mapping from effort outcomes (`tooHard` / `onTarget` / `tooEasy`) and standalone vs program context.
+- Improved SuggestMeSome standalone continuity in shared recommendation flow:
+  - extended `SuggestMeSomeSessionRecommendation` with:
+    - `continuitySummary`
+    - `nextActionGuidance`
+  - updated `SuggestMeSomeRecommendationService` to produce follow-through messaging that ties:
+    - last standalone session recency
+    - recent overlap / blocked lift context
+    - fatigue/readiness influence
+    - duration + equipment constraints
+    - concrete next action after recommendation
+  - surfaced these fields in `Views/Generator/GeneratorStepViews.swift` under a new `CONTINUITY` section.
+- Compatibility and trust guardrails preserved:
+  - no backend/cloud changes
+  - no fake AI behavior
+  - no destructive `TrainingProgram` mutation path changes
+  - HealthKit remains medium influence only (nudges, not overrides)
+  - active-program logic stays primary; standalone improvements reuse shared orchestration/services.
+- Added focused tests:
+  - `SuggestMeSomeTests/Feature11Prompt3StandaloneContinuityTests.swift`
+    - standalone Today Plan explanation path classification
+    - explicit no-program history-informed vs low-confidence distinction
+    - standalone SuggestMeSome continuity narrative + next action
+    - session-summary-to-next-step guidance for standalone completion
+- Verification runs for this prompt:
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature11Prompt3StandaloneContinuityTests -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests -only-testing:SuggestMeSomeTests/Feature9RecommendationEngineValidationTests -only-testing:SuggestMeSomeTests/Feature11Prompt2TodayPlanExecutionFlowTests` (pass)
+  - broader regression slice:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature7ValidationTests -only-testing:SuggestMeSomeTests/Feature9RecommendationEngineValidationTests -only-testing:SuggestMeSomeTests/Feature9SuggestMeSomeBuildValidationTests -only-testing:SuggestMeSomeTests/Feature10Prompt5CoachAwareFusionTests -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests -only-testing:SuggestMeSomeTests/Feature11Prompt2TodayPlanExecutionFlowTests -only-testing:SuggestMeSomeTests/Feature11Prompt3StandaloneContinuityTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
+
 ---
 
 ### UI Polish — Indigo Brand, Premium Moments, Micro-animations

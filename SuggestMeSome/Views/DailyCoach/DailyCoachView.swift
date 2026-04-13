@@ -309,12 +309,30 @@ struct DailyCoachView: View {
     }
 
     private var standaloneState: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let guidance = todayPlan.nextStepGuidance
+        let contextColor: Color = switch guidance.contextMode {
+        case .activeProgram: .secondary
+        case .standaloneHistoryInformed: .indigo
+        case .standaloneLowConfidence: .orange
+        }
+
+        return VStack(alignment: .leading, spacing: 6) {
             Text("No active program")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            Text(guidance.contextMode.rawValue)
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(contextColor.opacity(0.12))
+                .foregroundStyle(contextColor)
+                .clipShape(Capsule())
             Text("Daily Coach works without a program. Log workouts and check in daily to get personalized recommendations.")
                 .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(guidance.headline)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -412,6 +430,7 @@ struct DailyCoachView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             whatChangedTodaySection(plan.changeSummary)
+            nextStepGuidanceSection(plan.nextStepGuidance)
 
             // Primary suggestion chip
             HStack(spacing: 6) {
@@ -628,6 +647,46 @@ struct DailyCoachView: View {
             attributionRow("Recent History", attribution.recentHistoryInfluence)
             attributionRow("HealthKit", attribution.healthKitInfluence)
         }
+    }
+
+    private func nextStepGuidanceSection(_ guidance: TodayPlanNextStepGuidance) -> some View {
+        let accent: Color = switch guidance.contextMode {
+        case .activeProgram: .secondary
+        case .standaloneHistoryInformed: .indigo
+        case .standaloneLowConfidence: .orange
+        }
+
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: "point.forward.to.point.capsulepath")
+                    .font(.caption2)
+                    .foregroundStyle(accent)
+                Text("What Next")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(guidance.contextMode.rawValue)
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(accent.opacity(0.12))
+                    .foregroundStyle(accent)
+                    .clipShape(Capsule())
+            }
+            Text(guidance.headline)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(guidance.actions, id: \.self) { action in
+                Text("- \(action)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private func attributionRow(_ label: String, _ text: String) -> some View {
@@ -899,6 +958,15 @@ struct DailyCoachView: View {
 
             Text(summary.summaryText)
                 .font(.subheadline.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+            Text("What Next")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(summary.nextStepText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

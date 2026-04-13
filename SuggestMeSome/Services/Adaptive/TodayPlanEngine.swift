@@ -104,6 +104,13 @@ struct TodayPlanEngine {
             pendingProposalCount: pendingProposalCount
         )
         let whatChangedToday = changeSummary.compactText
+        let nextStepGuidance = TodayPlanExplanationAssembler.buildNextStepGuidance(
+            recommendation: recommendation,
+            confidence: confidence,
+            checkIn: checkIn,
+            activeRun: activeRun,
+            recentWorkouts: recentWorkouts
+        )
 
         return TodayPlan(
             recommendation: recommendation,
@@ -114,7 +121,8 @@ struct TodayPlanEngine {
             whyToday: whyToday,
             whatChangedToday: whatChangedToday,
             changeSummary: changeSummary,
-            proposalAwareness: proposalAwareness
+            proposalAwareness: proposalAwareness,
+            nextStepGuidance: nextStepGuidance
         )
     }
 

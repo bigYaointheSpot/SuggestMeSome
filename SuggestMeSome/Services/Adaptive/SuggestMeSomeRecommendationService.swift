@@ -124,6 +124,23 @@ struct SuggestMeSomeRecommendationService {
             hasProgramConflict: programConflict.hasConflict,
             coachContext: coachContext
         )
+        let continuitySummary = buildContinuitySummary(
+            recentWorkouts: recentWorkouts,
+            activeRun: activeRun,
+            finalMode: finalMode,
+            durationMinutes: configuration.durationMinutes,
+            equipmentProfile: configuration.equipmentProfile,
+            overlapCount: overlapCount,
+            blockedLifts: blockedLifts,
+            coachContext: coachContext
+        )
+        let nextActionGuidance = buildNextActionGuidance(
+            finalMode: finalMode,
+            buildable: buildable,
+            durationMinutes: configuration.durationMinutes,
+            activeRun: activeRun,
+            coachContext: coachContext
+        )
 
         return SuggestMeSomeSessionRecommendation(
             title: recommendationTitle(mode: finalMode, goal: finalGoal),
@@ -151,6 +168,8 @@ struct SuggestMeSomeRecommendationService {
             wasRedirected: finalMode != configuration.mode,
             mode: finalMode,
             goal: finalGoal,
+            continuitySummary: continuitySummary,
+            nextActionGuidance: nextActionGuidance,
             recommendedMovementPriorities: movementPriorities,
             candidateExerciseFamilies: candidateFamilies,
             candidateAnchorLifts: anchorLifts,
@@ -1047,6 +1066,84 @@ struct SuggestMeSomeRecommendationService {
         }
 
         return chips
+    }
+
+    private func buildContinuitySummary(
+        recentWorkouts: [Workout],
+        activeRun: ProgramRun?,
+        finalMode: SuggestMeSomeSessionMode,
+        durationMinutes: Int,
+        equipmentProfile: SuggestMeSomeEquipmentProfile,
+        overlapCount: Int,
+        blockedLifts: Set<CanonicalLift>,
+        coachContext: SuggestMeSomeCoachContext?
+    ) -> String {
+        let latestStandalone = recentWorkouts.first(where: { $0.programRun == nil })
+        let hoursSince = latestStandalone.map { max(0, Int(Date().timeIntervalSince($0.date) / 3600)) }
+        var parts: [String] = []
+
+        if activeRun != nil {
+            parts.append("Active program context is present; SuggestMeSome is following that broader training continuity.")
+        } else if let hoursSince {
+            let timeLabel: String
+            if hoursSince < 24 {
+                timeLabel = "within the last 24 hours"
+            } else {
+                let days = max(1, hoursSince / 24)
+                timeLabel = "\(days) day\(days == 1 ? "" : "s") ago"
+            }
+            parts.append("Last standalone session was \(timeLabel).")
+        } else {
+            parts.append("No recent standalone session found, so continuity is based on your current setup inputs.")
+        }
+
+        if !blockedLifts.isEmpty {
+            let blocked = blockedLifts.map(\.displayName).sorted().joined(separator: " and ")
+            parts.append("Recent heavy exposure on \(blocked) is being de-emphasized to avoid immediate repeat stress.")
+        } else if overlapCount >= 2 {
+            parts.append("Recent muscle-group overlap is high, so today's plan leans recovery-aware.")
+        } else {
+            parts.append("Recent overlap is manageable, so the recommendation keeps normal progression intent.")
+        }
+
+        if let fatigue = coachContext?.fatigueStatus, fatigue == .elevated || fatigue == .high || fatigue == .critical {
+            parts.append("Current fatigue status reinforced a conservative mode/intensity choice.")
+        }
+
+        parts.append("Session shape is constrained to \(durationMinutes) minutes with \(equipmentProfile.title.lowercased()) compatibility.")
+        parts.append("Recommended mode today: \(finalMode.title).")
+        return parts.joined(separator: " ")
+    }
+
+    private func buildNextActionGuidance(
+        finalMode: SuggestMeSomeSessionMode,
+        buildable: Bool,
+        durationMinutes: Int,
+        activeRun: ProgramRun?,
+        coachContext: SuggestMeSomeCoachContext?
+    ) -> String {
+        guard buildable else {
+            return "Increase duration to at least 20 minutes, then rebuild this recommendation."
+        }
+
+        if coachContext?.hasPainOrDiscomfort == true {
+            return "Build a light recovery session only, then log pain-safe movement outcomes before your next recommendation."
+        }
+
+        let path: String
+        switch finalMode {
+        case .recovery:
+            path = "Build a low-stress recovery session and keep intensity controlled."
+        case .conditioning:
+            path = "Build a short conditioning-focused session and keep pacing consistent."
+        default:
+            path = "Build this session, then log effort feedback to decide whether to progress or downshift next time."
+        }
+
+        if activeRun != nil {
+            return "\(path) Keep it aligned with your active program sequence."
+        }
+        return "\(path) If the session runs long, reduce accessory volume first to stay inside \(durationMinutes) minutes."
     }
 
     // MARK: - Utility helpers

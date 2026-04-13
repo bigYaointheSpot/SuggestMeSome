@@ -612,7 +612,12 @@ struct Feature10Prompt7WatchFoundationTests {
             whyToday: "Why",
             whatChangedToday: whatChanged,
             changeSummary: changeSummary,
-            proposalAwareness: []
+            proposalAwareness: [],
+            nextStepGuidance: TodayPlanNextStepGuidance(
+                contextMode: nextProgramSession != nil ? .activeProgram : .standaloneHistoryInformed,
+                headline: "Next",
+                actions: []
+            )
         )
     }
 }
