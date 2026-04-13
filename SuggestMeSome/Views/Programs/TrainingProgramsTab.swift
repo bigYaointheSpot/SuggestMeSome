@@ -81,7 +81,6 @@ struct TrainingProgramsTab: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .frame(maxHeight: .infinity)
         .background(Color.indigo.gradient)
         .foregroundStyle(.white)
         .clipShape(RoundedRectangle(cornerRadius: 12))
