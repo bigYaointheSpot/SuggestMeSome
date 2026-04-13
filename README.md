@@ -2276,7 +2276,12 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
     - end-to-end coordinator broadcast for planned and runtime-adjusted launches
   - updated `SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests.swift` to the renamed `runtimeAdjusted` kind and added `sessionCompletion` support in the mock bridge
 - Verification runs for this prompt:
-  - xcodebuild runs were skipped per saved user preference (user builds/runs in Xcode); please run the targeted + regression slices in Xcode before shipping.
+  - targeted:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature11Prompt5WatchContinuityTests` (pass)
+  - broader regression slice:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature11Prompt5WatchContinuityTests -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests -only-testing:SuggestMeSomeTests/Feature10Prompt8IntegrationHardeningTests -only-testing:SuggestMeSomeTests/Feature11Prompt2TodayPlanExecutionFlowTests -only-testing:SuggestMeSomeTests/Feature11Prompt3StandaloneContinuityTests -only-testing:SuggestMeSomeTests/Feature7ValidationTests` (pass)
+  - compile validation:
+    - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass)
 
 ---
 
