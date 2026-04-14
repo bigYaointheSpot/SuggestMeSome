@@ -15,6 +15,7 @@ import SwiftData
 struct DailyCoachView: View {
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
 
     // MARK: Queries
 
@@ -146,6 +147,7 @@ struct DailyCoachView: View {
     @State private var pendingLaunchResolution: TodayPlanLaunchResolution?
     @State private var showingDraftReview = false
     @State private var confirmedDraftLaunch = false
+    @State private var launchRequestPendingDiscard: TodayPlanLaunchRequest?
 
     // Proposal review/confirmation
     @State private var showingProposalReview = false
@@ -238,6 +240,28 @@ struct DailyCoachView: View {
                     }
                 )
             }
+        }
+        .confirmationDialog(
+            "Discard Active Workout?",
+            isPresented: Binding(
+                get: { launchRequestPendingDiscard != nil },
+                set: { if !$0 { launchRequestPendingDiscard = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Discard Active Workout", role: .destructive) {
+                let request = launchRequestPendingDiscard
+                launchRequestPendingDiscard = nil
+                activeWorkoutSessionStore.discardSession()
+                if let request {
+                    launch(request: request)
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                launchRequestPendingDiscard = nil
+            }
+        } message: {
+            Text("Starting a new workout will delete the in-progress draft.")
         }
         .confirmationDialog(
             stagedProposalDecision?.title ?? "Confirm Decision",
@@ -1219,6 +1243,11 @@ struct DailyCoachView: View {
     }
 
     private func launch(request: TodayPlanLaunchRequest) {
+        if activeWorkoutSessionStore.hasActiveSession {
+            launchRequestPendingDiscard = request
+            return
+        }
+
         guard let run = focusRun,
               let session = todayPlan.recommendation.nextProgramSession else { return }
         let resolution = TodayPlanActionCoordinator.resolveLaunch(

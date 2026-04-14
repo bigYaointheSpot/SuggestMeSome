@@ -81,6 +81,7 @@ struct DashboardView: View {
     @Binding var selectedTab: Int
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
     @Query(sort: \Workout.date, order: .reverse) private var allWorkouts: [Workout]
     @Query(filter: #Predicate<ProgramRun> { run in run.isCompleted == false })
     private var activeProgramRuns: [ProgramRun]
@@ -93,6 +94,13 @@ struct DashboardView: View {
     @Query private var allProposals: [AdaptationProposal]
 
     @State private var viewModel = DashboardViewModel()
+    @State private var pendingWorkoutStart: PendingWorkoutStart?
+
+    private enum PendingWorkoutStart {
+        case empty
+        case generatedWorkout
+        case programWorkout
+    }
 
     // MARK: - Body
 
@@ -143,7 +151,11 @@ struct DashboardView: View {
                 DeferredNavigationService.launchAfterSheetDismissIfNeeded(
                     hasPendingDestination: viewModel.pendingGeneratedWorkout != nil
                 ) {
+                    if activeWorkoutSessionStore.hasActiveSession {
+                        pendingWorkoutStart = .generatedWorkout
+                    } else {
                         viewModel.showingGeneratedWorkout = true
+                    }
                 }
             }) {
                 GeneratorSheetRootView { gw in
@@ -155,13 +167,45 @@ struct DashboardView: View {
                 DeferredNavigationService.launchAfterSheetDismissIfNeeded(
                     hasPendingDestination: viewModel.pendingProgramWorkout != nil
                 ) {
+                    if activeWorkoutSessionStore.hasActiveSession {
+                        pendingWorkoutStart = .programWorkout
+                    } else {
                         viewModel.showingProgramWorkout = true
+                    }
                 }
             }) {
                 CompleteProgramWorkoutSheet(activeRuns: Array(viewModel.activeProgramRuns)) { ctx in
                     viewModel.pendingProgramWorkout = ctx
                     viewModel.showingCompleteProgramSheet = false
                 }
+            }
+            .confirmationDialog(
+                "Discard Active Workout?",
+                isPresented: .init(
+                    get: { pendingWorkoutStart != nil },
+                    set: {
+                        if !$0 {
+                            discardPendingReplacement(start: pendingWorkoutStart)
+                            pendingWorkoutStart = nil
+                        }
+                    }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Discard Active Workout", role: .destructive) {
+                    let start = pendingWorkoutStart
+                    pendingWorkoutStart = nil
+                    activeWorkoutSessionStore.discardSession()
+                    if let start {
+                        performWorkoutStart(start)
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    discardPendingReplacement(start: pendingWorkoutStart)
+                    pendingWorkoutStart = nil
+                }
+            } message: {
+                Text("Starting a new workout will delete the in-progress draft.")
             }
         }
         .onAppear {
@@ -190,9 +234,10 @@ struct DashboardView: View {
                 .font(.title3.weight(.bold))
             HStack(spacing: 10) {
                 quickStartButton(icon: "play.fill", label: "Empty", color: .indigo) {
-                    viewModel.navigateToEmptyWorkout = true
+                    requestWorkoutStart(.empty)
                 }
                 quickStartButton(icon: "wand.and.stars", label: "Suggest", color: .indigo) {
+                    viewModel.pendingGeneratedWorkout = nil
                     viewModel.showingGeneratorSheet = true
                 }
                 quickStartButton(
@@ -204,10 +249,41 @@ struct DashboardView: View {
                     if viewModel.activeProgramRuns.isEmpty {
                         selectedTab = MainTab.programs.rawValue
                     } else {
+                        viewModel.pendingProgramWorkout = nil
                         viewModel.showingCompleteProgramSheet = true
                     }
                 }
             }
+        }
+    }
+
+    private func requestWorkoutStart(_ start: PendingWorkoutStart) {
+        if activeWorkoutSessionStore.hasActiveSession {
+            pendingWorkoutStart = start
+        } else {
+            performWorkoutStart(start)
+        }
+    }
+
+    private func performWorkoutStart(_ start: PendingWorkoutStart) {
+        switch start {
+        case .empty:
+            viewModel.navigateToEmptyWorkout = true
+        case .generatedWorkout:
+            viewModel.showingGeneratedWorkout = true
+        case .programWorkout:
+            viewModel.showingProgramWorkout = true
+        }
+    }
+
+    private func discardPendingReplacement(start: PendingWorkoutStart?) {
+        switch start {
+        case .generatedWorkout:
+            viewModel.pendingGeneratedWorkout = nil
+        case .programWorkout:
+            viewModel.pendingProgramWorkout = nil
+        case .empty, nil:
+            break
         }
     }
 

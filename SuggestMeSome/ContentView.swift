@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import Combine
 
 // MARK: - Main Tab Identity
 
@@ -44,7 +45,9 @@ enum MainTab: Int, CaseIterable {
 // MARK: - ContentView
 
 struct ContentView: View {
+    @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
     @State private var selectedTab: Int = MainTab.dailyCoach.rawValue
+    @State private var showingActiveWorkout = false
     @AppStorage("appColorScheme") private var appColorScheme: String = "system"
 
     private var preferredColorScheme: ColorScheme? {
@@ -52,35 +55,109 @@ struct ContentView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            DailyCoachView()
-                .tabItem {
-                    Label(MainTab.dailyCoach.label, systemImage: MainTab.dailyCoach.systemImage)
+        VStack(spacing: 0) {
+            if activeWorkoutSessionStore.hasActiveSession {
+                ActiveWorkoutBanner {
+                    showingActiveWorkout = true
                 }
-                .tag(MainTab.dailyCoach.rawValue)
-            DashboardView(selectedTab: $selectedTab)
-                .tabItem {
-                    Label(MainTab.dashboard.label, systemImage: MainTab.dashboard.systemImage)
-                }
-                .tag(MainTab.dashboard.rawValue)
-            WorkoutsTab()
-                .tabItem {
-                    Label(MainTab.workouts.label, systemImage: MainTab.workouts.systemImage)
-                }
-                .tag(MainTab.workouts.rawValue)
-            TrainingProgramsTab()
-                .tabItem {
-                    Label(MainTab.programs.label, systemImage: MainTab.programs.systemImage)
-                }
-                .tag(MainTab.programs.rawValue)
-            SettingsTab()
-                .tabItem {
-                    Label(MainTab.settings.label, systemImage: MainTab.settings.systemImage)
-                }
-                .tag(MainTab.settings.rawValue)
+            }
+
+            TabView(selection: $selectedTab) {
+                DailyCoachView()
+                    .tabItem {
+                        Label(MainTab.dailyCoach.label, systemImage: MainTab.dailyCoach.systemImage)
+                    }
+                    .tag(MainTab.dailyCoach.rawValue)
+                DashboardView(selectedTab: $selectedTab)
+                    .tabItem {
+                        Label(MainTab.dashboard.label, systemImage: MainTab.dashboard.systemImage)
+                    }
+                    .tag(MainTab.dashboard.rawValue)
+                WorkoutsTab()
+                    .tabItem {
+                        Label(MainTab.workouts.label, systemImage: MainTab.workouts.systemImage)
+                    }
+                    .tag(MainTab.workouts.rawValue)
+                TrainingProgramsTab()
+                    .tabItem {
+                        Label(MainTab.programs.label, systemImage: MainTab.programs.systemImage)
+                    }
+                    .tag(MainTab.programs.rawValue)
+                SettingsTab()
+                    .tabItem {
+                        Label(MainTab.settings.label, systemImage: MainTab.settings.systemImage)
+                    }
+                    .tag(MainTab.settings.rawValue)
+            }
         }
         .tint(.indigo)
         .preferredColorScheme(preferredColorScheme)
+        .sheet(isPresented: $showingActiveWorkout) {
+            NavigationStack {
+                WorkoutView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") {
+                                showingActiveWorkout = false
+                            }
+                        }
+                    }
+            }
+        }
+    }
+}
+
+// MARK: - Active Workout Banner
+
+struct ActiveWorkoutBanner: View {
+    @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
+    @State private var elapsedSeconds = 0
+
+    let onResume: () -> Void
+
+    var body: some View {
+        if let session = activeWorkoutSessionStore.session {
+            Button(action: onResume) {
+                HStack(spacing: 10) {
+                    Image(systemName: "timer")
+                        .font(.headline)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Workout in Progress")
+                            .font(.subheadline.weight(.semibold))
+                        Text("\(formattedElapsed) · \(exerciseCountLabel(session.exerciseEntries.count))")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                    Spacer()
+                    Text("Resume")
+                        .font(.subheadline.weight(.semibold))
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 10)
+                .foregroundStyle(.white)
+                .background(Color.indigo)
+            }
+            .buttonStyle(.plain)
+            .onAppear {
+                elapsedSeconds = Int(Date.now.timeIntervalSince(session.startTime))
+            }
+            .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+                elapsedSeconds = Int(Date.now.timeIntervalSince(session.startTime))
+            }
+        }
+    }
+
+    private var formattedElapsed: String {
+        let h = elapsedSeconds / 3600
+        let m = (elapsedSeconds % 3600) / 60
+        let s = elapsedSeconds % 60
+        return String(format: "%02d:%02d:%02d", h, m, s)
+    }
+
+    private func exerciseCountLabel(_ count: Int) -> String {
+        count == 1 ? "1 exercise" : "\(count) exercises"
     }
 }
 
@@ -88,6 +165,7 @@ struct ContentView: View {
 
 struct WorkoutsTab: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
     @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
     @Query(sort: \MuscleGroup.name) private var muscleGroups: [MuscleGroup]
     @Query(filter: #Predicate<ProgramRun> { run in run.isCompleted == false })
@@ -106,6 +184,7 @@ struct WorkoutsTab: View {
     @State private var workoutToDelete: Workout?
 
     // MARK: Generator flow
+    @State private var showingEmptyWorkout = false
     @State private var showingGeneratorSheet   = false
     @State private var pendingGeneratedWorkout: GeneratedWorkout?
     @State private var showingGeneratedWorkout = false
@@ -114,6 +193,13 @@ struct WorkoutsTab: View {
     @State private var showingCompleteProgramSheet = false
     @State private var pendingProgramWorkout: ProgramWorkoutContext?
     @State private var showingProgramWorkout = false
+    @State private var pendingWorkoutStart: PendingWorkoutStart?
+
+    private enum PendingWorkoutStart {
+        case empty
+        case generatedWorkout
+        case programWorkout
+    }
 
     // MARK: - Computed
 
@@ -171,6 +257,9 @@ struct WorkoutsTab: View {
             }
             .navigationTitle("SuggestMeSome")
             .navigationBarTitleDisplayMode(.large)
+            .navigationDestination(isPresented: $showingEmptyWorkout) {
+                WorkoutView()
+            }
             .sheet(isPresented: $showingExerciseFilter) {
                 ExerciseFilterSheet(
                     muscleGroups: muscleGroups,
@@ -182,7 +271,11 @@ struct WorkoutsTab: View {
                 DeferredNavigationService.launchAfterSheetDismissIfNeeded(
                     hasPendingDestination: pendingGeneratedWorkout != nil
                 ) {
+                    if activeWorkoutSessionStore.hasActiveSession {
+                        pendingWorkoutStart = .generatedWorkout
+                    } else {
                         showingGeneratedWorkout = true
+                    }
                 }
             }) {
                 GeneratorSheetRootView { gw in
@@ -197,7 +290,11 @@ struct WorkoutsTab: View {
                 DeferredNavigationService.launchAfterSheetDismissIfNeeded(
                     hasPendingDestination: pendingProgramWorkout != nil
                 ) {
+                    if activeWorkoutSessionStore.hasActiveSession {
+                        pendingWorkoutStart = .programWorkout
+                    } else {
                         showingProgramWorkout = true
+                    }
                 }
             }) {
                 CompleteProgramWorkoutSheet(activeRuns: Array(activeProgramRuns)) { ctx in
@@ -209,6 +306,34 @@ struct WorkoutsTab: View {
                 if let pw = pendingProgramWorkout {
                     WorkoutView(programWorkout: pw)
                 }
+            }
+            .confirmationDialog(
+                "Discard Active Workout?",
+                isPresented: .init(
+                    get: { pendingWorkoutStart != nil },
+                    set: {
+                        if !$0 {
+                            discardPendingReplacement(start: pendingWorkoutStart)
+                            pendingWorkoutStart = nil
+                        }
+                    }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Discard Active Workout", role: .destructive) {
+                    let start = pendingWorkoutStart
+                    pendingWorkoutStart = nil
+                    activeWorkoutSessionStore.discardSession()
+                    if let start {
+                        performWorkoutStart(start)
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    discardPendingReplacement(start: pendingWorkoutStart)
+                    pendingWorkoutStart = nil
+                }
+            } message: {
+                Text("Starting a new workout will delete the in-progress draft.")
             }
             .alert("Delete Workout?", isPresented: .init(
                 get: { workoutToDelete != nil },
@@ -229,8 +354,8 @@ struct WorkoutsTab: View {
 
     private var actionButtonRow: some View {
         HStack(spacing: 8) {
-            NavigationLink {
-                WorkoutView()
+            Button {
+                requestWorkoutStart(.empty)
             } label: {
                 Label("Start Workout", systemImage: "play.fill")
                     .font(.subheadline.weight(.semibold))
@@ -244,6 +369,7 @@ struct WorkoutsTab: View {
             }
 
             Button {
+                pendingGeneratedWorkout = nil
                 showingGeneratorSheet = true
             } label: {
                 Label("SuggestMeSome", systemImage: "wand.and.stars")
@@ -259,6 +385,7 @@ struct WorkoutsTab: View {
 
             if !activeProgramRuns.isEmpty {
                 Button {
+                    pendingProgramWorkout = nil
                     showingCompleteProgramSheet = true
                 } label: {
                     Label("Complete Program", systemImage: "checkmark.circle")
@@ -276,6 +403,36 @@ struct WorkoutsTab: View {
         .padding(.horizontal)
         .padding(.top, 12)
         .padding(.bottom, 8)
+    }
+
+    private func requestWorkoutStart(_ start: PendingWorkoutStart) {
+        if activeWorkoutSessionStore.hasActiveSession {
+            pendingWorkoutStart = start
+        } else {
+            performWorkoutStart(start)
+        }
+    }
+
+    private func performWorkoutStart(_ start: PendingWorkoutStart) {
+        switch start {
+        case .empty:
+            showingEmptyWorkout = true
+        case .generatedWorkout:
+            showingGeneratedWorkout = true
+        case .programWorkout:
+            showingProgramWorkout = true
+        }
+    }
+
+    private func discardPendingReplacement(start: PendingWorkoutStart?) {
+        switch start {
+        case .generatedWorkout:
+            pendingGeneratedWorkout = nil
+        case .programWorkout:
+            pendingProgramWorkout = nil
+        case .empty, nil:
+            break
+        }
     }
 
     private var filterBar: some View {

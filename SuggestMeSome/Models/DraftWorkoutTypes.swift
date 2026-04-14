@@ -10,7 +10,7 @@ import Foundation
 
 // MARK: - DraftSet
 
-struct DraftSet: Identifiable {
+struct DraftSet: Identifiable, Codable, Equatable {
     let id: UUID
     var setNumber: Int
     var repsText: String
@@ -30,7 +30,7 @@ struct DraftSet: Identifiable {
 
 // MARK: - DraftExerciseEntry
 
-struct DraftExerciseEntry: Identifiable {
+struct DraftExerciseEntry: Identifiable, Codable, Equatable {
     let id: UUID
     var exerciseName: String
     var unit: WeightUnit

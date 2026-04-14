@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct SuggestMeSomeApp: App {
+    @State private var activeWorkoutSessionStore = ActiveWorkoutSessionStore()
+
     private static let sharedSchema = Schema([
             MuscleGroup.self,
             Exercise.self,
@@ -85,6 +87,7 @@ struct SuggestMeSomeApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(activeWorkoutSessionStore)
                 .onAppear {
                     // v1.0: Populates default MuscleGroups and Exercises on first launch.
                     seedDefaultDataIfNeeded(context: sharedModelContainer.mainContext)

@@ -20,6 +20,7 @@ struct WorkoutView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
 
     @Query(sort: \MuscleGroup.name) private var muscleGroups: [MuscleGroup]
     @AppStorage("healthkit.enabled") private var healthKitEnabled = false
@@ -90,63 +91,19 @@ struct WorkoutView: View {
             Text("This will save your workout and mark any new personal records.")
         }
         .onAppear {
-            guard exerciseEntries.isEmpty else { return }
-            if let draft = preparedDraft {
-                exerciseEntries = draft
-                startTime = Date.now
-                isActive = true
-            } else if let gw = generatedWorkout {
-                exerciseEntries = gw.exercises.enumerated().map { index, genExercise in
-                    if genExercise.exercise.exerciseType == .cardio {
-                        let totalSeconds = Int(genExercise.effectiveTimeMinutes * 60)
-                        let mins = totalSeconds / 60
-                        let secs = totalSeconds % 60
-                        return DraftExerciseEntry(
-                            exerciseName: genExercise.exercise.name,
-                            unit: AppPreferences.defaultWeightUnit,
-                            orderIndex: index,
-                            sets: [],
-                            isCardio: true,
-                            cardioMinutesText: mins > 0 ? "\(mins)" : "",
-                            cardioSecondsText: secs > 0 ? "\(secs)" : ""
-                        )
-                    }
-                    let unit = genExercise.sets.first?.unit ?? AppPreferences.defaultWeightUnit
-                    let draftSets = genExercise.sets.map { genSet in
-                        DraftSet(
-                            setNumber: genSet.setNumber,
-                            repsText: "\(genSet.suggestedReps)",
-                            weightText: formatGeneratedWeight(genSet.suggestedWeight),
-                            isWarmup: genSet.isWarmup
-                        )
-                    }
-                    return DraftExerciseEntry(
-                        exerciseName: genExercise.exercise.name,
-                        unit: unit,
-                        orderIndex: index,
-                        sets: draftSets
-                    )
-                }
-                startTime = Date.now
-                isActive = true
-            } else if let pw = programWorkout {
-                let allPersonalRecords = TrainingContextQueryService.fetchPersonalRecords(context: modelContext)
-                exerciseEntries = ProgramWorkoutDraftBuilder.buildEntries(from: pw.exercises) { anchor in
-                    TrainingContextQueryService.preferredUnit(
-                        for: anchor.exerciseName,
-                        in: allPersonalRecords
-                    )
-                }
-                startTime = Date.now
-                isActive = true
-            }
+            configureWorkoutSession()
         }
+        .onChange(of: isActive) { persistActiveSessionIfNeeded() }
+        .onChange(of: startTime) { persistActiveSessionIfNeeded() }
+        .onChange(of: exerciseEntries) { persistActiveSessionIfNeeded() }
+        .onChange(of: caloriesText) { persistActiveSessionIfNeeded() }
+        .onChange(of: comments) { persistActiveSessionIfNeeded() }
     }
 
     // MARK: - Sub-views
 
     private var dateHeader: some View {
-        Text(Date.now, format: .dateTime.weekday(.wide).month(.wide).day().year())
+        Text(startTime ?? Date.now, format: .dateTime.weekday(.wide).month(.wide).day().year())
             .font(.title2.weight(.semibold))
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.horizontal)
@@ -168,8 +125,7 @@ struct WorkoutView: View {
                 }
             } else {
                 Button {
-                    startTime = Date.now
-                    isActive = true
+                    startActiveSession(with: [], programContext: nil)
                 } label: {
                     Label("Start Workout", systemImage: "play.fill")
                         .font(.headline)
@@ -274,6 +230,149 @@ struct WorkoutView: View {
         return w.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(w)) : String(format: "%.1f", w)
     }
 
+    private func configureWorkoutSession() {
+        if let activeSession = activeWorkoutSessionStore.session {
+            applyActiveSession(activeSession)
+            return
+        }
+
+        guard exerciseEntries.isEmpty else { return }
+
+        if let draft = preparedDraft {
+            startActiveSession(with: draft, programContext: activeProgramContext(from: programWorkout))
+        } else if let generatedWorkout {
+            startActiveSession(with: draftEntries(from: generatedWorkout), programContext: nil)
+        } else if let programWorkout {
+            startActiveSession(
+                with: draftEntries(from: programWorkout),
+                programContext: activeProgramContext(from: programWorkout)
+            )
+        }
+    }
+
+    private func startActiveSession(
+        with entries: [DraftExerciseEntry],
+        programContext: ActiveWorkoutProgramContext?
+    ) {
+        let now = Date.now
+        startTime = now
+        elapsedSeconds = 0
+        exerciseEntries = entries
+        caloriesText = ""
+        comments = ""
+        isActive = true
+        activeWorkoutSessionStore.startSession(
+            startTime: now,
+            exerciseEntries: entries,
+            programContext: programContext
+        )
+    }
+
+    private func applyActiveSession(_ session: ActiveWorkoutSession) {
+        startTime = session.startTime
+        elapsedSeconds = max(0, Int(Date.now.timeIntervalSince(session.startTime)))
+        exerciseEntries = session.exerciseEntries
+        caloriesText = session.caloriesText
+        comments = session.comments
+        isActive = true
+    }
+
+    private func persistActiveSessionIfNeeded() {
+        guard isActive, let startTime else { return }
+        activeWorkoutSessionStore.updateSession(
+            startTime: startTime,
+            exerciseEntries: exerciseEntries,
+            caloriesText: caloriesText,
+            comments: comments,
+            programContext: activeProgramContext(from: programWorkout) ?? activeWorkoutSessionStore.session?.programContext
+        )
+    }
+
+    private func activeProgramContext(from programWorkout: ProgramWorkoutContext?) -> ActiveWorkoutProgramContext? {
+        guard let programWorkout else { return nil }
+        return ActiveWorkoutProgramContext(
+            programRunID: programWorkout.programRun.id,
+            weekNumber: programWorkout.weekNumber,
+            sessionNumber: programWorkout.sessionNumber
+        )
+    }
+
+    private func workoutSaveProgramContext() -> WorkoutSaveProgramContext? {
+        if let programWorkout {
+            return WorkoutSaveProgramContext(
+                run: programWorkout.programRun,
+                weekNumber: programWorkout.weekNumber,
+                sessionNumber: programWorkout.sessionNumber
+            )
+        }
+
+        guard let activeProgramContext = activeWorkoutSessionStore.session?.programContext,
+              let run = fetchProgramRun(id: activeProgramContext.programRunID) else {
+            return nil
+        }
+
+        return WorkoutSaveProgramContext(
+            run: run,
+            weekNumber: activeProgramContext.weekNumber,
+            sessionNumber: activeProgramContext.sessionNumber
+        )
+    }
+
+    private func fetchProgramRun(id: UUID) -> ProgramRun? {
+        var descriptor = FetchDescriptor<ProgramRun>(
+            predicate: #Predicate<ProgramRun> { run in
+                run.id == id
+            }
+        )
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    private func draftEntries(from generatedWorkout: GeneratedWorkout) -> [DraftExerciseEntry] {
+        generatedWorkout.exercises.enumerated().map { index, genExercise in
+            if genExercise.exercise.exerciseType == .cardio {
+                let totalSeconds = Int(genExercise.effectiveTimeMinutes * 60)
+                let mins = totalSeconds / 60
+                let secs = totalSeconds % 60
+                return DraftExerciseEntry(
+                    exerciseName: genExercise.exercise.name,
+                    unit: AppPreferences.defaultWeightUnit,
+                    orderIndex: index,
+                    sets: [],
+                    isCardio: true,
+                    cardioMinutesText: mins > 0 ? "\(mins)" : "",
+                    cardioSecondsText: secs > 0 ? "\(secs)" : ""
+                )
+            }
+
+            let unit = genExercise.sets.first?.unit ?? AppPreferences.defaultWeightUnit
+            let draftSets = genExercise.sets.map { genSet in
+                DraftSet(
+                    setNumber: genSet.setNumber,
+                    repsText: "\(genSet.suggestedReps)",
+                    weightText: formatGeneratedWeight(genSet.suggestedWeight),
+                    isWarmup: genSet.isWarmup
+                )
+            }
+            return DraftExerciseEntry(
+                exerciseName: genExercise.exercise.name,
+                unit: unit,
+                orderIndex: index,
+                sets: draftSets
+            )
+        }
+    }
+
+    private func draftEntries(from programWorkout: ProgramWorkoutContext) -> [DraftExerciseEntry] {
+        let allPersonalRecords = TrainingContextQueryService.fetchPersonalRecords(context: modelContext)
+        return ProgramWorkoutDraftBuilder.buildEntries(from: programWorkout.exercises) { anchor in
+            TrainingContextQueryService.preferredUnit(
+                for: anchor.exerciseName,
+                in: allPersonalRecords
+            )
+        }
+    }
+
     private var formattedElapsed: String {
         let h = elapsedSeconds / 3600
         let m = (elapsedSeconds % 3600) / 60
@@ -292,17 +391,13 @@ struct WorkoutView: View {
             caloriesText: caloriesText,
             comments: comments,
             exerciseEntries: exerciseEntries,
-            programContext: programWorkout.map {
-                WorkoutSaveProgramContext(
-                    run: $0.programRun,
-                    weekNumber: $0.weekNumber,
-                    sessionNumber: $0.sessionNumber
-                )
-            },
+            programContext: workoutSaveProgramContext(),
             healthKitEnabled: healthKitEnabled,
             healthKitWritebackEnabled: writeAppWorkoutsToHealthKit
         )
         let savedWorkout = coordinator.saveWorkout(using: request)
+        activeWorkoutSessionStore.discardSession()
+        isActive = false
 
         let prCount = savedWorkout.exerciseEntries.flatMap(\.sets).filter(\.isPR).count
         if prCount > 0 {
