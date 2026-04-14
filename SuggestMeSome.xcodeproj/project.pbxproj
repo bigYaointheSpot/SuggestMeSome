@@ -10,6 +10,7 @@
 		F81200012F83000000000001 /* SuggestMeSomeWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = F81200042F83000000000004 /* SuggestMeSomeWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F81200022F83000000000002 /* WatchPayloadContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81200052F83000000000005 /* WatchPayloadContracts.swift */; };
 		F81200032F83000000000003 /* WatchCompanionTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81200062F83000000000006 /* WatchCompanionTypes.swift */; };
+		F81200202F84000000000020 /* WatchBridgeMessageCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81200212F84000000000021 /* WatchBridgeMessageCodec.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +55,7 @@
 		F81200042F83000000000004 /* SuggestMeSomeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SuggestMeSomeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F81200052F83000000000005 /* WatchPayloadContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestMeSome/Models/WatchPayloadContracts.swift; sourceTree = "<group>"; };
 		F81200062F83000000000006 /* WatchCompanionTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestMeSome/Models/WatchCompanionTypes.swift; sourceTree = "<group>"; };
+		F81200212F84000000000021 /* WatchBridgeMessageCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestMeSome/Models/WatchBridgeMessageCodec.swift; sourceTree = "<group>"; };
 		F8FB3BBD2F82D7ED0002A1DF /* SuggestMeSome.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SuggestMeSome.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F8FB3BCC2F82D7EE0002A1DF /* SuggestMeSomeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuggestMeSomeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F8FB3BD62F82D7EE0002A1DF /* SuggestMeSomeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuggestMeSomeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -119,6 +121,7 @@
 			children = (
 				F81200052F83000000000005 /* WatchPayloadContracts.swift */,
 				F81200062F83000000000006 /* WatchCompanionTypes.swift */,
+				F81200212F84000000000021 /* WatchBridgeMessageCodec.swift */,
 			);
 			name = "Shared Watch Contracts";
 			sourceTree = "<group>";
@@ -327,6 +330,7 @@
 			files = (
 				F81200022F83000000000002 /* WatchPayloadContracts.swift in Sources */,
 				F81200032F83000000000003 /* WatchCompanionTypes.swift in Sources */,
+				F81200202F84000000000020 /* WatchBridgeMessageCodec.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

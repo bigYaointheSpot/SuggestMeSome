@@ -2396,6 +2396,46 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+#### Prompt 2 [Bridge Codec and Watch Session Store] — 2026-04-13
+
+- Created a shared pure watch bridge codec:
+  - `SuggestMeSome/Models/WatchBridgeMessageCodec.swift`
+  - added the codec to the watch target's shared source list in `SuggestMeSome.xcodeproj/project.pbxproj`
+  - centralized dictionary encode/decode for `schemaVersion`, `kind`, `sentAt`, and `payloadJSON`
+  - preserved `.secondsSince1970` date coding and sorted JSON payload encoding for deterministic transport payloads
+- Refactored the iPhone bridge:
+  - `SuggestMeSome/Services/Watch/WatchCompanionBridge.swift`
+  - `DefaultWatchCompanionBridge` now builds both `transferUserInfo` and `updateApplicationContext` messages through the shared codec while keeping the existing wire shape and channel semantics intact
+- Rebuilt the watch-side receive/state foundation:
+  - `SuggestMeSomeWatch/WatchCompanionSessionStore.swift`
+  - decodes and stores `todayPlanSnapshot`, `workoutLaunch`, `workoutProgress`, `currentSessionContext`, `liveWorkoutSnapshot`, and `sessionCompletion`
+  - keeps application-context payloads latest-wins by kind
+  - queues transferred user-info events before applying them on the main actor
+  - exposes watch session support, activation, iPhone install, reachability, pending-content, and sync message status for SwiftUI
+- Wired the watch root to real observable state:
+  - `SuggestMeSomeWatch/WatchRootView.swift`
+  - active workout state still wins over Today Plan, including all workouts rather than program-only sessions
+  - completion handoff clears live workout state and returns the watch shell to the idle Today Plan surface
+  - the watch UI now surfaces iPhone reachability/sync status in both live workout and idle states
+- Added focused codec coverage:
+  - `SuggestMeSomeTests/Feature12Prompt2WatchBridgeCodecTests.swift`
+  - verifies current transport keys, payload round-trip decoding, malformed dictionary rejection, future schema detection, and payload decode failures
+- Architecture and guardrails:
+  - phone remains the source of truth for workout state, persistence, coaching, and proposal approval
+  - no watch-to-phone action sending was added
+  - no SwiftData/runtime model coupling was introduced into shared watch transport code
+  - watch-side state remains derived from existing DTOs only
+  - real-device quality is covered by the watchOS device-architecture compile command below; simulator behavior is not treated as sufficient on its own
+- Validation/build steps run:
+  - `xcodebuild -list -project SuggestMeSome.xcodeproj` (pass; schemes include `SuggestMeSome` and `SuggestMeSomeWatch`)
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature12Prompt2WatchBridgeCodecTests` (pass; 4/4 tests)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS Simulator'` (pass)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS' CODE_SIGNING_ALLOWED=NO` (pass; device-architecture compile)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass; includes embedded watch app validation)
+- Watch scheme/target used: `SuggestMeSomeWatch` / `SuggestMeSomeWatch`
+
+---
+
 
 
 ## Project Setup

@@ -136,13 +136,7 @@ extension DefaultWatchCompanionBridge {
         payload: Payload,
         now: Date = Date()
     ) -> [String: Any]? {
-        guard let payloadData = encodePayload(payload) else { return nil }
-        return [
-            "schemaVersion": WatchPayloadContractVersion.current,
-            "kind": kind.rawValue,
-            "sentAt": now.timeIntervalSince1970,
-            "payloadJSON": payloadData
-        ]
+        makeBridgeMessage(kind: kind, payload: payload, now: now)
     }
 
     static func makeContextMessage<Payload: Codable & Equatable>(
@@ -152,26 +146,27 @@ extension DefaultWatchCompanionBridge {
     ) -> [String: Any]? {
         // updateApplicationContext must be property-list-safe. We encode the
         // payload to JSON Data (allowed) and pair it with primitive metadata.
-        guard let payloadData = encodePayload(payload) else { return nil }
-        return [
-            "schemaVersion": WatchPayloadContractVersion.current,
-            "kind": kind.rawValue,
-            "sentAt": now.timeIntervalSince1970,
-            "payloadJSON": payloadData
-        ]
+        makeBridgeMessage(kind: kind, payload: payload, now: now)
+    }
+
+    static func makeBridgeMessage<Payload: Codable & Equatable>(
+        kind: WatchPayloadKind,
+        payload: Payload,
+        now: Date = Date()
+    ) -> [String: Any]? {
+        WatchBridgeMessageCodec.makeMessageIfPossible(
+            kind: kind,
+            payload: payload,
+            sentAt: now
+        )
     }
 
     static func encodePayload<Payload: Codable>(_ payload: Payload) -> Data? {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .secondsSince1970
-        encoder.outputFormatting = [.sortedKeys]
-        return try? encoder.encode(payload)
+        try? WatchBridgeMessageCodec.encodePayload(payload)
     }
 
     static func decodePayload<Payload: Codable>(_ type: Payload.Type, from data: Data) -> Payload? {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .secondsSince1970
-        return try? decoder.decode(type, from: data)
+        try? WatchBridgeMessageCodec.decodePayload(type, from: data)
     }
 }
 

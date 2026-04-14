@@ -18,13 +18,14 @@ struct WatchRootView: View {
                     WatchActiveWorkoutView(
                         liveWorkout: store.liveWorkout,
                         progressSnapshot: store.progressSnapshot,
-                        currentContext: store.currentContext
+                        currentContext: store.currentContext,
+                        sessionStatus: store.sessionStatus
                     )
                 case .todayPlan:
                     WatchTodayPlanView(
                         todayPlan: store.todayPlan,
                         completion: store.completion,
-                        connectionMessage: store.connectionMessage
+                        sessionStatus: store.sessionStatus
                     )
                 }
             }
@@ -38,6 +39,7 @@ struct WatchActiveWorkoutView: View {
     let liveWorkout: WatchLiveWorkoutSnapshot?
     let progressSnapshot: WatchWorkoutProgressSnapshot?
     let currentContext: WatchCurrentSessionContext?
+    let sessionStatus: WatchCompanionSessionStatus
 
     var body: some View {
         ScrollView {
@@ -47,6 +49,7 @@ struct WatchActiveWorkoutView: View {
                 if let currentContext {
                     currentSetSection(context: currentContext)
                 }
+                connectionStatus(sessionStatus)
             }
             .padding(.vertical, 6)
         }
@@ -127,6 +130,18 @@ struct WatchActiveWorkoutView: View {
         let minutes = clampedSeconds / 60
         let seconds = clampedSeconds % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    private func connectionStatus(_ status: WatchCompanionSessionStatus) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(status.isReachable ? .green : .secondary)
+                .frame(width: 6, height: 6)
+            Text(status.message)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
     }
 }
 
@@ -220,7 +235,7 @@ struct CrownSetLoggingControls: View {
 struct WatchTodayPlanView: View {
     let todayPlan: WatchTodayPlanSnapshot?
     let completion: WatchSessionCompletionPayload?
-    let connectionMessage: String
+    let sessionStatus: WatchCompanionSessionStatus
 
     var body: some View {
         ScrollView {
@@ -290,7 +305,7 @@ struct WatchTodayPlanView: View {
             Text("Open SuggestMeSome on iPhone to sync today's plan.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(connectionMessage)
+            Text(sessionStatus.message)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
