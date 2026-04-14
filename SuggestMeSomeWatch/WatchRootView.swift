@@ -24,7 +24,8 @@ struct WatchRootView: View {
                         liveWorkout: store.liveWorkout,
                         progressSnapshot: store.progressSnapshot,
                         currentContext: store.currentContext,
-                        sessionStatus: store.sessionStatus
+                        sessionStatus: store.sessionStatus,
+                        onExecutionAction: store.sendExecutionAction
                     )
                 case .todayPlan:
                     WatchTodayPlanView(

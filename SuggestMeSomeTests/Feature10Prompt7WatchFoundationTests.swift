@@ -743,6 +743,7 @@ private enum WatchFoundationUnwrapError: Error {
 @MainActor
 final class MockWatchCompanionBridge: WatchCompanionBridge {
     var latestStatus: WatchCompanionStatus = .unsupported()
+    var executionActionHandler: WatchExecutionActionHandler?
     var launchPayloads: [WatchWorkoutLaunchPayload] = []
     var progressSnapshots: [WatchWorkoutProgressSnapshot] = []
     var todayPlanSnapshots: [WatchTodayPlanSnapshot] = []

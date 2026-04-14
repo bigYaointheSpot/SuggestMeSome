@@ -39,6 +39,7 @@ struct DraftExerciseEntry: Identifiable, Codable, Equatable {
     var isCardio: Bool
     var cardioMinutesText: String
     var cardioSecondsText: String
+    var cardioCompletionLogged: Bool?
 
     // Optional prescription snapshot for program-driven workouts.
     var sourceProgramSessionExerciseID: UUID?
@@ -69,6 +70,7 @@ struct DraftExerciseEntry: Identifiable, Codable, Equatable {
         isCardio: Bool = false,
         cardioMinutesText: String = "",
         cardioSecondsText: String = "",
+        cardioCompletionLogged: Bool? = nil,
         sourceProgramSessionExerciseID: UUID? = nil,
         prescribedTargetSets: Int? = nil,
         prescribedTargetReps: Int? = nil,
@@ -88,6 +90,7 @@ struct DraftExerciseEntry: Identifiable, Codable, Equatable {
         self.isCardio = isCardio
         self.cardioMinutesText = cardioMinutesText
         self.cardioSecondsText = cardioSecondsText
+        self.cardioCompletionLogged = cardioCompletionLogged
         self.sourceProgramSessionExerciseID = sourceProgramSessionExerciseID
         self.prescribedTargetSets = prescribedTargetSets
         self.prescribedTargetReps = prescribedTargetReps

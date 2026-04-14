@@ -17,6 +17,7 @@ struct WatchActiveWorkoutView: View {
     let progressSnapshot: WatchWorkoutProgressSnapshot?
     let currentContext: WatchCurrentSessionContext?
     let sessionStatus: WatchCompanionSessionStatus
+    var onExecutionAction: (WatchWorkoutExecutionActionDTO) -> Void = { _ in }
 
     var body: some View {
         ScrollView {
@@ -88,23 +89,37 @@ struct WatchActiveWorkoutView: View {
             }
 
             if context.isCardio {
-                cardioTarget(context.cardioTargetSeconds)
+                cardioTarget(context)
             } else {
-                WatchCrownSetLoggingControls(context: context)
+                WatchCrownSetLoggingControls(
+                    context: context,
+                    onExecutionAction: onExecutionAction
+                )
             }
         }
         .watchCard()
     }
 
-    private func cardioTarget(_ seconds: Int?) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+    private func cardioTarget(_ context: WatchCurrentSessionContext) -> some View {
+        let targetText = context.cardioTargetSeconds.map { WatchDurationFormatter.format($0) } ?? "Open on iPhone"
+        return VStack(alignment: .leading, spacing: 3) {
             Text("Target")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
                 .tracking(0.4)
-            Text(seconds.map(WatchDurationFormatter.format) ?? "Open on iPhone")
+            Text(targetText)
                 .font(.title3.monospacedDigit().weight(.semibold))
+            Button("Mark Complete") {
+                onExecutionAction(
+                    makeAction(
+                        .completeCardioBlock,
+                        context: context
+                    )
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
         }
     }
 
@@ -117,6 +132,21 @@ struct WatchActiveWorkoutView: View {
         }
         return "Exercise \(context.exerciseIndex + 1) of \(context.totalExercisesInSession)"
     }
+
+    private func makeAction(
+        _ kind: WatchWorkoutExecutionActionKind,
+        context: WatchCurrentSessionContext,
+        ticks: Int? = nil
+    ) -> WatchWorkoutExecutionActionDTO {
+        WatchWorkoutExecutionActionDTO(
+            workoutID: context.workoutID,
+            sessionVersionStableID: context.sessionVersionStableID,
+            actionKind: kind,
+            exerciseIndex: context.exerciseIndex,
+            setNumber: context.currentSetNumber ?? context.nextSetNumber,
+            ticks: ticks
+        )
+    }
 }
 
 // MARK: - Crown-first Set Logging Controls
@@ -128,17 +158,26 @@ struct WatchCrownSetLoggingControls: View {
     }
 
     let context: WatchCurrentSessionContext
+    let onExecutionAction: (WatchWorkoutExecutionActionDTO) -> Void
 
     @State private var repsValue: Double
     @State private var weightValue: Double
+    @State private var lastSentRepsValue: Double
+    @State private var lastSentWeightValue: Double
     @FocusState private var focusedField: FocusedField?
 
-    init(context: WatchCurrentSessionContext) {
+    init(
+        context: WatchCurrentSessionContext,
+        onExecutionAction: @escaping (WatchWorkoutExecutionActionDTO) -> Void = { _ in }
+    ) {
         self.context = context
+        self.onExecutionAction = onExecutionAction
         let initialReps = context.currentSetCompletedReps ?? context.nextPrescribedReps ?? 0
         let initialWeight = context.currentSetCompletedWeight ?? context.nextPrescribedWeight ?? 0
         _repsValue = State(initialValue: Double(initialReps))
         _weightValue = State(initialValue: initialWeight)
+        _lastSentRepsValue = State(initialValue: Double(initialReps))
+        _lastSentWeightValue = State(initialValue: initialWeight)
     }
 
     var body: some View {
@@ -157,6 +196,7 @@ struct WatchCrownSetLoggingControls: View {
                 isContinuous: false,
                 isHapticFeedbackEnabled: true
             )
+            .onChange(of: repsValue) { _, newValue in sendRepsDelta(newValue) }
 
             crownRow(
                 title: "Weight",
@@ -172,6 +212,13 @@ struct WatchCrownSetLoggingControls: View {
                 isContinuous: false,
                 isHapticFeedbackEnabled: true
             )
+            .onChange(of: weightValue) { _, newValue in sendWeightDelta(newValue) }
+
+            Button("Complete Set") {
+                onExecutionAction(makeAction(.completeCurrentSet))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
         }
         .onAppear {
             if focusedField == nil {
@@ -213,6 +260,41 @@ struct WatchCrownSetLoggingControls: View {
         .onTapGesture {
             focusedField = field
         }
+    }
+
+    private func sendRepsDelta(_ newValue: Double) {
+        let newReps = Int(newValue.rounded())
+        let oldReps = Int(lastSentRepsValue.rounded())
+        let ticks = newReps - oldReps
+        guard ticks != 0 else { return }
+        lastSentRepsValue = Double(newReps)
+        onExecutionAction(
+            makeAction(.applyCrownTicksToCurrentSetReps, ticks: ticks)
+        )
+    }
+
+    private func sendWeightDelta(_ newValue: Double) {
+        let step = max(0.1, context.crownWeightStep ?? 5)
+        let ticks = Int(((newValue - lastSentWeightValue) / step).rounded())
+        guard ticks != 0 else { return }
+        lastSentWeightValue += Double(ticks) * step
+        onExecutionAction(
+            makeAction(.applyCrownTicksToCurrentSetWeight, ticks: ticks)
+        )
+    }
+
+    private func makeAction(
+        _ kind: WatchWorkoutExecutionActionKind,
+        ticks: Int? = nil
+    ) -> WatchWorkoutExecutionActionDTO {
+        WatchWorkoutExecutionActionDTO(
+            workoutID: context.workoutID,
+            sessionVersionStableID: context.sessionVersionStableID,
+            actionKind: kind,
+            exerciseIndex: context.exerciseIndex,
+            setNumber: context.currentSetNumber ?? context.nextSetNumber,
+            ticks: ticks
+        )
     }
 }
 

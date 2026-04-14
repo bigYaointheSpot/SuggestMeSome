@@ -98,6 +98,7 @@ struct WorkoutView: View {
         .onChange(of: exerciseEntries) { persistActiveSessionIfNeeded() }
         .onChange(of: caloriesText) { persistActiveSessionIfNeeded() }
         .onChange(of: comments) { persistActiveSessionIfNeeded() }
+        .onChange(of: activeWorkoutSessionStore.session) { syncWithActiveSessionIfNeeded($0) }
     }
 
     // MARK: - Sub-views
@@ -233,6 +234,7 @@ struct WorkoutView: View {
     private func configureWorkoutSession() {
         if let activeSession = activeWorkoutSessionStore.session {
             applyActiveSession(activeSession)
+            broadcastActiveSessionToWatch()
             return
         }
 
@@ -266,6 +268,7 @@ struct WorkoutView: View {
             exerciseEntries: entries,
             programContext: programContext
         )
+        broadcastActiveSessionToWatch()
     }
 
     private func applyActiveSession(_ session: ActiveWorkoutSession) {
@@ -286,6 +289,29 @@ struct WorkoutView: View {
             comments: comments,
             programContext: activeProgramContext(from: programWorkout) ?? activeWorkoutSessionStore.session?.programContext
         )
+        broadcastActiveSessionToWatch()
+    }
+
+    private func syncWithActiveSessionIfNeeded(_ session: ActiveWorkoutSession?) {
+        guard let session else { return }
+        guard isActive else {
+            applyActiveSession(session)
+            return
+        }
+        if startTime == session.startTime,
+           exerciseEntries == session.exerciseEntries,
+           caloriesText == session.caloriesText,
+           comments == session.comments {
+            return
+        }
+        applyActiveSession(session)
+    }
+
+    private func broadcastActiveSessionToWatch() {
+        guard let session = activeWorkoutSessionStore.session else { return }
+        Task { @MainActor in
+            await WatchSessionCoordinator.shared.broadcastActiveSessionState(session)
+        }
     }
 
     private func activeProgramContext(from programWorkout: ProgramWorkoutContext?) -> ActiveWorkoutProgramContext? {

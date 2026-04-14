@@ -2506,6 +2506,69 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+#### Prompt 4 [Watch Actions and Phone Workout Control] — 2026-04-13
+
+- Added shared watch action contracts:
+  - edited `SuggestMeSome/Models/WatchPayloadContracts.swift`
+  - added `WatchWorkoutExecutionActionDTO` with explicit `actionSchemaVersion`, `actionID`, `workoutID`, optional cursor fields, optional `sessionVersionStableID`, and `createdAt`
+  - added narrow action kinds for current-set weight ticks, current-set reps ticks, complete current set, and complete cardio block
+  - kept the existing iPhone-to-watch payload kinds intact and added only the new `workoutExecutionAction` kind
+- Extended bridge transport in both directions:
+  - edited `SuggestMeSome/Services/Watch/WatchCompanionBridge.swift`
+  - `DefaultWatchCompanionBridge.shared` now receives `workoutExecutionAction` payloads from `sendMessage` and queued `transferUserInfo`
+  - inbound action decoding goes through `WatchBridgeMessageCodec` and ignores malformed, unsupported-schema, or non-action payloads
+  - edited `SuggestMeSomeWatch/WatchCompanionSessionStore.swift`
+  - watch actions send immediately when the iPhone is reachable and fall back to queued `transferUserInfo` when not reachable
+- Wired phone-side application into the active draft owner:
+  - edited `SuggestMeSome/Services/ActiveWorkoutSessionStore.swift`
+  - actions apply only to the current `ActiveWorkoutSession.exerciseEntries`
+  - saved/completed `Workout`, `ExerciseEntry`, and `SetEntry` records are never mutated by watch actions
+  - mismatched workout IDs, duplicate action IDs, stale cursor actions, unsupported schemas, and incompatible action shapes are ignored
+  - edited `SuggestMeSome/Models/DraftWorkoutTypes.swift` to add optional `cardioCompletionLogged` for watch-cardio completion without inventing duration values
+- Added pure action helpers and rebroadcasts:
+  - edited `SuggestMeSome/Services/Watch/WatchSessionCoordinator.swift`
+  - added pure helpers for reps ticks, cardio completion, and DTO-driven action application alongside the existing weight and set-completion helpers
+  - `WatchSessionCoordinator.shared` installs the iPhone action handler at app launch and rebroadcasts updated live workout + current-session context after an action applies
+  - edited `SuggestMeSome/SuggestMeSomeApp.swift` to install the handler against the shared `ActiveWorkoutSessionStore`
+  - edited `SuggestMeSome/Views/Workout/WorkoutView.swift` so all active workout paths broadcast live/current state and sync visible draft state when watch actions update the store
+  - edited `SuggestMeSome/Views/Settings/HealthDataSettingsView.swift` to reuse the shared watch bridge instead of creating a competing `WCSession` delegate
+- Updated watch execution controls:
+  - edited `SuggestMeSomeWatch/WatchActiveWorkoutView.swift`
+  - edited `SuggestMeSomeWatch/WatchRootView.swift`
+  - reps and weight remain two stacked Digital Crown-focused controls
+  - crown changes emit versioned watch action DTOs instead of local-only state changes
+  - strength sessions add a narrow `Complete Set` action
+  - cardio sessions add a narrow `Mark Complete` action
+- Added focused tests:
+  - created `SuggestMeSomeTests/Feature12Prompt4WatchActionsTests.swift`
+  - edited `SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests.swift` to keep the existing mock bridge conforming to the extended bridge protocol
+  - coverage includes action DTO encode/decode, pure reps/weight/complete/cardio helpers, stale cursor ignore, and no-active-workout ignore
+- User-visible behavior:
+  - during any active workout, the watch can send current-set reps ticks, current-set weight ticks, complete-set actions, and cardio-complete actions to the iPhone
+  - the iPhone remains the state and persistence authority; the watch only requests narrow live-workout actions
+  - after an accepted action, the watch receives refreshed live progress and current-session context
+  - active workout state is broadcast from empty/manual workouts, SuggestMeSome generated workouts, program workouts, Daily Coach prepared workouts, and resumed in-progress sessions
+- Architecture and guardrails:
+  - no proposal review/approval moved to watch
+  - no save logic moved to watch
+  - no broad free-form watch editing was introduced
+  - no backend/cloud concepts were introduced
+  - watch-originated actions mutate only the active in-progress draft through `ActiveWorkoutSessionStore`
+  - stale or mismatched actions are ignored instead of creating duplicate or race-prone state
+  - real-device quality was checked with a generic watchOS device-architecture compile, not simulator-only validation
+- Validation/build/tests run:
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature12Prompt4WatchActionsTests` (initially failed on a Swift precedence compile issue, fixed)
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature12Prompt4WatchActionsTests` (initially failed on a test assumption about existing draft logging semantics, fixed)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS Simulator'` (pass)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS' CODE_SIGNING_ALLOWED=NO` (initially failed after warning cleanup because a `some View` helper needed an explicit return, fixed)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS Simulator'` (pass, final)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS' CODE_SIGNING_ALLOWED=NO` (pass, final device-architecture compile)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass; includes embedded watch app validation)
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature12Prompt4WatchActionsTests` (pass, final; 5/5 tests)
+- Watch scheme/target used: `SuggestMeSomeWatch` / `SuggestMeSomeWatch`
+
+---
+
 
 
 ## Project Setup

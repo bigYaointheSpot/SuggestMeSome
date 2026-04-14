@@ -38,6 +38,7 @@ enum WatchPayloadKind: String, Codable {
     case currentSessionContext
     case liveWorkoutSnapshot
     case sessionCompletion
+    case workoutExecutionAction
 }
 
 // MARK: - Execution Interaction Types
@@ -55,6 +56,53 @@ enum WatchSessionPlanKind: String, Codable, Equatable {
     case planned
     case overlayAdjusted
     case runtimeAdjusted
+}
+
+/// Narrow, watch-originated live workout controls. These are intentionally
+/// action verbs rather than broad patch shapes so the phone remains the source
+/// of truth for draft state and persistence.
+enum WatchWorkoutExecutionActionKind: String, Codable, Equatable {
+    case applyCrownTicksToCurrentSetWeight
+    case applyCrownTicksToCurrentSetReps
+    case completeCurrentSet
+    case completeCardioBlock
+}
+
+/// Versioned, transport-safe command DTO sent from watch -> iPhone during an
+/// active workout. Optional cursor fields let the phone ignore stale actions
+/// when the visible watch context no longer matches the active draft.
+struct WatchWorkoutExecutionActionDTO: Codable, Equatable {
+    var actionID: UUID
+    var actionSchemaVersion: Int
+    var workoutID: UUID
+    var sessionVersionStableID: String?
+    var actionKind: WatchWorkoutExecutionActionKind
+    var exerciseIndex: Int?
+    var setNumber: Int?
+    var ticks: Int?
+    var createdAt: Date
+
+    init(
+        actionID: UUID = UUID(),
+        actionSchemaVersion: Int = WatchPayloadContractVersion.current,
+        workoutID: UUID,
+        sessionVersionStableID: String? = nil,
+        actionKind: WatchWorkoutExecutionActionKind,
+        exerciseIndex: Int? = nil,
+        setNumber: Int? = nil,
+        ticks: Int? = nil,
+        createdAt: Date = Date()
+    ) {
+        self.actionID = actionID
+        self.actionSchemaVersion = actionSchemaVersion
+        self.workoutID = workoutID
+        self.sessionVersionStableID = sessionVersionStableID
+        self.actionKind = actionKind
+        self.exerciseIndex = exerciseIndex
+        self.setNumber = setNumber
+        self.ticks = ticks
+        self.createdAt = createdAt
+    }
 }
 
 // MARK: - Envelope

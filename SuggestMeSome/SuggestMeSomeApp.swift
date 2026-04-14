@@ -95,6 +95,9 @@ struct SuggestMeSomeApp: App {
                     migrateExerciseTypesIfNeeded(context: sharedModelContainer.mainContext)
                     // v1.2: Adds expanded exercise library introduced for the AI program generator.
                     migrateExercisesV2IfNeeded(context: sharedModelContainer.mainContext)
+                    WatchSessionCoordinator.shared.installExecutionActionHandler(
+                        activeWorkoutSessionStore: activeWorkoutSessionStore
+                    )
                 }
         }
         .modelContainer(sharedModelContainer)

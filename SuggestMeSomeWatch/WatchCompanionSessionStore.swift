@@ -150,6 +150,8 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 self.liveWorkout = nil
                 self.currentContext = nil
             }
+        case .workoutExecutionAction:
+            return
         }
     }
 
@@ -203,6 +205,30 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         }
         sessionStatus = Self.makeStatus(from: session, message: message)
     }
+
+    func sendExecutionAction(_ action: WatchWorkoutExecutionActionDTO) {
+        guard let session,
+              session.activationState == .activated,
+              let message = WatchBridgeMessageCodec.makeMessageIfPossible(
+                kind: .workoutExecutionAction,
+                payload: action
+              ) else {
+            return
+        }
+
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil) { [weak self] _ in
+                session.transferUserInfo(message)
+                Task { @MainActor in
+                    self?.refreshSessionStatus(message: "Action queued for iPhone.")
+                }
+            }
+            refreshSessionStatus(message: "Sent to iPhone.")
+        } else {
+            session.transferUserInfo(message)
+            refreshSessionStatus(message: "Action queued for iPhone.")
+        }
+    }
 }
 
 private extension WatchPayloadKind {
@@ -210,7 +236,7 @@ private extension WatchPayloadKind {
         switch self {
         case .workoutLaunch, .workoutProgress, .liveWorkoutSnapshot, .currentSessionContext:
             return true
-        case .todayPlanSnapshot, .sessionCompletion:
+        case .todayPlanSnapshot, .sessionCompletion, .workoutExecutionAction:
             return false
         }
     }

@@ -11,8 +11,11 @@ import Foundation
 import WatchConnectivity
 #endif
 
+typealias WatchExecutionActionHandler = @MainActor (WatchWorkoutExecutionActionDTO) -> Void
+
 protocol WatchCompanionBridge {
     var latestStatus: WatchCompanionStatus { get }
+    var executionActionHandler: WatchExecutionActionHandler? { get set }
     func refreshStatus() async -> WatchCompanionStatus
     func sendWorkoutLaunch(_ payload: WatchWorkoutLaunchPayload) async
     func sendWorkoutProgress(_ snapshot: WatchWorkoutProgressSnapshot) async
@@ -24,7 +27,10 @@ protocol WatchCompanionBridge {
 
 @MainActor
 final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
+    static let shared = DefaultWatchCompanionBridge()
+
     private(set) var latestStatus: WatchCompanionStatus
+    var executionActionHandler: WatchExecutionActionHandler?
 
 #if canImport(WatchConnectivity)
     private let session: WCSession?
@@ -193,9 +199,34 @@ extension DefaultWatchCompanionBridge: WCSessionDelegate {
             _ = await refreshStatus()
         }
     }
+
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        Task { @MainActor in
+            handleIncomingMessage(message)
+        }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        Task { @MainActor in
+            handleIncomingMessage(userInfo)
+        }
+    }
 }
 
 private extension DefaultWatchCompanionBridge {
+    func handleIncomingMessage(_ dictionary: [String: Any]) {
+        guard let message = try? WatchBridgeMessageCodec.decodeMessage(from: dictionary),
+              message.isSupportedSchemaVersion,
+              message.kind == .workoutExecutionAction,
+              let action = try? WatchBridgeMessageCodec.decodePayload(
+                WatchWorkoutExecutionActionDTO.self,
+                from: message
+              ) else {
+            return
+        }
+        executionActionHandler?(action)
+    }
+
     static func makeStatus(from session: WCSession, checkedAt: Date) -> WatchCompanionStatus {
         if !session.isPaired {
             return WatchCompanionStatus(

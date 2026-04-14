@@ -43,6 +43,7 @@ struct ActiveWorkoutSession: Identifiable, Codable, Equatable {
 final class ActiveWorkoutSessionStore {
     private let userDefaults: UserDefaults
     private let persistenceKey: String
+    private var appliedWatchActionIDs: Set<UUID> = []
 
     var session: ActiveWorkoutSession? {
         didSet {
@@ -109,6 +110,39 @@ final class ActiveWorkoutSessionStore {
 
     func discardSession() {
         session = nil
+        appliedWatchActionIDs.removeAll()
+    }
+
+    @discardableResult
+    func applyWatchExecutionAction(_ action: WatchWorkoutExecutionActionDTO) -> WatchWorkoutExecutionActionApplyResult {
+        guard var current = session else {
+            return WatchWorkoutExecutionActionApplyResult(status: .ignoredEmptyDraft, updatedEntries: [])
+        }
+
+        guard action.workoutID == current.id else {
+            return WatchWorkoutExecutionActionApplyResult(
+                status: .ignoredStaleCursor,
+                updatedEntries: current.exerciseEntries
+            )
+        }
+
+        guard !appliedWatchActionIDs.contains(action.actionID) else {
+            return WatchWorkoutExecutionActionApplyResult(
+                status: .ignoredStaleCursor,
+                updatedEntries: current.exerciseEntries
+            )
+        }
+
+        let result = WatchPayloadMapper.applyExecutionAction(
+            action,
+            to: current.exerciseEntries
+        )
+        guard result.didApply else { return result }
+
+        current.exerciseEntries = result.updatedEntries
+        session = current
+        appliedWatchActionIDs.insert(action.actionID)
+        return result
     }
 
     private func persistSession() {

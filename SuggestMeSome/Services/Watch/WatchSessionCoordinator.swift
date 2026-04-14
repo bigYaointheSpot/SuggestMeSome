@@ -29,6 +29,23 @@ struct WatchSetCompletionAdvanceResult {
     var isSessionComplete: Bool
 }
 
+enum WatchWorkoutExecutionActionApplyStatus: Equatable {
+    case applied
+    case ignoredEmptyDraft
+    case ignoredUnsupportedSchema
+    case ignoredIncompatibleAction
+    case ignoredStaleCursor
+}
+
+struct WatchWorkoutExecutionActionApplyResult: Equatable {
+    var status: WatchWorkoutExecutionActionApplyStatus
+    var updatedEntries: [DraftExerciseEntry]
+
+    var didApply: Bool {
+        status == .applied
+    }
+}
+
 // MARK: - WatchPayloadMapper
 
 /// Pure, deterministic mapping layer. All functions are side-effect free so
@@ -352,6 +369,90 @@ enum WatchPayloadMapper {
         return updated
     }
 
+    /// Applies digital-crown ticks to reps for the current unlogged set. Reps
+    /// stay integer and bounded so watch input cannot create invalid draft
+    /// text.
+    static func applyCrownTicksToCurrentSetReps(
+        entries: [DraftExerciseEntry],
+        cursor: Int? = nil,
+        ticks: Int,
+        minReps: Int = 0,
+        maxReps: Int = 100
+    ) -> [DraftExerciseEntry] {
+        guard !entries.isEmpty else { return entries }
+        var updated = entries
+        let exerciseIndex = resolveCurrentExerciseIndex(entries: entries, cursor: cursor)
+        guard updated.indices.contains(exerciseIndex) else { return entries }
+        guard !updated[exerciseIndex].isCardio else { return entries }
+        guard let setIndex = updated[exerciseIndex].sets.firstIndex(where: { !isSetLogged($0) }) else { return entries }
+
+        let entry = updated[exerciseIndex]
+        let existingReps = Int(entry.sets[setIndex].repsText) ?? entry.prescribedTargetReps ?? 0
+        let adjusted = min(maxReps, max(minReps, existingReps + ticks))
+        updated[exerciseIndex].sets[setIndex].repsText = adjusted > 0 ? "\(adjusted)" : ""
+        return updated
+    }
+
+    /// Marks the current cardio block complete without inventing new duration
+    /// values. Duration remains whatever the phone draft already contains.
+    static func markCurrentCardioBlockComplete(
+        entries: [DraftExerciseEntry],
+        cursor: Int? = nil
+    ) -> [DraftExerciseEntry] {
+        guard !entries.isEmpty else { return entries }
+        var updated = entries
+        let exerciseIndex = resolveCurrentExerciseIndex(entries: entries, cursor: cursor)
+        guard updated.indices.contains(exerciseIndex), updated[exerciseIndex].isCardio else { return entries }
+        updated[exerciseIndex].cardioCompletionLogged = true
+        return updated
+    }
+
+    /// Applies a watch-originated execution command to draft entries only. The
+    /// phone caller owns persistence and broadcasting after this pure transform.
+    static func applyExecutionAction(
+        _ action: WatchWorkoutExecutionActionDTO,
+        to entries: [DraftExerciseEntry],
+        cursor: Int? = nil
+    ) -> WatchWorkoutExecutionActionApplyResult {
+        guard action.actionSchemaVersion <= WatchPayloadContractVersion.current else {
+            return WatchWorkoutExecutionActionApplyResult(status: .ignoredUnsupportedSchema, updatedEntries: entries)
+        }
+        guard !entries.isEmpty else {
+            return WatchWorkoutExecutionActionApplyResult(status: .ignoredEmptyDraft, updatedEntries: entries)
+        }
+
+        let exerciseIndex = resolveCurrentExerciseIndex(entries: entries, cursor: cursor)
+        guard cursorMatches(action: action, entries: entries, exerciseIndex: exerciseIndex) else {
+            return WatchWorkoutExecutionActionApplyResult(status: .ignoredStaleCursor, updatedEntries: entries)
+        }
+
+        let updatedEntries: [DraftExerciseEntry]
+        switch action.actionKind {
+        case .applyCrownTicksToCurrentSetWeight:
+            guard let ticks = action.ticks, ticks != 0 else {
+                return WatchWorkoutExecutionActionApplyResult(status: .ignoredIncompatibleAction, updatedEntries: entries)
+            }
+            updatedEntries = applyCrownTicksToCurrentSet(entries: entries, cursor: exerciseIndex, ticks: ticks)
+        case .applyCrownTicksToCurrentSetReps:
+            guard let ticks = action.ticks, ticks != 0 else {
+                return WatchWorkoutExecutionActionApplyResult(status: .ignoredIncompatibleAction, updatedEntries: entries)
+            }
+            updatedEntries = applyCrownTicksToCurrentSetReps(entries: entries, cursor: exerciseIndex, ticks: ticks)
+        case .completeCurrentSet:
+            guard let result = completeCurrentSetAndAdvance(entries: entries, cursor: exerciseIndex) else {
+                return WatchWorkoutExecutionActionApplyResult(status: .ignoredIncompatibleAction, updatedEntries: entries)
+            }
+            updatedEntries = result.updatedEntries
+        case .completeCardioBlock:
+            updatedEntries = markCurrentCardioBlockComplete(entries: entries, cursor: exerciseIndex)
+        }
+
+        guard updatedEntries != entries else {
+            return WatchWorkoutExecutionActionApplyResult(status: .ignoredIncompatibleAction, updatedEntries: entries)
+        }
+        return WatchWorkoutExecutionActionApplyResult(status: .applied, updatedEntries: updatedEntries)
+    }
+
     // MARK: Set Completion + Advance
 
     /// Completes the current set and returns the updated draft plus next cursor
@@ -401,7 +502,7 @@ enum WatchPayloadMapper {
 
     static func isExerciseComplete(_ entry: DraftExerciseEntry) -> Bool {
         if entry.isCardio {
-            return entry.cardioDurationSeconds > 0
+            return entry.cardioCompletionLogged ?? (entry.cardioDurationSeconds > 0)
         }
         guard !entry.sets.isEmpty else { return false }
         return entry.sets.allSatisfy { isSetLogged($0) }
@@ -419,6 +520,30 @@ enum WatchPayloadMapper {
             return firstIncomplete
         }
         return max(0, entries.count - 1)
+    }
+
+    private static func cursorMatches(
+        action: WatchWorkoutExecutionActionDTO,
+        entries: [DraftExerciseEntry],
+        exerciseIndex: Int
+    ) -> Bool {
+        guard entries.indices.contains(exerciseIndex) else { return false }
+        if let actionExerciseIndex = action.exerciseIndex, actionExerciseIndex != exerciseIndex {
+            return false
+        }
+
+        guard !entries[exerciseIndex].isCardio else {
+            return action.setNumber == nil
+        }
+
+        guard let setIndex = entries[exerciseIndex].sets.firstIndex(where: { !isSetLogged($0) }) else {
+            return false
+        }
+        if let actionSetNumber = action.setNumber,
+           actionSetNumber != entries[exerciseIndex].sets[setIndex].setNumber {
+            return false
+        }
+        return true
     }
 
     private static func preferredCrownWeightStep(unitLabel: String?) -> Double {
@@ -488,10 +613,23 @@ enum WatchPayloadMapper {
 /// `WatchPayloadMapper`, keeping this type trivially replaceable in tests.
 @MainActor
 final class WatchSessionCoordinator {
-    private let bridge: WatchCompanionBridge
+    static let shared = WatchSessionCoordinator(bridge: DefaultWatchCompanionBridge.shared)
+
+    private var bridge: WatchCompanionBridge
 
     init(bridge: WatchCompanionBridge? = nil) {
-        self.bridge = bridge ?? DefaultWatchCompanionBridge()
+        self.bridge = bridge ?? DefaultWatchCompanionBridge.shared
+    }
+
+    func installExecutionActionHandler(activeWorkoutSessionStore: ActiveWorkoutSessionStore) {
+        bridge.executionActionHandler = { [weak activeWorkoutSessionStore, weak self] action in
+            guard let activeWorkoutSessionStore, let self else { return }
+            let result = activeWorkoutSessionStore.applyWatchExecutionAction(action)
+            guard result.didApply, let session = activeWorkoutSessionStore.session else { return }
+            Task { @MainActor in
+                await self.broadcastActiveSessionState(session)
+            }
+        }
     }
 
     // MARK: Today Plan
@@ -598,6 +736,28 @@ final class WatchSessionCoordinator {
         await bridge.sendCurrentSessionContext(context)
     }
 
+    func broadcastActiveSessionState(
+        _ session: ActiveWorkoutSession,
+        capturedAt: Date = Date()
+    ) async {
+        let elapsedSeconds = Int(capturedAt.timeIntervalSince(session.startTime))
+        let label = activeSessionLabel(for: session)
+        await broadcastLiveWorkout(
+            workoutID: session.id,
+            elapsedSeconds: elapsedSeconds,
+            entries: session.exerciseEntries,
+            sessionLabel: label,
+            programWeekNumber: session.programContext?.weekNumber,
+            programSessionNumber: session.programContext?.sessionNumber,
+            capturedAt: capturedAt
+        )
+        await broadcastCurrentSessionContext(
+            workoutID: session.id,
+            entries: session.exerciseEntries,
+            capturedAt: capturedAt
+        )
+    }
+
     // MARK: Session Completion Handoff
 
     /// Terminal broadcast sent after a workout is saved. Lets watch execution
@@ -626,5 +786,12 @@ final class WatchSessionCoordinator {
             newPersonalRecordCount: newPersonalRecordCount
         )
         await bridge.sendSessionCompletion(payload)
+    }
+
+    private func activeSessionLabel(for session: ActiveWorkoutSession) -> String {
+        if let programContext = session.programContext {
+            return "W\(programContext.weekNumber) · S\(programContext.sessionNumber)"
+        }
+        return "Active workout"
     }
 }

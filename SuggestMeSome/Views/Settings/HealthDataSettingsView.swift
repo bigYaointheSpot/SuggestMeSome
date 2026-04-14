@@ -44,7 +44,7 @@ final class HealthDataSettingsViewModel: ObservableObject {
     private let watchBridge: WatchCompanionBridge
 
     init(watchBridge: WatchCompanionBridge? = nil) {
-        self.watchBridge = watchBridge ?? DefaultWatchCompanionBridge()
+        self.watchBridge = watchBridge ?? DefaultWatchCompanionBridge.shared
     }
 
     func refreshStatus(hasRequestedAuthorization: Bool) async {
