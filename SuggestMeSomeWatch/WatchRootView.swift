@@ -2,12 +2,12 @@
 //  WatchRootView.swift
 //  SuggestMeSomeWatch
 //
-//  Feature 12 Prompt 3 — Execution-first watch root flow.
+//  Feature 12 Prompt 5 — Execution-first watch root flow.
 //
-//  Thin switcher between the premium live workout surface and the polished
-//  Today Plan surface. Navigation stays minimal and watch-native — no tab
-//  bar bloat, no proposal review, no history. iPhone remains the source of
-//  truth; the watch only renders what the bridge delivers.
+//  Three-mode switcher: live workout > session completion > Today Plan.
+//  Matches the Smart Stack direction: active execution wins when
+//  present, a polished completion moment follows a saved workout, and
+//  Today Plan fills the surface when nothing else is active.
 //
 
 import SwiftUI
@@ -27,6 +27,21 @@ struct WatchRootView: View {
                         sessionStatus: store.sessionStatus,
                         onExecutionAction: store.sendExecutionAction
                     )
+                case .sessionCompletion:
+                    if let completion = store.completion {
+                        WatchSessionCompletionView(
+                            completion: completion,
+                            sessionStatus: store.sessionStatus,
+                            onDismiss: store.dismissCompletion
+                        )
+                    } else {
+                        WatchTodayPlanView(
+                            todayPlan: store.todayPlan,
+                            liveWorkout: store.liveWorkout,
+                            completion: nil,
+                            sessionStatus: store.sessionStatus
+                        )
+                    }
                 case .todayPlan:
                     WatchTodayPlanView(
                         todayPlan: store.todayPlan,

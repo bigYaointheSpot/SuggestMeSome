@@ -11,6 +11,7 @@ import WatchConnectivity
 
 enum WatchCompanionRootMode: Equatable {
     case activeWorkout
+    case sessionCompletion
     case todayPlan
 }
 
@@ -77,11 +78,17 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     }
 
     var rootMode: WatchCompanionRootMode {
-        hasActiveWorkout ? .activeWorkout : .todayPlan
+        if hasActiveWorkout { return .activeWorkout }
+        if completion != nil { return .sessionCompletion }
+        return .todayPlan
     }
 
     var hasActiveWorkout: Bool {
         workoutLaunch != nil || liveWorkout != nil || currentContext != nil || progressSnapshot != nil
+    }
+
+    func dismissCompletion() {
+        completion = nil
     }
 
     var connectionMessage: String {

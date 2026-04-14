@@ -190,6 +190,50 @@ enum WatchPreviewFixtures {
         capturedAt: referenceDate
     )
 
+    static let adjustedLiveWorkout = WatchLiveWorkoutSnapshot(
+        workoutID: UUID(uuidString: "22222222-3333-4444-5555-666666666666") ?? UUID(),
+        elapsedSeconds: 960, // 16:00
+        completedExercises: 1,
+        totalExercises: 4,
+        completedSetsInCurrentExercise: 2,
+        totalSetsInCurrentExercise: 3,
+        currentExerciseName: "Goblet Squat",
+        sessionLabel: "Lower — Adjusted",
+        programRunStableID: "preview-run",
+        programWeekNumber: 3,
+        programSessionNumber: 3,
+        sessionPlanKind: .runtimeAdjusted,
+        sessionSourceLabels: ["Program", "Daily Coach"],
+        sessionVersionStableID: "preview-session-adjusted",
+        capturedAt: referenceDate
+    )
+
+    static let adjustedCurrentContext = WatchCurrentSessionContext(
+        workoutID: UUID(uuidString: "22222222-3333-4444-5555-666666666666") ?? UUID(),
+        exerciseIndex: 1,
+        exerciseName: "Goblet Squat",
+        totalExercisesInSession: 4,
+        totalSetsInExercise: 3,
+        loggedSetsInExercise: 2,
+        nextSetNumber: 3,
+        nextPrescribedReps: 8,
+        nextPrescribedWeight: 55,
+        nextPrescribedWeightUnit: "lb",
+        isCardio: false,
+        cardioTargetSeconds: nil,
+        currentSetNumber: 3,
+        currentSetTargetSummary: "8 reps @ 55 lb",
+        currentSetCompletedWeight: 55,
+        currentSetCompletedReps: 8,
+        crownWeightStep: 5,
+        quickCompleteEnabled: true,
+        preferredInteractionModel: .digitalCrownFirst,
+        sessionPlanKind: .runtimeAdjusted,
+        sessionSourceLabels: ["Program", "Daily Coach"],
+        sessionVersionStableID: "preview-session-adjusted",
+        capturedAt: referenceDate
+    )
+
     static let completionPayload = WatchSessionCompletionPayload(
         workoutID: UUID(uuidString: "11111111-2222-3333-4444-555555555555") ?? UUID(),
         completedAt: referenceDate,
@@ -203,6 +247,21 @@ enum WatchPreviewFixtures {
         sessionSourceLabels: ["Program", "Check-In"],
         sessionVersionStableID: "preview-session-version",
         newPersonalRecordCount: 2
+    )
+
+    static let completionPayloadNoPR = WatchSessionCompletionPayload(
+        workoutID: UUID(uuidString: "11111111-2222-3333-4444-555555555555") ?? UUID(),
+        completedAt: referenceDate,
+        totalElapsedSeconds: 2_460,
+        completedExercises: 4,
+        totalExercises: 4,
+        completedSets: 12,
+        totalSets: 12,
+        sessionLabel: "Upper — Manual",
+        sessionPlanKind: nil,
+        sessionSourceLabels: nil,
+        sessionVersionStableID: nil,
+        newPersonalRecordCount: 0
     )
 }
 #endif

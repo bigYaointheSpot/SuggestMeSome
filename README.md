@@ -2569,6 +2569,67 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+#### Prompt 5 [Live Watch Workout UI and Rest Timer] — 2026-04-13
+
+- Rebuilt the watch live-workout execution surface:
+  - edited `SuggestMeSomeWatch/WatchActiveWorkoutView.swift`
+  - session header now surfaces plan kind as a compact "Planned / Adjusted / Live" chip derived from the iPhone-produced snapshot — no watch-side attribution invented
+  - progress card shows elapsed time, linear indigo progress bar, and `Ex n/total` counter derived from the current context cursor
+  - current exercise card keeps two stacked crown-first focused controls (reps on top, weight below), the explicit `Complete Set` primary action, and unit-aware weight stepping tied to `crownWeightStep`
+  - added a "Warming Up" card for the window where an active workout has launched but no current context has synced yet so the watch never shows a blank panel
+  - added an "awaiting iPhone" empty state for the unusual case where the root mode enters active workout without any live/progress/context payload
+  - crown changes still emit versioned `WatchWorkoutExecutionActionDTO`s; phone remains source of truth for persistence
+- Added a watch-local rest timer experience:
+  - created `SuggestMeSomeWatch/WatchRestTimerController.swift`
+  - `@MainActor` observable controller with 1-second tick cadence, remaining/total seconds, progress, and an explicit skip path
+  - haptic cues for start, 3-second next-set pre-cue, completion, and skip via `WKInterfaceDevice`, all guarded behind `#if canImport(WatchKit)` so the shared contracts keep compiling against non-watch targets
+  - added `WatchRestTimerPanel` inside `WatchActiveWorkoutView.swift` — countdown hero, linear progress, next-set hint, and a `Skip Rest` bordered button
+  - `Complete Set` on strength exercises now kicks off a 90-second rest timer locally and replaces the crown rows with the rest panel so the user sees only one focused state at a time
+  - rest timer stops automatically when the current set cursor changes (e.g. next set syncs from iPhone), keeping wrist state honest vs phone state
+- Added a dedicated polished session completion state:
+  - created `SuggestMeSomeWatch/WatchSessionCompletionView.swift`
+  - large "Total time" hero, side-by-side exercise/set metric tiles, optional PR banner, source-label strip, and a "Back to Today" dismiss action
+  - added `WatchCompanionRootMode.sessionCompletion` and a `dismissCompletion()` method in `SuggestMeSomeWatch/WatchCompanionSessionStore.swift`
+  - edited `SuggestMeSomeWatch/WatchRootView.swift` to pick completion as its own root mode when present, falling back to Today Plan after dismissal
+  - Today Plan celebration card still renders when a completion is available alongside a plan, so the wrist has a premium moment whether the user dismisses or not
+- Extended preview fixtures for the new states:
+  - edited `SuggestMeSomeWatch/WatchPreviewFixtures.swift`
+  - added `adjustedLiveWorkout` + `adjustedCurrentContext` pair for the runtime-adjusted plan kind preview
+  - added `completionPayloadNoPR` for the non-PR completion preview
+  - wired previews: "Active — Strength", "Active — Cardio", "Active — Adjusted Session", "Active — Pending Context", "Active — Idle Connection", "Completion — With PRs", "Completion — No PRs"
+- User-visible behavior:
+  - glanceable live-workout hero with elapsed time, exercise counter, and plan-kind chip
+  - two stacked crown-first controls for reps and weight — no shared mode toggle, no tiny controls
+  - tapping `Complete Set` kicks off a visible rest countdown with haptic cues and a next-set hint; the user can skip any time
+  - cardio sessions keep their dedicated target card and `Mark Complete` action
+  - when a workout finishes, the wrist switches into a premium completion moment with totals, elapsed time, and PR count
+  - when the context hasn't arrived yet, the wrist shows a clear "Warming Up" state instead of an empty card
+- Architecture and guardrails:
+  - iPhone remains source of truth for workout state, persistence, coaching, and proposal approval
+  - no proposal review/approval, no history, no dashboard added to the watch target
+  - rest timer is watch-local UX state only and never mutates iPhone-owned draft entries
+  - phone-owned `WatchWorkoutExecutionActionDTO` path is unchanged — `Complete Set` still emits the same versioned action the phone already understands
+  - real-device quality validated with a generic watchOS device-architecture compile, not only simulator
+  - no SwiftData model types pulled into the watch target; `WKInterfaceDevice` is guarded behind `#if canImport(WatchKit)`
+- Files created/edited:
+  - created: `SuggestMeSomeWatch/WatchRestTimerController.swift`
+  - created: `SuggestMeSomeWatch/WatchSessionCompletionView.swift`
+  - edited: `SuggestMeSomeWatch/WatchActiveWorkoutView.swift`
+  - edited: `SuggestMeSomeWatch/WatchRootView.swift`
+  - edited: `SuggestMeSomeWatch/WatchCompanionSessionStore.swift`
+  - edited: `SuggestMeSomeWatch/WatchPreviewFixtures.swift`
+  - edited: `README.md` (Feature 12 Prompt 5 entry)
+- Validation/build/previews/tests run:
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS Simulator'` (pass; BUILD SUCCEEDED, watch simulator compile)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS' CODE_SIGNING_ALLOWED=NO` (pass; device-architecture compile, BUILD SUCCEEDED)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass; iOS build + embedded watch app validation)
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature12Prompt4WatchActionsTests -only-testing:SuggestMeSomeTests/Feature12Prompt2WatchBridgeCodecTests` (pass; 9/9 tests)
+  - SwiftUI previews compile into `__preview.dylib` as part of the watch simulator build, exercising the new strength, cardio, adjusted, pending-context, idle-connection, with-PR, and no-PR fixtures
+  - state coverage exercised in previews: manual/empty workout analogue (awaiting iPhone empty state), SuggestMeSome workout (strength), program workout (strength + planned), runtime-adjusted program workout, cardio block, resumed in-progress workout (warming-up/pending context), rest timer flow (kicks off on complete), session completion (with PRs and no PRs)
+- Watch scheme/target used: `SuggestMeSomeWatch` / `SuggestMeSomeWatch`
+
+---
+
 
 
 ## Project Setup
