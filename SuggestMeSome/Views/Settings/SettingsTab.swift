@@ -228,7 +228,7 @@ struct SettingsTab: View {
                     Text("Version 1.0")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Created by Alex Yao in partnership with Claude")
+                    Text("Built by Alex Yao assisted by Codex and Claude")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

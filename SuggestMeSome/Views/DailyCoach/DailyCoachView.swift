@@ -430,17 +430,27 @@ struct DailyCoachView: View {
         let plan = todayPlan
         let rec = plan.recommendation
         return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Coach Recommendation", systemImage: "brain.head.profile")
-                    .font(.headline)
-                Spacer()
-                if rec.hasPainFlag {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .font(.subheadline)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "brain.head.profile")
+                        .foregroundStyle(.indigo)
+                    Text("Coach Recommendation")
+                        .font(.headline)
+                        .lineLimit(1)
+                        .allowsTightening(true)
+                    Spacer()
+                    if rec.hasPainFlag {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.subheadline)
+                    }
                 }
-                confidenceBadge(plan.confidence)
-                readinessTierBadge(rec.readinessTier)
+
+                HStack(spacing: 6) {
+                    confidenceBadge(plan.confidence)
+                    readinessTierBadge(rec.readinessTier)
+                    Spacer()
+                }
             }
 
             Divider()
