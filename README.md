@@ -2357,6 +2357,45 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+### Feature 12 — Apple Watch Workout Execution Companion
+
+**Status:** In progress
+
+#### Prompt 1 [watchOS Target and Companion Shell] — 2026-04-13
+
+- Added the first installable watchOS companion target:
+  - `SuggestMeSomeWatch` target and shared scheme `SuggestMeSomeWatch`
+  - watch bundle identifier `com.alexyao.SuggestMeSome.watch`
+  - iOS app now embeds `SuggestMeSomeWatch.app` through an `Embed Watch Content` build phase
+- Created watch app shell files:
+  - `SuggestMeSomeWatch/SuggestMeSomeWatchApp.swift`
+  - `SuggestMeSomeWatch/WatchCompanionContainer.swift`
+  - `SuggestMeSomeWatch/WatchCompanionSessionStore.swift`
+  - `SuggestMeSomeWatch/WatchRootView.swift`
+  - `SuggestMeSomeWatch/Assets.xcassets`
+  - `SuggestMeSome.xcodeproj/xcshareddata/xcschemes/SuggestMeSomeWatch.xcscheme`
+  - updated `SuggestMeSome.xcodeproj/project.pbxproj`
+- User-visible behavior:
+  - watch app opens directly into active workout progress when live workout/current-set payloads exist
+  - otherwise it shows Today Plan or a clear "sync from iPhone" empty state
+  - active strength sets expose two stacked Digital Crown-focused controls: reps first, weight second
+  - completion handoff clears live workout state and returns the shell to Today Plan
+- Architecture and guardrails:
+  - iPhone remains source of truth for workout state, persistence, coaching, and proposal approval
+  - watch target only shares transport-safe DTOs from `WatchPayloadContracts.swift` and `WatchCompanionTypes.swift`
+  - no SwiftData models, iPhone services, coaching engines, cloud/backend concepts, proposal review UI, history dashboard, or broad watch surfaces were added
+  - root state priority matches the Feature 12 Smart Stack direction: active workout progress first, Today Plan when idle
+  - watch companion is scoped to all active workouts, not just program sessions
+- Validation/build steps run:
+  - `xcodebuild -list -project SuggestMeSome.xcodeproj` (pass; schemes include `SuggestMeSome` and `SuggestMeSomeWatch`)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS Simulator'` (pass)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS'` (blocked by missing local provisioning profile for `com.alexyao.SuggestMeSome.watch`)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS' CODE_SIGNING_ALLOWED=NO` (pass; device-architecture compile)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass; includes embedded watch app validation)
+- Watch scheme/target used: `SuggestMeSomeWatch` / `SuggestMeSomeWatch`
+
+---
+
 
 
 ## Project Setup

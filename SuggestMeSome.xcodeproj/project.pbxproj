@@ -6,7 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F81200012F83000000000001 /* SuggestMeSomeWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = F81200042F83000000000004 /* SuggestMeSomeWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		F81200022F83000000000002 /* WatchPayloadContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81200052F83000000000005 /* WatchPayloadContracts.swift */; };
+		F81200032F83000000000003 /* WatchCompanionTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81200062F83000000000006 /* WatchCompanionTypes.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		F812000D2F8300000000000D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F8FB3BB52F82D7ED0002A1DF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F812000C2F8300000000000C;
+			remoteInfo = SuggestMeSomeWatch;
+		};
 		F8FB3BCD2F82D7EE0002A1DF /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = F8FB3BB52F82D7ED0002A1DF /* Project object */;
@@ -23,13 +36,35 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		F812000F2F8300000000000F /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				F81200012F83000000000001 /* SuggestMeSomeWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		F81200042F83000000000004 /* SuggestMeSomeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SuggestMeSomeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F81200052F83000000000005 /* WatchPayloadContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestMeSome/Models/WatchPayloadContracts.swift; sourceTree = "<group>"; };
+		F81200062F83000000000006 /* WatchCompanionTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestMeSome/Models/WatchCompanionTypes.swift; sourceTree = "<group>"; };
 		F8FB3BBD2F82D7ED0002A1DF /* SuggestMeSome.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SuggestMeSome.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F8FB3BCC2F82D7EE0002A1DF /* SuggestMeSomeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuggestMeSomeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F8FB3BD62F82D7EE0002A1DF /* SuggestMeSomeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuggestMeSomeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		F81200072F83000000000007 /* SuggestMeSomeWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SuggestMeSomeWatch;
+			sourceTree = "<group>";
+		};
 		F8FB3BBF2F82D7ED0002A1DF /* SuggestMeSome */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = SuggestMeSome;
@@ -48,6 +83,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		F81200092F83000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F8FB3BBA2F82D7ED0002A1DF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -72,10 +114,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		F81200082F83000000000008 /* Shared Watch Contracts */ = {
+			isa = PBXGroup;
+			children = (
+				F81200052F83000000000005 /* WatchPayloadContracts.swift */,
+				F81200062F83000000000006 /* WatchCompanionTypes.swift */,
+			);
+			name = "Shared Watch Contracts";
+			sourceTree = "<group>";
+		};
 		F8FB3BB42F82D7ED0002A1DF = {
 			isa = PBXGroup;
 			children = (
 				F8FB3BBF2F82D7ED0002A1DF /* SuggestMeSome */,
+				F81200072F83000000000007 /* SuggestMeSomeWatch */,
+				F81200082F83000000000008 /* Shared Watch Contracts */,
 				F8FB3BCF2F82D7EE0002A1DF /* SuggestMeSomeTests */,
 				F8FB3BD92F82D7EE0002A1DF /* SuggestMeSomeUITests */,
 				F8FB3BBE2F82D7ED0002A1DF /* Products */,
@@ -86,6 +139,7 @@
 			isa = PBXGroup;
 			children = (
 				F8FB3BBD2F82D7ED0002A1DF /* SuggestMeSome.app */,
+				F81200042F83000000000004 /* SuggestMeSomeWatch.app */,
 				F8FB3BCC2F82D7EE0002A1DF /* SuggestMeSomeTests.xctest */,
 				F8FB3BD62F82D7EE0002A1DF /* SuggestMeSomeUITests.xctest */,
 			);
@@ -95,6 +149,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		F812000C2F8300000000000C /* SuggestMeSomeWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F81200122F83000000000012 /* Build configuration list for PBXNativeTarget "SuggestMeSomeWatch" */;
+			buildPhases = (
+				F812000A2F8300000000000A /* Sources */,
+				F81200092F83000000000009 /* Frameworks */,
+				F812000B2F8300000000000B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F81200072F83000000000007 /* SuggestMeSomeWatch */,
+			);
+			name = SuggestMeSomeWatch;
+			packageProductDependencies = (
+			);
+			productName = SuggestMeSomeWatch;
+			productReference = F81200042F83000000000004 /* SuggestMeSomeWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 		F8FB3BBC2F82D7ED0002A1DF /* SuggestMeSome */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F8FB3BE02F82D7EE0002A1DF /* Build configuration list for PBXNativeTarget "SuggestMeSome" */;
@@ -102,10 +178,12 @@
 				F8FB3BB92F82D7ED0002A1DF /* Sources */,
 				F8FB3BBA2F82D7ED0002A1DF /* Frameworks */,
 				F8FB3BBB2F82D7ED0002A1DF /* Resources */,
+				F812000F2F8300000000000F /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F812000E2F8300000000000E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				F8FB3BBF2F82D7ED0002A1DF /* SuggestMeSome */,
@@ -173,6 +251,9 @@
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					F812000C2F8300000000000C = {
+						CreatedOnToolsVersion = 26.4;
+					};
 					F8FB3BBC2F82D7ED0002A1DF = {
 						CreatedOnToolsVersion = 26.4;
 					};
@@ -201,6 +282,7 @@
 			projectRoot = "";
 			targets = (
 				F8FB3BBC2F82D7ED0002A1DF /* SuggestMeSome */,
+				F812000C2F8300000000000C /* SuggestMeSomeWatch */,
 				F8FB3BCB2F82D7EE0002A1DF /* SuggestMeSomeTests */,
 				F8FB3BD52F82D7EE0002A1DF /* SuggestMeSomeUITests */,
 			);
@@ -208,6 +290,13 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		F812000B2F8300000000000B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F8FB3BBB2F82D7ED0002A1DF /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -232,6 +321,15 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		F812000A2F8300000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F81200022F83000000000002 /* WatchPayloadContracts.swift in Sources */,
+				F81200032F83000000000003 /* WatchCompanionTypes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F8FB3BB92F82D7ED0002A1DF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -256,6 +354,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		F812000E2F8300000000000E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F812000C2F8300000000000C /* SuggestMeSomeWatch */;
+			targetProxy = F812000D2F8300000000000D /* PBXContainerItemProxy */;
+		};
 		F8FB3BCE2F82D7EE0002A1DF /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = F8FB3BBC2F82D7ED0002A1DF /* SuggestMeSome */;
@@ -269,6 +372,75 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		F81200102F83000000000010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WFFG5RX39F;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = SuggestMeSome;
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.alexyao.SuggestMeSome;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alexyao.SuggestMeSome.watch;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Debug;
+		};
+		F81200112F83000000000011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WFFG5RX39F;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = SuggestMeSome;
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.alexyao.SuggestMeSome;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alexyao.SuggestMeSome.watch;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Release;
+		};
 		F8FB3BDE2F82D7EE0002A1DF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -547,6 +719,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		F81200122F83000000000012 /* Build configuration list for PBXNativeTarget "SuggestMeSomeWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F81200102F83000000000010 /* Debug */,
+				F81200112F83000000000011 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		F8FB3BB82F82D7ED0002A1DF /* Build configuration list for PBXProject "SuggestMeSome" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
