@@ -11,10 +11,14 @@ import SwiftData
 // MARK: - ProgramWorkoutContext
 
 struct ProgramWorkoutContext {
+    var workoutID: UUID = UUID()
     var programRun: ProgramRun
     var weekNumber: Int
     var sessionNumber: Int
     var exercises: [ProgramSessionExercise]
+    var watchSessionPlanKind: WatchSessionPlanKind? = nil
+    var watchSessionSourceLabels: [String]? = nil
+    var watchSessionVersionStableID: String? = nil
 }
 
 // MARK: - SelectProgramView

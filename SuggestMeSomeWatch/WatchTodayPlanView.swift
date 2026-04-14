@@ -106,6 +106,7 @@ struct WatchTodayPlanView: View {
             }
         }
         .watchCard(emphasized: true)
+        .accessibilityElement(children: .combine)
     }
 
     private func signalsRow(_ plan: WatchTodayPlanSnapshot) -> some View {
@@ -142,6 +143,7 @@ struct WatchTodayPlanView: View {
                 .foregroundStyle(.secondary)
         }
         .watchCard(emphasized: true)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Completion Celebration
@@ -174,6 +176,7 @@ struct WatchTodayPlanView: View {
             }
         }
         .watchCard(emphasized: true, tint: WatchPalette.positive)
+        .accessibilityElement(children: .combine)
     }
 }
 

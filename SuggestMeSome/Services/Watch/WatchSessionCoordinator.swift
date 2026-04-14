@@ -747,13 +747,20 @@ final class WatchSessionCoordinator {
             elapsedSeconds: elapsedSeconds,
             entries: session.exerciseEntries,
             sessionLabel: label,
+            programRunStableID: session.programRunStableID,
             programWeekNumber: session.programContext?.weekNumber,
             programSessionNumber: session.programContext?.sessionNumber,
+            sessionPlanKind: session.sessionPlanKind,
+            sessionSourceLabels: session.sessionSourceLabels,
+            sessionVersionStableID: session.sessionVersionStableID,
             capturedAt: capturedAt
         )
         await broadcastCurrentSessionContext(
             workoutID: session.id,
             entries: session.exerciseEntries,
+            sessionPlanKind: session.sessionPlanKind,
+            sessionSourceLabels: session.sessionSourceLabels,
+            sessionVersionStableID: session.sessionVersionStableID,
             capturedAt: capturedAt
         )
     }
@@ -792,6 +799,15 @@ final class WatchSessionCoordinator {
         if let programContext = session.programContext {
             return "W\(programContext.weekNumber) · S\(programContext.sessionNumber)"
         }
+        if session.sessionSourceLabels?.contains("SuggestMeSome Generated") == true {
+            return "Suggested workout"
+        }
         return "Active workout"
+    }
+}
+
+private extension ActiveWorkoutSession {
+    var programRunStableID: String? {
+        programContext?.programRunStableID
     }
 }

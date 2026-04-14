@@ -2359,7 +2359,7 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ### Feature 12 — Apple Watch Workout Execution Companion
 
-**Status:** In progress
+**Status:** Complete
 
 #### Prompt 1 [watchOS Target and Companion Shell] — 2026-04-13
 
@@ -2627,6 +2627,47 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - SwiftUI previews compile into `__preview.dylib` as part of the watch simulator build, exercising the new strength, cardio, adjusted, pending-context, idle-connection, with-PR, and no-PR fixtures
   - state coverage exercised in previews: manual/empty workout analogue (awaiting iPhone empty state), SuggestMeSome workout (strength), program workout (strength + planned), runtime-adjusted program workout, cardio block, resumed in-progress workout (warming-up/pending context), rest timer flow (kicks off on complete), session completion (with PRs and no PRs)
 - Watch scheme/target used: `SuggestMeSomeWatch` / `SuggestMeSomeWatch`
+
+---
+
+#### Prompt 6 [Smart Stack, Hardening, and Final Validation] — 2026-04-13
+
+- Added Smart Stack support through a narrow watch widget extension:
+  - created `SuggestMeSomeWatchWidget` target, shared scheme `SuggestMeSomeWatchWidget`, widget product `SuggestMeSomeWatchWidget.appex`, and app-group entitlements for the watch app/widget
+  - created `SuggestMeSome/Models/WatchWidgetSnapshot.swift` as the shared phone/watch/widget snapshot contract
+  - created `SuggestMeSomeWatchWidget/Sources/SuggestMeSomeWatchWidget.swift`, `SuggestMeSomeWatchWidget/Info.plist`, `SuggestMeSomeWatchWidget/SuggestMeSomeWatchWidget.entitlements`, and `SuggestMeSome.xcodeproj/xcshareddata/xcschemes/SuggestMeSomeWatchWidget.xcscheme`
+  - rectangular, circular, and inline widget families prefer live workout progress while a non-stale session is active and fall back to Today Plan only when idle
+- Hardened live workout continuity and source attribution:
+  - edited `ActiveWorkoutSessionStore`, `WatchSessionCoordinator`, `DailyCoachView`, `ProgramWorkoutViews`, and `WorkoutView` so manual/empty, SuggestMeSome generated, program, prepared draft, and resumed sessions keep stable workout IDs, session plan kind, source labels, and version IDs
+  - rejected stale or mismatched watch actions/current-context payloads instead of applying them to the wrong active session
+  - completion handoff now carries phone-owned session attribution and counts before clearing active state
+  - planned vs approved-overlay vs runtime-adjusted labels remain phone-derived; proposal review/approval stays off-watch
+- Added final watch accessibility and interaction polish:
+  - edited `WatchActiveWorkoutView`, `WatchCompanionSessionStore`, `WatchTodayPlanView`, and `WatchUIComponents`
+  - added VoiceOver labels/values/hints for progress, cardio targets, complete actions, connection state, source badges, and the stacked reps/weight Crown controls
+  - added guarded success haptics for completed set/cardio actions and safe widget reloads when live, Today Plan, current-context, or completion payloads arrive
+  - color is paired with labels, chips, progress text, or explicit status copy instead of being the only signal
+- Added focused regression coverage in `SuggestMeSomeTests/Feature12Prompt6WatchSmartStackHardeningTests.swift`:
+  - Smart Stack idle vs active-session switching, stale live fallback, mismatched current-context version rejection, mismatched action rejection, and coordinator attribution propagation
+- Files edited:
+  - `SuggestMeSome.xcodeproj/project.pbxproj`
+  - `SuggestMeSome/Services/ActiveWorkoutSessionStore.swift`
+  - `SuggestMeSome/Services/Watch/WatchSessionCoordinator.swift`
+  - `SuggestMeSome/Views/DailyCoach/DailyCoachView.swift`
+  - `SuggestMeSome/Views/Programs/ProgramWorkoutViews.swift`
+  - `SuggestMeSome/Views/Workout/WorkoutView.swift`
+  - `SuggestMeSomeWatch/WatchActiveWorkoutView.swift`
+  - `SuggestMeSomeWatch/WatchCompanionSessionStore.swift`
+  - `SuggestMeSomeWatch/WatchTodayPlanView.swift`
+  - `SuggestMeSomeWatch/WatchUIComponents.swift`
+  - `README.md`
+- Validation/build/tests run:
+  - `xcodebuild -list -project SuggestMeSome.xcodeproj` (pass; schemes include `SuggestMeSome`, `SuggestMeSomeWatch`, and `SuggestMeSomeWatchWidget`)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatchWidget -destination generic/platform=watchOS -derivedDataPath /tmp/SuggestMeSomeDerivedData CODE_SIGNING_ALLOWED=NO` (pass; widget device-architecture compile)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination generic/platform=iOS -derivedDataPath /tmp/SuggestMeSomeDerivedData CODE_SIGNING_ALLOWED=NO` (pass; iOS device-architecture compile with embedded watch content)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination generic/platform=watchOS -derivedDataPath /tmp/SuggestMeSomeDerivedData CODE_SIGNING_ALLOWED=NO` (pass; watch device-architecture compile with embedded widget extension)
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/SuggestMeSomeDerivedData -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests -only-testing:SuggestMeSomeTests/Feature10Prompt8IntegrationHardeningTests -only-testing:SuggestMeSomeTests/Feature11Prompt5WatchContinuityTests -only-testing:SuggestMeSomeTests/Feature11Prompt7IntegrationHardeningTests -only-testing:SuggestMeSomeTests/Feature12Prompt4WatchActionsTests -only-testing:SuggestMeSomeTests/Feature12Prompt6WatchSmartStackHardeningTests` (pass; focused watch regression slice)
+- Watch/widget schemes and targets used: `SuggestMeSomeWatch` / `SuggestMeSomeWatch`, `SuggestMeSomeWatchWidget` / `SuggestMeSomeWatchWidget`
 
 ---
 

@@ -83,6 +83,8 @@ struct WatchPillBadge: View {
         .padding(.vertical, size == .small ? 3 : 4)
         .background(tint.opacity(0.22), in: Capsule())
         .foregroundStyle(.primary)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(detail.map { "\(label), \($0)" } ?? label)
     }
 }
 
@@ -151,6 +153,7 @@ struct WatchPainFlagBadge: View {
         .padding(.vertical, 4)
         .foregroundStyle(WatchPalette.warning)
         .background(WatchPalette.warning.opacity(0.18), in: Capsule())
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -310,6 +313,9 @@ struct WatchConnectionDot: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("iPhone connection")
+        .accessibilityValue(status.message)
     }
 }
 

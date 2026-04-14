@@ -13,6 +13,9 @@
 //
 
 import SwiftUI
+#if canImport(WatchKit)
+import WatchKit
+#endif
 
 struct WatchActiveWorkoutView: View {
     let liveWorkout: WatchLiveWorkoutSnapshot?
@@ -87,6 +90,8 @@ struct WatchActiveWorkoutView: View {
             ProgressView(value: Double(completed), total: Double(total))
                 .progressViewStyle(.linear)
                 .tint(WatchPalette.primary)
+                .accessibilityLabel("Workout progress")
+                .accessibilityValue("\(completed) of \(total) exercises complete")
             Text("\(completed) of \(total) exercises done")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -178,7 +183,10 @@ struct WatchActiveWorkoutView: View {
                 .tracking(0.4)
             Text(targetText)
                 .font(.title3.monospacedDigit().weight(.semibold))
+                .accessibilityLabel("Cardio target")
+                .accessibilityValue(targetText)
             Button {
+                playActionHaptic(.success)
                 onExecutionAction(
                     makeAction(.completeCardioBlock, context: context)
                 )
@@ -190,6 +198,7 @@ struct WatchActiveWorkoutView: View {
             .buttonStyle(.borderedProminent)
             .tint(WatchPalette.primary)
             .controlSize(.small)
+            .accessibilityHint("Marks this cardio block complete on iPhone.")
         }
     }
 
@@ -240,10 +249,24 @@ struct WatchActiveWorkoutView: View {
     }
 
     private func handleCrownAction(_ action: WatchWorkoutExecutionActionDTO) {
+        if action.actionKind == .completeCurrentSet {
+            playActionHaptic(.success)
+        }
         onExecutionAction(action)
         if action.actionKind == .completeCurrentSet {
             restTimer.start(duration: WatchRestTimerDefaults.strengthSeconds)
         }
+    }
+
+    private func playActionHaptic(_ type: WatchActionHaptic) {
+#if canImport(WatchKit)
+        switch type {
+        case .success:
+            WKInterfaceDevice.current().play(.success)
+        }
+#else
+        _ = type
+#endif
     }
 
     private func makeAction(
@@ -260,6 +283,10 @@ struct WatchActiveWorkoutView: View {
             ticks: ticks
         )
     }
+}
+
+private enum WatchActionHaptic {
+    case success
 }
 
 // MARK: - Plan Kind Chip
@@ -409,6 +436,7 @@ struct WatchCrownSetLoggingControls: View {
             .buttonStyle(.borderedProminent)
             .tint(WatchPalette.primary)
             .controlSize(.small)
+            .accessibilityHint("Logs the current set on iPhone and starts a rest timer.")
         }
         .onAppear {
             if focusedField == nil {
@@ -450,6 +478,10 @@ struct WatchCrownSetLoggingControls: View {
         .onTapGesture {
             focusedField = field
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(valueText)
+        .accessibilityHint("Double tap to focus, then turn the Digital Crown to adjust.")
     }
 
     private func sendRepsDelta(_ newValue: Double) {

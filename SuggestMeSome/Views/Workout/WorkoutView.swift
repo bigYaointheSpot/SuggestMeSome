@@ -257,6 +257,9 @@ struct WorkoutView: View {
         programContext: ActiveWorkoutProgramContext?
     ) {
         let now = Date.now
+        let workoutID = programWorkout?.workoutID ?? UUID()
+        let sourceLabels = watchSourceLabels()
+        let sessionVersionStableID = watchSessionVersionStableID(workoutID: workoutID)
         startTime = now
         elapsedSeconds = 0
         exerciseEntries = entries
@@ -264,9 +267,13 @@ struct WorkoutView: View {
         comments = ""
         isActive = true
         activeWorkoutSessionStore.startSession(
+            id: workoutID,
             startTime: now,
             exerciseEntries: entries,
-            programContext: programContext
+            programContext: programContext,
+            sessionPlanKind: programWorkout?.watchSessionPlanKind ?? (programContext == nil ? nil : .planned),
+            sessionSourceLabels: sourceLabels,
+            sessionVersionStableID: sessionVersionStableID
         )
         broadcastActiveSessionToWatch()
     }
@@ -287,7 +294,10 @@ struct WorkoutView: View {
             exerciseEntries: exerciseEntries,
             caloriesText: caloriesText,
             comments: comments,
-            programContext: activeProgramContext(from: programWorkout) ?? activeWorkoutSessionStore.session?.programContext
+            programContext: activeProgramContext(from: programWorkout) ?? activeWorkoutSessionStore.session?.programContext,
+            sessionPlanKind: programWorkout?.watchSessionPlanKind,
+            sessionSourceLabels: programWorkout?.watchSessionSourceLabels,
+            sessionVersionStableID: programWorkout?.watchSessionVersionStableID
         )
         broadcastActiveSessionToWatch()
     }
@@ -318,9 +328,41 @@ struct WorkoutView: View {
         guard let programWorkout else { return nil }
         return ActiveWorkoutProgramContext(
             programRunID: programWorkout.programRun.id,
+            programRunStableID: programWorkout.programRun.syncStableID,
             weekNumber: programWorkout.weekNumber,
             sessionNumber: programWorkout.sessionNumber
         )
+    }
+
+    private func watchSourceLabels() -> [String] {
+        if let labels = WatchPayloadMapper.normalizeSourceLabels(programWorkout?.watchSessionSourceLabels) {
+            return labels
+        }
+        if programWorkout != nil {
+            return ["Program"]
+        }
+        if generatedWorkout != nil {
+            return ["SuggestMeSome Generated"]
+        }
+        return ["Manual Workout"]
+    }
+
+    private func watchSessionVersionStableID(workoutID: UUID) -> String {
+        if let versionID = programWorkout?.watchSessionVersionStableID {
+            return versionID
+        }
+        if let programWorkout {
+            return TodayPlanActionCoordinator.watchSessionVersionStableID(
+                runStableID: programWorkout.programRun.syncStableID,
+                path: .planned,
+                weekNumber: programWorkout.weekNumber,
+                sessionNumber: programWorkout.sessionNumber
+            )
+        }
+        if generatedWorkout != nil {
+            return "generated::\(workoutID.uuidString)"
+        }
+        return "manual::\(workoutID.uuidString)"
     }
 
     private func workoutSaveProgramContext() -> WorkoutSaveProgramContext? {
@@ -410,6 +452,7 @@ struct WorkoutView: View {
 
     private func saveWorkout() {
         guard isActive, let start = startTime else { return }
+        let activeSessionForCompletion = activeWorkoutSessionStore.session
         let coordinator = WorkoutSaveCoordinator(modelContext: modelContext)
         let request = WorkoutSaveRequest(
             startTime: start,
@@ -422,10 +465,15 @@ struct WorkoutView: View {
             healthKitWritebackEnabled: writeAppWorkoutsToHealthKit
         )
         let savedWorkout = coordinator.saveWorkout(using: request)
+        let prCount = savedWorkout.exerciseEntries.flatMap(\.sets).filter(\.isPR).count
+        broadcastWatchCompletion(
+            activeSession: activeSessionForCompletion,
+            savedWorkout: savedWorkout,
+            prCount: prCount
+        )
         activeWorkoutSessionStore.discardSession()
         isActive = false
 
-        let prCount = savedWorkout.exerciseEntries.flatMap(\.sets).filter(\.isPR).count
         if prCount > 0 {
             newPRCount = prCount
             withAnimation(.spring(response: 0.5, dampingFraction: 0.65)) {
@@ -438,6 +486,38 @@ struct WorkoutView: View {
         } else {
             dismiss()
         }
+    }
+
+    private func broadcastWatchCompletion(
+        activeSession: ActiveWorkoutSession?,
+        savedWorkout: Workout,
+        prCount: Int
+    ) {
+        let workoutID = activeSession?.id ?? savedWorkout.id
+        let label = watchCompletionLabel(activeSession: activeSession)
+        Task { @MainActor in
+            await WatchSessionCoordinator.shared.broadcastSessionCompletion(
+                workoutID: workoutID,
+                completedAt: savedWorkout.date,
+                totalElapsedSeconds: savedWorkout.durationSeconds,
+                entries: exerciseEntries,
+                sessionLabel: label,
+                sessionPlanKind: activeSession?.sessionPlanKind,
+                sessionSourceLabels: activeSession?.sessionSourceLabels,
+                sessionVersionStableID: activeSession?.sessionVersionStableID,
+                newPersonalRecordCount: prCount
+            )
+        }
+    }
+
+    private func watchCompletionLabel(activeSession: ActiveWorkoutSession?) -> String {
+        if let programContext = activeSession?.programContext {
+            return "W\(programContext.weekNumber) · S\(programContext.sessionNumber)"
+        }
+        if generatedWorkout != nil {
+            return "Suggested workout"
+        }
+        return "Workout"
     }
 
     private func dismissCelebration() {

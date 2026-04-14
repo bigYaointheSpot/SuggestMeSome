@@ -9,6 +9,7 @@ import Foundation
 
 struct ActiveWorkoutProgramContext: Codable, Equatable {
     var programRunID: UUID
+    var programRunStableID: String? = nil
     var weekNumber: Int
     var sessionNumber: Int
 }
@@ -20,6 +21,9 @@ struct ActiveWorkoutSession: Identifiable, Codable, Equatable {
     var caloriesText: String
     var comments: String
     var programContext: ActiveWorkoutProgramContext?
+    var sessionPlanKind: WatchSessionPlanKind?
+    var sessionSourceLabels: [String]?
+    var sessionVersionStableID: String?
 
     init(
         id: UUID = UUID(),
@@ -27,7 +31,10 @@ struct ActiveWorkoutSession: Identifiable, Codable, Equatable {
         exerciseEntries: [DraftExerciseEntry] = [],
         caloriesText: String = "",
         comments: String = "",
-        programContext: ActiveWorkoutProgramContext? = nil
+        programContext: ActiveWorkoutProgramContext? = nil,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil
     ) {
         self.id = id
         self.startTime = startTime
@@ -35,6 +42,9 @@ struct ActiveWorkoutSession: Identifiable, Codable, Equatable {
         self.caloriesText = caloriesText
         self.comments = comments
         self.programContext = programContext
+        self.sessionPlanKind = sessionPlanKind
+        self.sessionSourceLabels = sessionSourceLabels
+        self.sessionVersionStableID = sessionVersionStableID
     }
 }
 
@@ -71,14 +81,29 @@ final class ActiveWorkoutSessionStore {
     }
 
     func startSession(
+        id: UUID = UUID(),
         startTime: Date = Date.now,
         exerciseEntries: [DraftExerciseEntry] = [],
-        programContext: ActiveWorkoutProgramContext? = nil
+        programContext: ActiveWorkoutProgramContext? = nil,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil
     ) {
+        let metadata = resolvedWatchMetadata(
+            workoutID: id,
+            programContext: programContext,
+            sessionPlanKind: sessionPlanKind,
+            sessionSourceLabels: sessionSourceLabels,
+            sessionVersionStableID: sessionVersionStableID
+        )
         session = ActiveWorkoutSession(
+            id: id,
             startTime: startTime,
             exerciseEntries: exerciseEntries,
-            programContext: programContext
+            programContext: programContext,
+            sessionPlanKind: metadata.kind,
+            sessionSourceLabels: metadata.sourceLabels,
+            sessionVersionStableID: metadata.versionID
         )
     }
 
@@ -87,15 +112,30 @@ final class ActiveWorkoutSessionStore {
         exerciseEntries: [DraftExerciseEntry],
         caloriesText: String,
         comments: String,
-        programContext: ActiveWorkoutProgramContext?
+        programContext: ActiveWorkoutProgramContext?,
+        sessionPlanKind: WatchSessionPlanKind? = nil,
+        sessionSourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil
     ) {
         guard var current = session else {
+            let id = UUID()
+            let metadata = resolvedWatchMetadata(
+                workoutID: id,
+                programContext: programContext,
+                sessionPlanKind: sessionPlanKind,
+                sessionSourceLabels: sessionSourceLabels,
+                sessionVersionStableID: sessionVersionStableID
+            )
             session = ActiveWorkoutSession(
+                id: id,
                 startTime: startTime,
                 exerciseEntries: exerciseEntries,
                 caloriesText: caloriesText,
                 comments: comments,
-                programContext: programContext
+                programContext: programContext,
+                sessionPlanKind: metadata.kind,
+                sessionSourceLabels: metadata.sourceLabels,
+                sessionVersionStableID: metadata.versionID
             )
             return
         }
@@ -104,7 +144,18 @@ final class ActiveWorkoutSessionStore {
         current.exerciseEntries = exerciseEntries
         current.caloriesText = caloriesText
         current.comments = comments
-        current.programContext = programContext
+        if let programContext {
+            current.programContext = programContext
+        }
+        if let sessionPlanKind {
+            current.sessionPlanKind = sessionPlanKind
+        }
+        if let normalizedLabels = WatchPayloadMapper.normalizeSourceLabels(sessionSourceLabels) {
+            current.sessionSourceLabels = normalizedLabels
+        }
+        if let sessionVersionStableID {
+            current.sessionVersionStableID = sessionVersionStableID
+        }
         session = current
     }
 
@@ -120,6 +171,15 @@ final class ActiveWorkoutSessionStore {
         }
 
         guard action.workoutID == current.id else {
+            return WatchWorkoutExecutionActionApplyResult(
+                status: .ignoredStaleCursor,
+                updatedEntries: current.exerciseEntries
+            )
+        }
+
+        if let actionVersion = action.sessionVersionStableID,
+           let sessionVersion = current.sessionVersionStableID,
+           actionVersion != sessionVersion {
             return WatchWorkoutExecutionActionApplyResult(
                 status: .ignoredStaleCursor,
                 updatedEntries: current.exerciseEntries
@@ -153,5 +213,48 @@ final class ActiveWorkoutSessionStore {
 
         guard let data = try? JSONEncoder().encode(session) else { return }
         userDefaults.set(data, forKey: persistenceKey)
+    }
+
+    private func resolvedWatchMetadata(
+        workoutID: UUID,
+        programContext: ActiveWorkoutProgramContext?,
+        sessionPlanKind: WatchSessionPlanKind?,
+        sessionSourceLabels: [String]?,
+        sessionVersionStableID: String?
+    ) -> (
+        kind: WatchSessionPlanKind?,
+        sourceLabels: [String]?,
+        versionID: String
+    ) {
+        let kind = sessionPlanKind ?? (programContext == nil ? nil : .planned)
+        let fallbackLabels = programContext == nil ? ["Manual Workout"] : ["Program"]
+        let sourceLabels = WatchPayloadMapper.normalizeSourceLabels(sessionSourceLabels) ?? fallbackLabels
+        let versionID = sessionVersionStableID ?? defaultSessionVersionStableID(
+            workoutID: workoutID,
+            programContext: programContext,
+            kind: kind
+        )
+        return (kind, sourceLabels, versionID)
+    }
+
+    private func defaultSessionVersionStableID(
+        workoutID: UUID,
+        programContext: ActiveWorkoutProgramContext?,
+        kind: WatchSessionPlanKind?
+    ) -> String {
+        guard let programContext else {
+            return "manual::\(workoutID.uuidString)"
+        }
+        let runSegment = programContext.programRunStableID ?? programContext.programRunID.uuidString
+        let suffix: String
+        switch kind {
+        case .overlayAdjusted:
+            suffix = "overlay"
+        case .runtimeAdjusted:
+            suffix = "runtime"
+        case .planned, .none:
+            suffix = "planned"
+        }
+        return "\(runSegment)::w\(programContext.weekNumber)s\(programContext.sessionNumber)::\(suffix)"
     }
 }

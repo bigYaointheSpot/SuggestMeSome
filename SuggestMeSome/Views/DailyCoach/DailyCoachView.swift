@@ -1261,11 +1261,28 @@ struct DailyCoachView: View {
             session: session.sessionNumber,
             resolution: resolution
         )
+        let workoutID = UUID()
+        let kind = TodayPlanActionCoordinator.watchSessionPlanKind(for: resolution.path)
+        let sessionVersionStableID = TodayPlanActionCoordinator.watchSessionVersionStableID(
+            runStableID: run.syncStableID,
+            path: resolution.path,
+            weekNumber: session.weekNumber,
+            sessionNumber: session.sessionNumber
+        )
+        let sourceLabels = TodayPlanActionCoordinator.executionSourceLabels(
+            plan: todayPlan,
+            resolution: resolution,
+            hasRelevantPendingProposal: relevantProposalForTodayPlan != nil
+        )
         pendingProgramWorkout = ProgramWorkoutContext(
+            workoutID: workoutID,
             programRun: run,
             weekNumber: session.weekNumber,
             sessionNumber: session.sessionNumber,
-            exercises: exercises
+            exercises: exercises,
+            watchSessionPlanKind: kind,
+            watchSessionSourceLabels: sourceLabels,
+            watchSessionVersionStableID: sessionVersionStableID
         )
         pendingDraft = nil
         pendingLaunchResolution = resolution
@@ -1282,7 +1299,11 @@ struct DailyCoachView: View {
                 resolution: resolution,
                 run: run,
                 session: session,
-                entries: draftEntries(for: exercises)
+                entries: draftEntries(for: exercises),
+                workoutID: workoutID,
+                kind: kind,
+                sourceLabels: sourceLabels,
+                sessionVersionStableID: sessionVersionStableID
             )
         }
     }
@@ -1319,21 +1340,24 @@ struct DailyCoachView: View {
         resolution: TodayPlanLaunchResolution,
         run: ProgramRun,
         session: NextProgramSessionInfo,
-        entries: [DraftExerciseEntry]
+        entries: [DraftExerciseEntry],
+        workoutID: UUID = UUID(),
+        kind: WatchSessionPlanKind? = nil,
+        sourceLabels: [String]? = nil,
+        sessionVersionStableID: String? = nil
     ) {
         let coordinator = watchSessionCoordinator ?? WatchSessionCoordinator()
         watchSessionCoordinator = coordinator
         let plan = todayPlan
-        let kind = TodayPlanActionCoordinator.watchSessionPlanKind(for: resolution.path)
-        let sessionVersionStableID = TodayPlanActionCoordinator.watchSessionVersionStableID(
+        let resolvedKind = kind ?? TodayPlanActionCoordinator.watchSessionPlanKind(for: resolution.path)
+        let resolvedVersionStableID = sessionVersionStableID ?? TodayPlanActionCoordinator.watchSessionVersionStableID(
             runStableID: run.syncStableID,
             path: resolution.path,
             weekNumber: session.weekNumber,
             sessionNumber: session.sessionNumber
         )
-        let launchID = UUID()
         let startedAt = Date()
-        let sourceLabels = TodayPlanActionCoordinator.executionSourceLabels(
+        let resolvedSourceLabels = sourceLabels ?? TodayPlanActionCoordinator.executionSourceLabels(
             plan: plan,
             resolution: resolution,
             hasRelevantPendingProposal: relevantProposalForTodayPlan != nil
@@ -1341,14 +1365,14 @@ struct DailyCoachView: View {
         let sessionLabel = nextSessionLabel(for: session)
         Task { @MainActor in
             await coordinator.broadcastWorkoutLaunch(
-                workoutID: launchID,
+                workoutID: workoutID,
                 startedAt: startedAt,
                 programRunID: run.id,
                 programWeekNumber: session.weekNumber,
                 programSessionNumber: session.sessionNumber,
-                sessionPlanKind: kind,
-                sessionSourceLabels: sourceLabels,
-                sessionVersionStableID: sessionVersionStableID
+                sessionPlanKind: resolvedKind,
+                sessionSourceLabels: resolvedSourceLabels,
+                sessionVersionStableID: resolvedVersionStableID
             )
             await coordinator.broadcastTodayPlan(
                 plan,
@@ -1356,23 +1380,23 @@ struct DailyCoachView: View {
                 programRunStableID: run.syncStableID
             )
             await coordinator.broadcastLiveWorkout(
-                workoutID: launchID,
+                workoutID: workoutID,
                 elapsedSeconds: 0,
                 entries: entries,
                 sessionLabel: sessionLabel,
                 programRunStableID: run.syncStableID,
                 programWeekNumber: session.weekNumber,
                 programSessionNumber: session.sessionNumber,
-                sessionPlanKind: kind,
-                sessionSourceLabels: sourceLabels,
-                sessionVersionStableID: sessionVersionStableID
+                sessionPlanKind: resolvedKind,
+                sessionSourceLabels: resolvedSourceLabels,
+                sessionVersionStableID: resolvedVersionStableID
             )
             await coordinator.broadcastCurrentSessionContext(
-                workoutID: launchID,
+                workoutID: workoutID,
                 entries: entries,
-                sessionPlanKind: kind,
-                sessionSourceLabels: sourceLabels,
-                sessionVersionStableID: sessionVersionStableID
+                sessionPlanKind: resolvedKind,
+                sessionSourceLabels: resolvedSourceLabels,
+                sessionVersionStableID: resolvedVersionStableID
             )
         }
     }
@@ -1393,7 +1417,11 @@ struct DailyCoachView: View {
             resolution: resolution,
             run: context.programRun,
             session: session,
-            entries: entries
+            entries: entries,
+            workoutID: context.workoutID,
+            kind: context.watchSessionPlanKind,
+            sourceLabels: context.watchSessionSourceLabels,
+            sessionVersionStableID: context.watchSessionVersionStableID
         )
     }
 

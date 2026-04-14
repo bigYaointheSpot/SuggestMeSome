@@ -9,6 +9,10 @@ import Combine
 import Foundation
 import WatchConnectivity
 
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
+
 enum WatchCompanionRootMode: Equatable {
     case activeWorkout
     case sessionCompletion
@@ -128,26 +132,60 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         case .todayPlanSnapshot:
             applyDecoded(WatchTodayPlanSnapshot.self, from: message) { todayPlan in
                 self.todayPlan = todayPlan
+                self.updateWidgetSnapshot { existing in
+                    WatchWidgetSnapshot.mergingTodayPlan(todayPlan, into: existing)
+                }
+                return true
             }
         case .workoutLaunch:
             applyDecoded(WatchWorkoutLaunchPayload.self, from: message) { launch in
+                self.resetActivePayloadsIfNeeded(
+                    workoutID: launch.workoutID,
+                    sessionVersionStableID: launch.sessionVersionStableID
+                )
                 self.workoutLaunch = launch
                 self.completion = nil
+                return true
             }
         case .workoutProgress:
             applyDecoded(WatchWorkoutProgressSnapshot.self, from: message) { progress in
+                guard self.acceptsActivePayload(
+                    workoutID: progress.workoutID,
+                    sessionVersionStableID: nil
+                ) else { return false }
                 self.progressSnapshot = progress
                 self.completion = nil
+                return true
             }
         case .liveWorkoutSnapshot:
             applyDecoded(WatchLiveWorkoutSnapshot.self, from: message) { liveWorkout in
+                guard self.acceptsActivePayload(
+                    workoutID: liveWorkout.workoutID,
+                    sessionVersionStableID: liveWorkout.sessionVersionStableID
+                ) else { return false }
                 self.liveWorkout = liveWorkout
                 self.completion = nil
+                self.updateWidgetSnapshot { existing in
+                    WatchWidgetSnapshot.mergingLiveWorkout(
+                        liveWorkout,
+                        currentContext: self.currentContext,
+                        into: existing
+                    )
+                }
+                return true
             }
         case .currentSessionContext:
             applyDecoded(WatchCurrentSessionContext.self, from: message) { context in
+                guard self.acceptsActivePayload(
+                    workoutID: context.workoutID,
+                    sessionVersionStableID: context.sessionVersionStableID
+                ) else { return false }
                 self.currentContext = context
                 self.completion = nil
+                self.updateWidgetSnapshot { existing in
+                    existing.updatingCurrentContext(context)
+                }
+                return true
             }
         case .sessionCompletion:
             applyDecoded(WatchSessionCompletionPayload.self, from: message) { completion in
@@ -156,6 +194,10 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 self.progressSnapshot = nil
                 self.liveWorkout = nil
                 self.currentContext = nil
+                self.updateWidgetSnapshot { existing in
+                    existing.clearingActiveWorkout()
+                }
+                return true
             }
         case .workoutExecutionAction:
             return
@@ -196,13 +238,63 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     private func applyDecoded<Payload: Decodable>(
         _ type: Payload.Type,
         from message: WatchBridgeMessage,
-        apply: (Payload) -> Void
+        apply: (Payload) -> Bool
     ) -> Bool {
         guard let payload = try? WatchBridgeMessageCodec.decodePayload(type, from: message) else { return false }
-        apply(payload)
+        guard apply(payload) else { return false }
         markApplied(message)
         refreshSessionStatus(message: "Synced from iPhone.")
         return true
+    }
+
+    private func acceptsActivePayload(
+        workoutID: UUID,
+        sessionVersionStableID: String?
+    ) -> Bool {
+        guard let activeWorkoutID else { return true }
+        guard activeWorkoutID == workoutID else { return false }
+
+        guard let existingVersion = activeSessionVersionStableID,
+              let incomingVersion = sessionVersionStableID else {
+            return true
+        }
+        return existingVersion == incomingVersion
+    }
+
+    private func resetActivePayloadsIfNeeded(
+        workoutID: UUID,
+        sessionVersionStableID: String?
+    ) {
+        guard let activeWorkoutID else { return }
+        let versionChanged: Bool = {
+            guard let existingVersion = activeSessionVersionStableID,
+                  let sessionVersionStableID else {
+                return false
+            }
+            return existingVersion != sessionVersionStableID
+        }()
+        guard activeWorkoutID != workoutID || versionChanged else { return }
+        progressSnapshot = nil
+        liveWorkout = nil
+        currentContext = nil
+    }
+
+    private var activeWorkoutID: UUID? {
+        workoutLaunch?.workoutID ?? liveWorkout?.workoutID ?? currentContext?.workoutID ?? progressSnapshot?.workoutID
+    }
+
+    private var activeSessionVersionStableID: String? {
+        workoutLaunch?.sessionVersionStableID ?? liveWorkout?.sessionVersionStableID ?? currentContext?.sessionVersionStableID
+    }
+
+    private func updateWidgetSnapshot(
+        _ transform: (WatchWidgetSnapshot) -> WatchWidgetSnapshot
+    ) {
+        let existing = WatchWidgetSnapshotStore.load()
+        WatchWidgetSnapshotStore.save(transform(existing))
+#if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+#endif
     }
 
     private func refreshSessionStatus(message: String? = nil) {
