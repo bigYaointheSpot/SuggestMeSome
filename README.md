@@ -2436,6 +2436,76 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+#### Prompt 3 [Watch Root and Today Plan UI] — 2026-04-13
+
+- Rebuilt the watch root flow as a thin, native switcher:
+  - `SuggestMeSomeWatch/WatchRootView.swift`
+  - active live workout wins the root when any of `liveWorkout`, `currentContext`, `progressSnapshot`, or `workoutLaunch` is present; otherwise Today Plan fills the surface
+  - navigation stays minimal — single `NavigationStack`, no tab bar, no proposal review, no history drill-in
+  - companion app now tints with the shared `WatchPalette.primary` indigo token
+- Added a premium Today Plan watch surface:
+  - `SuggestMeSomeWatch/WatchTodayPlanView.swift`
+  - compact header with "Today" label, program session title, and program name
+  - indigo-tinted primary suggestion card with compact summary subtitle
+  - side-by-side readiness and confidence pills with color tiers
+  - standalone pain-flag pill when the iPhone plan is pain-gated
+  - "What Changed" block appears only when the iPhone plan actually reports a change
+  - adherence rescue block surfaces headline, sessions-behind count, and guidance type when present
+  - compact source label strip for trust without clutter
+  - strong empty state when no plan has synced yet, with reconnect hint
+  - "Resume Workout" live CTA when both a Today Plan and a live workout snapshot are staged
+  - completion celebration block with exercise count, elapsed time, and PR count when `completion` is present
+  - all content stays faithful to iPhone-produced state — watch never synthesises its own coaching text
+- Extracted the active workout execution surface into its own file:
+  - `SuggestMeSomeWatch/WatchActiveWorkoutView.swift`
+  - prominent elapsed-time hero, linear indigo progress bar, exercise count subtitle
+  - current exercise card with two stacked crown-first focused controls: reps on top, weight below
+  - focus highlighting tints the active row indigo so the Digital Crown target is glanceable
+  - dedicated cardio panel reuses the shared duration formatter and falls back to "Open on iPhone" when no target
+  - reps focus auto-activates on first appear so users can log immediately without tapping
+- Introduced a reusable watch UI helper layer:
+  - `SuggestMeSomeWatch/WatchUIComponents.swift`
+  - `WatchPalette` primary/surface/positive/warning/danger color tokens
+  - `watchCard(emphasized:tint:)` view modifier with subtle stroke + rounded background
+  - `WatchPillBadge`, `WatchReadinessBadge`, `WatchConfidenceBadge`, `WatchPainFlagBadge`
+  - `WatchAdherenceBlock`, `WatchWhatChangedBlock`, `WatchSourceLabelsStrip`
+  - `WatchEmptyStatePanel`, `WatchConnectionDot`
+  - `WatchDurationFormatter` for `mm:ss` / `h:mm:ss` elapsed rendering shared across surfaces
+- Added mock state fixtures and SwiftUI previews for the key watch screens:
+  - `SuggestMeSomeWatch/WatchPreviewFixtures.swift` (guarded by `#if DEBUG`)
+  - `WatchTodayPlanView` previews: normal plan, pain-flagged plan, adherence rescue, empty state, active-workout CTA, completion celebration
+  - `WatchActiveWorkoutView` previews: strength session, cardio session, idle connection status
+- User-visible behavior:
+  - glanceable Today Plan that now looks and reads like a premium watch app, not a debug dump of DTO fields
+  - pain-flagged days are visually distinct and never hide behind a generic caption
+  - adherence rescue surfaces with an explicit rescue headline and session-behind count
+  - live workout state keeps its execution-first hero layout with crown-first logging intact
+  - empty state tells the user exactly how to unblock themselves ("Open SuggestMeSome on iPhone")
+- Architecture and guardrails:
+  - iPhone remains the source of truth for workout state, persistence, coaching, and proposal approval
+  - no plan/coaching/analytics logic moved onto the watch target
+  - no proposal review/approval, dashboard, history, or settings surfaces added on watch
+  - iPhone Today Plan UI was not redesigned — the phone surface is untouched
+  - watch companion continues to support all active workouts, not just program sessions
+  - companion app uses the shared transport DTOs only; no SwiftData imports, no coaching engines, no runtime model coupling
+  - root mode still prioritises active live workout, matching the Feature 12 Smart Stack direction
+- Files created/edited:
+  - created: `SuggestMeSomeWatch/WatchUIComponents.swift`
+  - created: `SuggestMeSomeWatch/WatchTodayPlanView.swift`
+  - created: `SuggestMeSomeWatch/WatchActiveWorkoutView.swift`
+  - created: `SuggestMeSomeWatch/WatchPreviewFixtures.swift`
+  - edited: `SuggestMeSomeWatch/WatchRootView.swift`
+  - edited: `README.md` (Feature 12 Prompt 3 entry)
+- Validation/build/previews run:
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS Simulator'` (pass; BUILD SUCCEEDED)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS' CODE_SIGNING_ALLOWED=NO` (pass; device-architecture compile, BUILD SUCCEEDED)
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'` (pass; includes embedded watch app validation)
+  - SwiftUI previews compile into `__preview.dylib` as part of the watch simulator build, exercising every fixture in `WatchPreviewFixtures`
+  - state coverage wired through the preview macros: no-plan, normal plan, pain-flagged plan, adherence rescue, active live workout (strength and cardio), idle connection status, and completion celebration
+- Watch scheme/target used: `SuggestMeSomeWatch` / `SuggestMeSomeWatch`
+
+---
+
 
 
 ## Project Setup
