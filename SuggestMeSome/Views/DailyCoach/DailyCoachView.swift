@@ -157,6 +157,7 @@ struct DailyCoachView: View {
     // Watch continuity — lazily initialised on first launch broadcast to keep
     // `DefaultWatchCompanionBridge` off the view's init path.
     @State private var watchSessionCoordinator: WatchSessionCoordinator?
+    @State private var lastPublishedWatchTodayPlanSignature: String?
 
     // MARK: Body
 
@@ -297,6 +298,12 @@ struct DailyCoachView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(proposalActionErrorMessage ?? "Unknown error")
+        }
+        .onAppear {
+            publishTodayPlanToWatchIfNeeded(force: true)
+        }
+        .onChange(of: watchTodayPlanSignature) { _, _ in
+            publishTodayPlanToWatchIfNeeded()
         }
     }
 
@@ -1234,6 +1241,48 @@ struct DailyCoachView: View {
 
     // MARK: - Session Launch Helpers
 
+    private var watchTodayPlanSignature: String {
+        let plan = todayPlan
+        let session = plan.recommendation.nextProgramSession
+        return [
+            focusRun?.syncStableID ?? "standalone",
+            focusRun?.program?.name ?? "",
+            "\(session?.weekNumber ?? 0)",
+            "\(session?.sessionNumber ?? 0)",
+            plan.confidence.rawValue,
+            plan.recommendation.compactSummary,
+            plan.recommendation.primarySuggestion.type.rawValue,
+            plan.recommendation.primarySuggestion.compactText,
+            "\(plan.recommendation.hasPainFlag)",
+            "\(plan.recommendation.pendingProposalCount)",
+            plan.recommendation.readinessTier.watchSignatureLabel,
+            plan.attribution.activeSourceLabels.joined(separator: ","),
+            plan.whatChangedToday,
+            plan.adherenceRescue?.headline ?? "",
+            "\(plan.adherenceRescue?.sessionsBehindCount ?? 0)"
+        ].joined(separator: "|")
+    }
+
+    private func publishTodayPlanToWatchIfNeeded(force: Bool = false) {
+        let signature = watchTodayPlanSignature
+        guard force || signature != lastPublishedWatchTodayPlanSignature else { return }
+
+        lastPublishedWatchTodayPlanSignature = signature
+        let coordinator = watchSessionCoordinator ?? WatchSessionCoordinator()
+        watchSessionCoordinator = coordinator
+        let plan = todayPlan
+        let programName = focusRun?.program?.name
+        let programRunStableID = focusRun?.syncStableID
+
+        Task { @MainActor in
+            await coordinator.broadcastTodayPlan(
+                plan,
+                programName: programName,
+                programRunStableID: programRunStableID
+            )
+        }
+    }
+
     private func launchApprovedVersion() {
         launch(request: .startApprovedVersion)
     }
@@ -1469,6 +1518,17 @@ struct DailyCoachView: View {
         case .elevated:   return .yellow
         case .high:       return .orange
         case .critical:   return .red
+        }
+    }
+}
+
+private extension ReadinessTier {
+    var watchSignatureLabel: String {
+        switch self {
+        case .strong: return "Strong"
+        case .neutral: return "Neutral"
+        case .low: return "Low"
+        case .unknown: return "Unknown"
         }
     }
 }

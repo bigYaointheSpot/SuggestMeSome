@@ -28,19 +28,30 @@ struct HealthKitAuthorizationSnapshot {
         workoutWriteStatus == .sharingAuthorized
     }
 
+    var isWorkoutWriteDenied: Bool {
+        workoutWriteStatus == .sharingDenied
+    }
+
+    var hasCompletedAuthorizationFlow: Bool {
+        hasRequestedAuthorization && requestStatus == .unnecessary
+    }
+
     var hasAnyDeniedScope: Bool {
-        readStatuses.contains(.sharingDenied) || workoutWriteStatus == .sharingDenied
+        isWorkoutWriteDenied && !isConnected
     }
 
     var isConnected: Bool {
-        availability == .available && (hasAnyAuthorizedRead || isWriteAuthorized)
+        availability == .available && (hasAnyAuthorizedRead || isWriteAuthorized || hasCompletedAuthorizationFlow)
     }
 
     var isDenied: Bool {
         guard availability == .available else { return false }
-        if hasAnyDeniedScope { return true }
         guard hasRequestedAuthorization else { return false }
-        return requestStatus == .unnecessary && !isConnected
+        return !isConnected && (requestStatus == .unnecessary || isWorkoutWriteDenied)
+    }
+
+    var canPresentAuthorizationPrompt: Bool {
+        availability == .available && requestStatus != .unnecessary
     }
 }
 

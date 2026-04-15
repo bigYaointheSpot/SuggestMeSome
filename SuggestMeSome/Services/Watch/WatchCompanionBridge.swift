@@ -31,6 +31,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
 
     private(set) var latestStatus: WatchCompanionStatus
     var executionActionHandler: WatchExecutionActionHandler?
+    private var latestTodayPlanSnapshot: WatchTodayPlanSnapshot?
 
 #if canImport(WatchConnectivity)
     private let session: WCSession?
@@ -94,10 +95,9 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     }
 
     func sendTodayPlanSnapshot(_ snapshot: WatchTodayPlanSnapshot) async {
+        latestTodayPlanSnapshot = snapshot
 #if canImport(WatchConnectivity)
-        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
-        guard let message = Self.makeContextMessage(kind: .todayPlanSnapshot, payload: snapshot) else { return }
-        try? session.updateApplicationContext(message)
+        sendLatestTodayPlanIfPossible()
 #else
         _ = snapshot
 #endif
@@ -126,8 +126,15 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     func sendSessionCompletion(_ payload: WatchSessionCompletionPayload) async {
 #if canImport(WatchConnectivity)
         guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
-        guard let message = Self.makeTransferMessage(kind: .sessionCompletion, payload: payload) else { return }
-        session.transferUserInfo(message)
+        guard let message = Self.makeContextMessage(kind: .sessionCompletion, payload: payload) else { return }
+        try? session.updateApplicationContext(message)
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil) { _ in
+                session.transferUserInfo(message)
+            }
+        } else {
+            session.transferUserInfo(message)
+        }
 #else
         _ = payload
 #endif
@@ -191,12 +198,21 @@ extension DefaultWatchCompanionBridge: WCSessionDelegate {
     ) {
         Task { @MainActor in
             _ = await refreshStatus()
+            sendLatestTodayPlanIfPossible()
         }
     }
 
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
         Task { @MainActor in
             _ = await refreshStatus()
+            sendLatestTodayPlanIfPossible()
+        }
+    }
+
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        Task { @MainActor in
+            _ = await refreshStatus()
+            sendLatestTodayPlanIfPossible()
         }
     }
 
@@ -214,6 +230,22 @@ extension DefaultWatchCompanionBridge: WCSessionDelegate {
 }
 
 private extension DefaultWatchCompanionBridge {
+    func sendLatestTodayPlanIfPossible() {
+        guard let snapshot = latestTodayPlanSnapshot else { return }
+#if canImport(WatchConnectivity)
+        guard let session,
+              session.activationState == .activated,
+              session.isWatchAppInstalled,
+              let message = Self.makeContextMessage(kind: .todayPlanSnapshot, payload: snapshot) else {
+            return
+        }
+        try? session.updateApplicationContext(message)
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil, errorHandler: nil)
+        }
+#endif
+    }
+
     func handleIncomingMessage(_ dictionary: [String: Any]) {
         guard let message = try? WatchBridgeMessageCodec.decodeMessage(from: dictionary),
               message.isSupportedSchemaVersion,

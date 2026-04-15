@@ -208,8 +208,12 @@ struct HealthDataSettingsView: View {
 
             Button(connectButtonTitle) {
                 Task {
-                    healthKitPermissionsRequested = true
-                    await viewModel.requestAuthorization(hasRequestedAuthorization: true)
+                    if viewModel.snapshot.canPresentAuthorizationPrompt {
+                        healthKitPermissionsRequested = true
+                        await viewModel.requestAuthorization(hasRequestedAuthorization: true)
+                    } else {
+                        await viewModel.refreshStatus(hasRequestedAuthorization: healthKitPermissionsRequested)
+                    }
                 }
             }
             .disabled(!healthKitEnabled || isUnavailable || viewModel.isLoading)
@@ -373,14 +377,18 @@ struct HealthDataSettingsView: View {
             return "HealthKit access is denied. Enable access in the Health app or iOS Privacy settings."
         }
         if isConnected {
+            if viewModel.snapshot.isWorkoutWriteDenied {
+                return "HealthKit permissions are configured. Workout writeback is off; enable workout write access in Health settings if you want SuggestMeSome to write saved workouts."
+            }
             return "HealthKit permissions are active."
         }
         return "HealthKit is not connected yet."
     }
 
     private var connectButtonTitle: String {
-        if isDenied { return "Request Access Again" }
-        if isConnected { return "Review Permissions" }
+        if !viewModel.snapshot.canPresentAuthorizationPrompt {
+            return "Refresh Permission Status"
+        }
         return "Connect HealthKit"
     }
 

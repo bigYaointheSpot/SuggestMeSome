@@ -436,6 +436,13 @@ extension WatchCompanionSessionStore: WCSessionDelegate {
         }
     }
 
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        Task { @MainActor in
+            refreshSessionStatus()
+            applyApplicationContext(message)
+        }
+    }
+
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         Task { @MainActor in
             refreshSessionStatus()

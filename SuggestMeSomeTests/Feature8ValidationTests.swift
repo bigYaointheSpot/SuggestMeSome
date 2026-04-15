@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HealthKit
 import SwiftData
 import Testing
 @testable import SuggestMeSome
@@ -13,6 +14,35 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct Feature8ValidationTests {
+
+    @Test func healthKitAuthorizationTreatsCompletedFlowAsConnectedEvenWhenOptionalWriteIsDenied() {
+        let snapshot = HealthKitAuthorizationSnapshot(
+            availability: .available,
+            readStatuses: [.notDetermined],
+            workoutWriteStatus: .sharingDenied,
+            requestStatus: .unnecessary,
+            hasRequestedAuthorization: true
+        )
+
+        #expect(snapshot.isConnected)
+        #expect(snapshot.isWorkoutWriteDenied)
+        #expect(!snapshot.isDenied)
+        #expect(!snapshot.canPresentAuthorizationPrompt)
+    }
+
+    @Test func healthKitAuthorizationCanStillPromptBeforeSystemMarksRequestUnnecessary() {
+        let snapshot = HealthKitAuthorizationSnapshot(
+            availability: .available,
+            readStatuses: [.notDetermined],
+            workoutWriteStatus: .notDetermined,
+            requestStatus: .shouldRequest,
+            hasRequestedAuthorization: false
+        )
+
+        #expect(!snapshot.isConnected)
+        #expect(!snapshot.isDenied)
+        #expect(snapshot.canPresentAuthorizationPrompt)
+    }
 
     @Test func healthKitDailySummaryUpsertUpdatesByDayWithoutDupes() throws {
         let container = try makeInMemoryContainer()
