@@ -233,6 +233,138 @@ struct Feature12Prompt6WatchSmartStackHardeningTests {
         )
     }
 
+    @Test func currentSetPresentationPolicyUsesLiveWorkoutAsCatchUpFallback() throws {
+        let now = Date(timeIntervalSince1970: 1_780_000_030)
+        let current = makeCurrentContext(capturedAt: now, versionID: "run-1::w1s1::planned")
+        let optimistic = try unwrap(
+            WatchCurrentSetPresentationPolicy.optimisticNextSetContext(
+                afterCompleting: current,
+                completedReps: 5,
+                completedWeight: 185,
+                capturedAt: now.addingTimeInterval(1)
+            )
+        )
+        let live = WatchLiveWorkoutSnapshot(
+            workoutID: optimistic.workoutID,
+            elapsedSeconds: 240,
+            completedExercises: optimistic.exerciseIndex,
+            totalExercises: optimistic.totalExercisesInSession,
+            completedSetsInCurrentExercise: optimistic.loggedSetsInExercise,
+            totalSetsInCurrentExercise: optimistic.totalSetsInExercise,
+            currentExerciseName: optimistic.exerciseName,
+            sessionLabel: "W1 · S1",
+            programRunStableID: "run-1",
+            programWeekNumber: 1,
+            programSessionNumber: 1,
+            sessionPlanKind: .planned,
+            sessionSourceLabels: ["Program"],
+            sessionVersionStableID: optimistic.sessionVersionStableID,
+            capturedAt: now.addingTimeInterval(2)
+        )
+
+        #expect(
+            WatchCurrentSetPresentationPolicy.hasLiveWorkoutCaughtUp(
+                liveWorkout: live,
+                to: optimistic
+            )
+        )
+    }
+
+    @Test func currentSetPresentationPolicyRejectsStaleLiveWorkoutFallback() throws {
+        let now = Date(timeIntervalSince1970: 1_780_000_040)
+        let current = makeCurrentContext(capturedAt: now, versionID: "run-1::w1s1::planned")
+        let optimistic = try unwrap(
+            WatchCurrentSetPresentationPolicy.optimisticNextSetContext(
+                afterCompleting: current,
+                completedReps: 5,
+                completedWeight: 185,
+                capturedAt: now.addingTimeInterval(1)
+            )
+        )
+        let staleLive = WatchLiveWorkoutSnapshot(
+            workoutID: optimistic.workoutID,
+            elapsedSeconds: 240,
+            completedExercises: optimistic.exerciseIndex,
+            totalExercises: optimistic.totalExercisesInSession,
+            completedSetsInCurrentExercise: max(0, optimistic.loggedSetsInExercise - 1),
+            totalSetsInCurrentExercise: optimistic.totalSetsInExercise,
+            currentExerciseName: optimistic.exerciseName,
+            sessionLabel: "W1 · S1",
+            programRunStableID: "run-1",
+            programWeekNumber: 1,
+            programSessionNumber: 1,
+            sessionPlanKind: .planned,
+            sessionSourceLabels: ["Program"],
+            sessionVersionStableID: optimistic.sessionVersionStableID,
+            capturedAt: now.addingTimeInterval(2)
+        )
+
+        #expect(
+            !WatchCurrentSetPresentationPolicy.hasLiveWorkoutCaughtUp(
+                liveWorkout: staleLive,
+                to: optimistic
+            )
+        )
+    }
+
+    @Test func currentSetPresentationPolicyTreatsBehindPhoneContextAsStaleAgainstLiveWorkout() {
+        let now = Date(timeIntervalSince1970: 1_780_000_050)
+        let staleContext = makeCurrentContext(capturedAt: now, versionID: "run-1::w1s1::planned")
+        let live = WatchLiveWorkoutSnapshot(
+            workoutID: staleContext.workoutID,
+            elapsedSeconds: 300,
+            completedExercises: staleContext.exerciseIndex,
+            totalExercises: staleContext.totalExercisesInSession,
+            completedSetsInCurrentExercise: staleContext.loggedSetsInExercise + 1,
+            totalSetsInCurrentExercise: staleContext.totalSetsInExercise,
+            currentExerciseName: staleContext.exerciseName,
+            sessionLabel: "W1 · S1",
+            programRunStableID: "run-1",
+            programWeekNumber: 1,
+            programSessionNumber: 1,
+            sessionPlanKind: .planned,
+            sessionSourceLabels: ["Program"],
+            sessionVersionStableID: staleContext.sessionVersionStableID,
+            capturedAt: now.addingTimeInterval(1)
+        )
+
+        #expect(
+            WatchCurrentSetPresentationPolicy.isPhoneContextStaleComparedToLiveWorkout(
+                phoneContext: staleContext,
+                liveWorkout: live
+            )
+        )
+    }
+
+    @Test func currentSetPresentationPolicyDetectsLiveWorkoutAdvancePastCompletedExercise() {
+        let now = Date(timeIntervalSince1970: 1_780_000_060)
+        let live = WatchLiveWorkoutSnapshot(
+            workoutID: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            elapsedSeconds: 360,
+            completedExercises: 1,
+            totalExercises: 3,
+            completedSetsInCurrentExercise: 0,
+            totalSetsInCurrentExercise: 3,
+            currentExerciseName: "Bench Press",
+            sessionLabel: "W1 · S1",
+            programRunStableID: "run-1",
+            programWeekNumber: 1,
+            programSessionNumber: 1,
+            sessionPlanKind: .planned,
+            sessionSourceLabels: ["Program"],
+            sessionVersionStableID: "run-1::w1s1::planned",
+            capturedAt: now
+        )
+
+        #expect(
+            WatchCurrentSetPresentationPolicy.hasLiveWorkoutAdvancedPastCompletedExercise(
+                liveWorkout: live,
+                sessionIdentity: "\(live.workoutID.uuidString)|\(live.sessionVersionStableID ?? "")",
+                completedExerciseIndex: 0
+            )
+        )
+    }
+
     @Test func ignoredWatchActionRebroadcastsCurrentSessionStateForRecovery() async throws {
         let bridge = MockWatchCompanionBridge()
         let coordinator = WatchSessionCoordinator(bridge: bridge)

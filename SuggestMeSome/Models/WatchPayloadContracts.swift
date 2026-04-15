@@ -291,6 +291,75 @@ enum WatchCurrentSetPresentationPolicy {
         }
     }
 
+    static func hasLiveWorkoutCaughtUp(
+        liveWorkout: WatchLiveWorkoutSnapshot?,
+        to displayedContext: WatchCurrentSessionContext?
+    ) -> Bool {
+        guard let displayedContext, let liveWorkout else { return false }
+        guard liveWorkout.workoutID == displayedContext.workoutID else { return false }
+
+        if let displayedVersion = displayedContext.sessionVersionStableID,
+           let liveVersion = liveWorkout.sessionVersionStableID,
+           liveVersion != displayedVersion {
+            return false
+        }
+
+        if liveWorkout.completedExercises > displayedContext.exerciseIndex {
+            return true
+        }
+        guard liveWorkout.completedExercises == displayedContext.exerciseIndex else {
+            return false
+        }
+
+        if let currentExerciseName = liveWorkout.currentExerciseName,
+           !currentExerciseName.isEmpty,
+           currentExerciseName != displayedContext.exerciseName {
+            return false
+        }
+
+        return liveWorkout.completedSetsInCurrentExercise >= displayedContext.loggedSetsInExercise
+    }
+
+    static func isPhoneContextStaleComparedToLiveWorkout(
+        phoneContext: WatchCurrentSessionContext?,
+        liveWorkout: WatchLiveWorkoutSnapshot?
+    ) -> Bool {
+        guard let phoneContext, let liveWorkout else { return false }
+        guard liveWorkout.workoutID == phoneContext.workoutID else { return false }
+
+        if let phoneVersion = phoneContext.sessionVersionStableID,
+           let liveVersion = liveWorkout.sessionVersionStableID,
+           liveVersion != phoneVersion {
+            return true
+        }
+
+        if liveWorkout.completedExercises > phoneContext.exerciseIndex {
+            return true
+        }
+        if liveWorkout.completedExercises < phoneContext.exerciseIndex {
+            return false
+        }
+
+        if let currentExerciseName = liveWorkout.currentExerciseName,
+           !currentExerciseName.isEmpty,
+           currentExerciseName != phoneContext.exerciseName {
+            return true
+        }
+
+        return liveWorkout.completedSetsInCurrentExercise > phoneContext.loggedSetsInExercise
+    }
+
+    static func hasLiveWorkoutAdvancedPastCompletedExercise(
+        liveWorkout: WatchLiveWorkoutSnapshot?,
+        sessionIdentity: String,
+        completedExerciseIndex: Int
+    ) -> Bool {
+        guard let liveWorkout else { return false }
+        let liveIdentity = "\(liveWorkout.workoutID.uuidString)|\(liveWorkout.sessionVersionStableID ?? "")"
+        guard liveIdentity == sessionIdentity else { return true }
+        return liveWorkout.completedExercises > completedExerciseIndex
+    }
+
     static func optimisticNextSetContext(
         afterCompleting context: WatchCurrentSessionContext,
         completedReps: Int?,

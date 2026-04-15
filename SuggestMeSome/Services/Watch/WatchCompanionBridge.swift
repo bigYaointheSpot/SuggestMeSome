@@ -32,6 +32,11 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     private(set) var latestStatus: WatchCompanionStatus
     var executionActionHandler: WatchExecutionActionHandler?
     private var latestTodayPlanSnapshot: WatchTodayPlanSnapshot?
+    private var latestWorkoutLaunchPayload: WatchWorkoutLaunchPayload?
+    private var latestWorkoutProgressSnapshot: WatchWorkoutProgressSnapshot?
+    private var latestLiveWorkoutSnapshot: WatchLiveWorkoutSnapshot?
+    private var latestCurrentSessionContext: WatchCurrentSessionContext?
+    private var latestSessionCompletionPayload: WatchSessionCompletionPayload?
 
 #if canImport(WatchConnectivity)
     private let session: WCSession?
@@ -75,20 +80,27 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     }
 
     func sendWorkoutLaunch(_ payload: WatchWorkoutLaunchPayload) async {
+        latestWorkoutLaunchPayload = payload
+        latestWorkoutProgressSnapshot = nil
+        latestLiveWorkoutSnapshot = nil
+        latestCurrentSessionContext = nil
+        latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
         guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
         guard let message = Self.makeTransferMessage(kind: .workoutLaunch, payload: payload) else { return }
-        session.transferUserInfo(message)
+        sendTransferMessage(message, on: session)
 #else
         _ = payload
 #endif
     }
 
     func sendWorkoutProgress(_ snapshot: WatchWorkoutProgressSnapshot) async {
+        latestWorkoutProgressSnapshot = snapshot
+        latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
         guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
         guard let message = Self.makeTransferMessage(kind: .workoutProgress, payload: snapshot) else { return }
-        session.transferUserInfo(message)
+        sendTransferMessage(message, on: session)
 #else
         _ = snapshot
 #endif
@@ -104,37 +116,44 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     }
 
     func sendLiveWorkoutSnapshot(_ snapshot: WatchLiveWorkoutSnapshot) async {
+        latestLiveWorkoutSnapshot = snapshot
+        latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
         guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
         guard let message = Self.makeContextMessage(kind: .liveWorkoutSnapshot, payload: snapshot) else { return }
-        try? session.updateApplicationContext(message)
+        sendContextMessage(message, on: session)
 #else
         _ = snapshot
 #endif
     }
 
     func sendCurrentSessionContext(_ context: WatchCurrentSessionContext) async {
+        latestCurrentSessionContext = context
+        latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
         guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
         guard let message = Self.makeContextMessage(kind: .currentSessionContext, payload: context) else { return }
-        try? session.updateApplicationContext(message)
+        sendContextMessage(message, on: session)
 #else
         _ = context
 #endif
     }
 
     func sendSessionCompletion(_ payload: WatchSessionCompletionPayload) async {
+        latestSessionCompletionPayload = payload
+        latestWorkoutLaunchPayload = nil
+        latestWorkoutProgressSnapshot = nil
+        latestLiveWorkoutSnapshot = nil
+        latestCurrentSessionContext = nil
 #if canImport(WatchConnectivity)
         guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
         guard let message = Self.makeContextMessage(kind: .sessionCompletion, payload: payload) else { return }
-        try? session.updateApplicationContext(message)
-        if session.isReachable {
-            session.sendMessage(message, replyHandler: nil) { _ in
-                session.transferUserInfo(message)
-            }
-        } else {
-            session.transferUserInfo(message)
-        }
+        sendContextMessage(
+            message,
+            on: session,
+            transferOnForegroundSendFailure: true,
+            transferWhenUnreachable: true
+        )
 #else
         _ = payload
 #endif
@@ -198,21 +217,21 @@ extension DefaultWatchCompanionBridge: WCSessionDelegate {
     ) {
         Task { @MainActor in
             _ = await refreshStatus()
-            sendLatestTodayPlanIfPossible()
+            replayLatestSnapshotsIfPossible()
         }
     }
 
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
         Task { @MainActor in
             _ = await refreshStatus()
-            sendLatestTodayPlanIfPossible()
+            replayLatestSnapshotsIfPossible()
         }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         Task { @MainActor in
             _ = await refreshStatus()
-            sendLatestTodayPlanIfPossible()
+            replayLatestSnapshotsIfPossible()
         }
     }
 
@@ -230,6 +249,49 @@ extension DefaultWatchCompanionBridge: WCSessionDelegate {
 }
 
 private extension DefaultWatchCompanionBridge {
+    func sendTransferMessage(
+        _ message: [String: Any],
+        on session: WCSession,
+        queueDurablyWhenUnreachable: Bool = true
+    ) {
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil) { _ in
+                guard queueDurablyWhenUnreachable else { return }
+                session.transferUserInfo(message)
+            }
+            return
+        }
+        guard queueDurablyWhenUnreachable else { return }
+        session.transferUserInfo(message)
+    }
+
+    func sendContextMessage(
+        _ message: [String: Any],
+        on session: WCSession,
+        transferOnForegroundSendFailure: Bool = false,
+        transferWhenUnreachable: Bool = false
+    ) {
+        // Keep application context as the durable latest-state channel, but
+        // mirror foreground-active updates over sendMessage so the watch UI
+        // does not stall behind an optimistic local transition.
+        try? session.updateApplicationContext(message)
+        guard session.isReachable else {
+            guard transferWhenUnreachable else { return }
+            session.transferUserInfo(message)
+            return
+        }
+        session.sendMessage(message, replyHandler: nil) { _ in
+            guard transferOnForegroundSendFailure else { return }
+            session.transferUserInfo(message)
+        }
+    }
+
+    func replayLatestSnapshotsIfPossible() {
+        sendLatestTodayPlanIfPossible()
+        sendLatestSessionCompletionIfPossible()
+        sendLatestActiveWorkoutIfPossible()
+    }
+
     func sendLatestTodayPlanIfPossible() {
         guard let snapshot = latestTodayPlanSnapshot else { return }
 #if canImport(WatchConnectivity)
@@ -239,9 +301,54 @@ private extension DefaultWatchCompanionBridge {
               let message = Self.makeContextMessage(kind: .todayPlanSnapshot, payload: snapshot) else {
             return
         }
-        try? session.updateApplicationContext(message)
-        if session.isReachable {
-            session.sendMessage(message, replyHandler: nil, errorHandler: nil)
+        sendContextMessage(message, on: session)
+#endif
+    }
+
+    func sendLatestSessionCompletionIfPossible() {
+        guard let completion = latestSessionCompletionPayload else { return }
+#if canImport(WatchConnectivity)
+        guard let session,
+              session.activationState == .activated,
+              session.isWatchAppInstalled,
+              let message = Self.makeContextMessage(kind: .sessionCompletion, payload: completion) else {
+            return
+        }
+        sendContextMessage(
+            message,
+            on: session,
+            transferOnForegroundSendFailure: true,
+            transferWhenUnreachable: true
+        )
+#endif
+    }
+
+    func sendLatestActiveWorkoutIfPossible() {
+#if canImport(WatchConnectivity)
+        guard let session,
+              session.activationState == .activated,
+              session.isWatchAppInstalled else {
+            return
+        }
+
+        if let payload = latestWorkoutLaunchPayload,
+           let message = Self.makeTransferMessage(kind: .workoutLaunch, payload: payload) {
+            sendTransferMessage(message, on: session)
+        }
+
+        if let snapshot = latestWorkoutProgressSnapshot,
+           let message = Self.makeTransferMessage(kind: .workoutProgress, payload: snapshot) {
+            sendTransferMessage(message, on: session)
+        }
+
+        if let snapshot = latestLiveWorkoutSnapshot,
+           let message = Self.makeContextMessage(kind: .liveWorkoutSnapshot, payload: snapshot) {
+            sendContextMessage(message, on: session)
+        }
+
+        if let context = latestCurrentSessionContext,
+           let message = Self.makeContextMessage(kind: .currentSessionContext, payload: context) {
+            sendContextMessage(message, on: session)
         }
 #endif
     }

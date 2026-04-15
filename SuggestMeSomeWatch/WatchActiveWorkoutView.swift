@@ -48,6 +48,9 @@ struct WatchActiveWorkoutView: View {
         .onChange(of: currentContext) { _, _ in
             synchronizeDisplayedContext()
         }
+        .onChange(of: liveWorkout) { _, _ in
+            synchronizeDisplayedContext()
+        }
         .onChange(of: restTimerSessionIdentity) { oldIdentity, newIdentity in
             guard restTimer.isRunning else { return }
             guard oldIdentity != newIdentity else { return }
@@ -282,7 +285,13 @@ struct WatchActiveWorkoutView: View {
     }
 
     private var isAwaitingPhoneCommitForCurrentSet: Bool {
-        WatchCurrentSetPresentationPolicy.isAheadOfPhone(
+        guard !WatchCurrentSetPresentationPolicy.hasLiveWorkoutCaughtUp(
+            liveWorkout: liveWorkout,
+            to: awaitingPhoneCommitContext
+        ) else {
+            return false
+        }
+        return WatchCurrentSetPresentationPolicy.isAheadOfPhone(
             displayedContext: awaitingPhoneCommitContext,
             phoneContext: currentContext
         )
@@ -364,10 +373,29 @@ struct WatchActiveWorkoutView: View {
     }
 
     private func synchronizeDisplayedContext() {
-        guard let currentContext else {
+        if currentContext == nil && liveWorkout == nil {
             displayedContext = nil
             awaitingPhoneCommitContext = nil
             awaitingPhoneAdvance = nil
+            return
+        }
+
+        if let awaitingPhoneAdvance,
+           WatchCurrentSetPresentationPolicy.hasLiveWorkoutAdvancedPastCompletedExercise(
+            liveWorkout: liveWorkout,
+            sessionIdentity: awaitingPhoneAdvance.sessionIdentity,
+            completedExerciseIndex: awaitingPhoneAdvance.completedExerciseIndex
+           ) {
+            self.awaitingPhoneAdvance = nil
+        }
+
+        guard let currentContext else {
+            if WatchCurrentSetPresentationPolicy.hasLiveWorkoutCaughtUp(
+                liveWorkout: liveWorkout,
+                to: awaitingPhoneCommitContext
+            ) {
+                awaitingPhoneCommitContext = nil
+            }
             return
         }
 
@@ -375,7 +403,12 @@ struct WatchActiveWorkoutView: View {
             awaitingPhoneAdvance = nil
         }
 
-        if WatchCurrentSetPresentationPolicy.hasCaughtUp(
+        if WatchCurrentSetPresentationPolicy.hasLiveWorkoutCaughtUp(
+            liveWorkout: liveWorkout,
+            to: awaitingPhoneCommitContext
+        ) {
+            awaitingPhoneCommitContext = nil
+        } else if WatchCurrentSetPresentationPolicy.hasCaughtUp(
             phoneContext: currentContext,
             to: awaitingPhoneCommitContext
         ) {
@@ -390,6 +423,13 @@ struct WatchActiveWorkoutView: View {
         }
 
         guard !shouldSuppressCurrentContextWhileAwaitingAdvance else { return }
+        if displayedContext != nil,
+           WatchCurrentSetPresentationPolicy.isPhoneContextStaleComparedToLiveWorkout(
+            phoneContext: currentContext,
+            liveWorkout: liveWorkout
+           ) {
+            return
+        }
 
         guard WatchCurrentSetPresentationPolicy.shouldReplaceDisplayedContext(
             existing: displayedContext,
