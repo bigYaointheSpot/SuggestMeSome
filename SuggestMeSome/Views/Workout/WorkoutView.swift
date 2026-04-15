@@ -419,7 +419,8 @@ struct WorkoutView: View {
                     setNumber: genSet.setNumber,
                     repsText: "\(genSet.suggestedReps)",
                     weightText: formatGeneratedWeight(genSet.suggestedWeight),
-                    isWarmup: genSet.isWarmup
+                    isWarmup: genSet.isWarmup,
+                    isPrefilledFromPrescription: true
                 )
             }
             return DraftExerciseEntry(

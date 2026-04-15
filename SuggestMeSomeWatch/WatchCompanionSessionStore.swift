@@ -64,6 +64,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     private var latestAppliedSentAtByKind: [WatchPayloadKind: Date] = [:]
     private var latestActiveSentAt: Date?
     private var latestCompletionSentAt: Date?
+    private var terminalWorkoutID: UUID?
 
     override init() {
         super.init()
@@ -139,10 +140,12 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
             }
         case .workoutLaunch:
             applyDecoded(WatchWorkoutLaunchPayload.self, from: message) { launch in
+                guard self.acceptsInactiveTerminalState(workoutID: launch.workoutID) else { return false }
                 self.resetActivePayloadsIfNeeded(
                     workoutID: launch.workoutID,
                     sessionVersionStableID: launch.sessionVersionStableID
                 )
+                self.terminalWorkoutID = nil
                 self.workoutLaunch = launch
                 self.completion = nil
                 return true
@@ -189,6 +192,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
             }
         case .sessionCompletion:
             applyDecoded(WatchSessionCompletionPayload.self, from: message) { completion in
+                self.terminalWorkoutID = completion.workoutID
                 self.completion = completion
                 self.workoutLaunch = nil
                 self.progressSnapshot = nil
@@ -251,6 +255,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         workoutID: UUID,
         sessionVersionStableID: String?
     ) -> Bool {
+        guard acceptsInactiveTerminalState(workoutID: workoutID) else { return false }
         guard let activeWorkoutID else { return true }
         guard activeWorkoutID == workoutID else { return false }
 
@@ -259,6 +264,10 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
             return true
         }
         return existingVersion == incomingVersion
+    }
+
+    private func acceptsInactiveTerminalState(workoutID: UUID) -> Bool {
+        terminalWorkoutID != workoutID
     }
 
     private func resetActivePayloadsIfNeeded(

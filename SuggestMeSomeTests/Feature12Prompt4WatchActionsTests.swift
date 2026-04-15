@@ -26,6 +26,8 @@ struct Feature12Prompt4WatchActionsTests {
             exerciseIndex: 1,
             setNumber: 2,
             ticks: 3,
+            completedReps: 8,
+            completedWeight: 155,
             createdAt: createdAt
         )
 
@@ -131,6 +133,91 @@ struct Feature12Prompt4WatchActionsTests {
 
         #expect(result.status == .ignoredStaleCursor)
         #expect(result.updatedEntries == entries)
+    }
+
+    @Test func completeCurrentSetUsesExplicitWatchValuesForManualCarryForward() {
+        let entries = [
+            DraftExerciseEntry(
+                exerciseName: "Bench Press",
+                unit: .lbs,
+                orderIndex: 0,
+                sets: [
+                    DraftSet(setNumber: 1, repsText: "10", weightText: "100"),
+                    DraftSet(setNumber: 2),
+                    DraftSet(setNumber: 3)
+                ]
+            )
+        ]
+        let action = WatchWorkoutExecutionActionDTO(
+            workoutID: UUID(),
+            actionKind: .completeCurrentSet,
+            exerciseIndex: 0,
+            setNumber: 2,
+            completedReps: 10,
+            completedWeight: 105
+        )
+
+        let result = WatchPayloadMapper.applyExecutionAction(action, to: entries)
+
+        #expect(result.didApply)
+        #expect(result.updatedEntries[0].sets[1].repsText == "10")
+        #expect(result.updatedEntries[0].sets[1].weightText == "105")
+        #expect(WatchPayloadMapper.isSetLogged(result.updatedEntries[0].sets[1]))
+        let context = WatchPayloadMapper.makeCurrentSessionContext(
+            workoutID: action.workoutID,
+            entries: result.updatedEntries
+        )
+        #expect(context != nil)
+        #expect(context?.currentSetNumber == 3)
+        #expect(context?.loggedSetsInExercise == 2)
+    }
+
+    @Test func completeCurrentSetAdvancesWhenCurrentSetWasOnlyPrefilled() {
+        let entries = [
+            DraftExerciseEntry(
+                exerciseName: "Bench Press",
+                unit: .lbs,
+                orderIndex: 0,
+                sets: [
+                    DraftSet(
+                        setNumber: 1,
+                        repsText: "5",
+                        weightText: "185",
+                        isPrefilledFromPrescription: true
+                    ),
+                    DraftSet(
+                        setNumber: 2,
+                        repsText: "5",
+                        weightText: "185",
+                        isPrefilledFromPrescription: true
+                    )
+                ],
+                prescribedTargetReps: 5,
+                prescribedWeight: 185,
+                prescribedWeightUnit: "lbs"
+            )
+        ]
+        let action = WatchWorkoutExecutionActionDTO(
+            workoutID: UUID(),
+            actionKind: .completeCurrentSet,
+            exerciseIndex: 0,
+            setNumber: 1,
+            completedReps: 5,
+            completedWeight: 185
+        )
+
+        let result = WatchPayloadMapper.applyExecutionAction(action, to: entries)
+
+        #expect(result.didApply)
+        #expect(result.updatedEntries[0].sets[0].completionLoggedAt != nil)
+        #expect(result.updatedEntries[0].sets[0].isPrefilledFromPrescription == false)
+        let context = WatchPayloadMapper.makeCurrentSessionContext(
+            workoutID: action.workoutID,
+            entries: result.updatedEntries
+        )
+        #expect(context != nil)
+        #expect(context?.currentSetNumber == 2)
+        #expect(context?.loggedSetsInExercise == 1)
     }
 
     @Test func activeWorkoutStoreIgnoresActionWhenNoActiveWorkoutExists() {

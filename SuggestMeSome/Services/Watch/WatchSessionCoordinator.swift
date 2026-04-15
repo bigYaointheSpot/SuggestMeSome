@@ -439,7 +439,12 @@ enum WatchPayloadMapper {
             }
             updatedEntries = applyCrownTicksToCurrentSetReps(entries: entries, cursor: exerciseIndex, ticks: ticks)
         case .completeCurrentSet:
-            guard let result = completeCurrentSetAndAdvance(entries: entries, cursor: exerciseIndex) else {
+            guard let result = completeCurrentSetAndAdvance(
+                entries: entries,
+                cursor: exerciseIndex,
+                completedWeight: action.completedWeight,
+                completedReps: action.completedReps
+            ) else {
                 return WatchWorkoutExecutionActionApplyResult(status: .ignoredIncompatibleAction, updatedEntries: entries)
             }
             updatedEntries = result.updatedEntries
@@ -461,7 +466,8 @@ enum WatchPayloadMapper {
         entries: [DraftExerciseEntry],
         cursor: Int? = nil,
         completedWeight: Double? = nil,
-        completedReps: Int? = nil
+        completedReps: Int? = nil,
+        completedAt: Date = Date()
     ) -> WatchSetCompletionAdvanceResult? {
         guard !entries.isEmpty else { return nil }
         var updated = entries
@@ -480,6 +486,8 @@ enum WatchPayloadMapper {
 
         updated[exerciseIndex].sets[setIndex].repsText = reps > 0 ? "\(reps)" : ""
         updated[exerciseIndex].sets[setIndex].weightText = weight > 0 ? formatWeight(weight) : ""
+        updated[exerciseIndex].sets[setIndex].completionLoggedAt = completedAt
+        updated[exerciseIndex].sets[setIndex].isPrefilledFromPrescription = false
 
         let nextExerciseIndex = updated.firstIndex(where: { !isExerciseComplete($0) })
         let nextSetNumber: Int? = {
@@ -509,7 +517,11 @@ enum WatchPayloadMapper {
     }
 
     static func isSetLogged(_ set: DraftSet) -> Bool {
-        !set.repsText.isEmpty && !set.weightText.isEmpty
+        if set.completionLoggedAt != nil {
+            return true
+        }
+        guard !set.repsText.isEmpty && !set.weightText.isEmpty else { return false }
+        return set.isPrefilledFromPrescription != true
     }
 
     private static func resolveCurrentExerciseIndex(entries: [DraftExerciseEntry], cursor: Int?) -> Int {

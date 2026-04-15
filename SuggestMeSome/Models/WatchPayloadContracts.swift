@@ -80,6 +80,8 @@ struct WatchWorkoutExecutionActionDTO: Codable, Equatable {
     var exerciseIndex: Int?
     var setNumber: Int?
     var ticks: Int?
+    var completedReps: Int?
+    var completedWeight: Double?
     var createdAt: Date
 
     init(
@@ -91,6 +93,8 @@ struct WatchWorkoutExecutionActionDTO: Codable, Equatable {
         exerciseIndex: Int? = nil,
         setNumber: Int? = nil,
         ticks: Int? = nil,
+        completedReps: Int? = nil,
+        completedWeight: Double? = nil,
         createdAt: Date = Date()
     ) {
         self.actionID = actionID
@@ -101,6 +105,8 @@ struct WatchWorkoutExecutionActionDTO: Codable, Equatable {
         self.exerciseIndex = exerciseIndex
         self.setNumber = setNumber
         self.ticks = ticks
+        self.completedReps = completedReps
+        self.completedWeight = completedWeight
         self.createdAt = createdAt
     }
 }
@@ -189,6 +195,21 @@ struct WatchCurrentSessionContext: Codable, Equatable {
     /// planned → runtime-adjusted mid-session.
     var sessionVersionStableID: String? = nil
     var capturedAt: Date
+}
+
+enum WatchRestTimerTransitionPolicy {
+    static func sessionIdentity(for context: WatchCurrentSessionContext?) -> String? {
+        guard let context else { return nil }
+        return "\(context.workoutID.uuidString)|\(context.sessionVersionStableID ?? "")"
+    }
+
+    static func shouldStopRestTimer(
+        previousContext: WatchCurrentSessionContext?,
+        currentContext: WatchCurrentSessionContext?
+    ) -> Bool {
+        guard previousContext != nil else { return false }
+        return sessionIdentity(for: previousContext) != sessionIdentity(for: currentContext)
+    }
 }
 
 // MARK: - Live Workout Snapshot

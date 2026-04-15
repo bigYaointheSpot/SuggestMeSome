@@ -56,7 +56,8 @@ struct ProgramWorkoutDraftBuilder {
                             setNumber: setNumber,
                             repsText: repsText,
                             weightText: weightText,
-                            isWarmup: row.isWarmup
+                            isWarmup: row.isWarmup,
+                            isPrefilledFromPrescription: true
                         )
                     )
                     setNumber += 1

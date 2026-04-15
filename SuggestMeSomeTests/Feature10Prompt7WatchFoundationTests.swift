@@ -361,6 +361,40 @@ struct Feature10Prompt7WatchFoundationTests {
         #expect(context.currentSetTargetSummary == "5 reps @ 225 lbs")
     }
 
+    @Test func currentSessionContextDoesNotTreatPrefilledPrescriptionSetsAsCompleted() {
+        let entry = DraftExerciseEntry(
+            exerciseName: "Bench Press",
+            unit: .lbs,
+            orderIndex: 0,
+            sets: [
+                DraftSet(
+                    setNumber: 1,
+                    repsText: "5",
+                    weightText: "185",
+                    isPrefilledFromPrescription: true
+                ),
+                DraftSet(
+                    setNumber: 2,
+                    repsText: "5",
+                    weightText: "185",
+                    isPrefilledFromPrescription: true
+                )
+            ],
+            prescribedTargetReps: 5,
+            prescribedWeight: 185,
+            prescribedWeightUnit: "lbs"
+        )
+
+        let ctx = WatchPayloadMapper.makeCurrentSessionContext(
+            workoutID: UUID(),
+            entries: [entry]
+        )
+        let context = try! unwrap(ctx)
+        #expect(context.currentSetNumber == 1)
+        #expect(context.loggedSetsInExercise == 0)
+        #expect(context.currentSetTargetSummary == "5 reps @ 185 lbs")
+    }
+
     @Test func currentSessionContextFallsBackToLastEntryWhenAllComplete() {
         let entries: [DraftExerciseEntry] = [
             makeCompletedEntry(name: "Squat", orderIndex: 0, sets: 3),

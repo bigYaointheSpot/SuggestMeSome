@@ -17,14 +17,26 @@ struct DraftSet: Identifiable, Codable, Equatable {
     var weightText: String
     var isPR: Bool
     var isWarmup: Bool
+    var completionLoggedAt: Date?
+    var isPrefilledFromPrescription: Bool?
 
-    init(setNumber: Int, repsText: String = "", weightText: String = "", isPR: Bool = false, isWarmup: Bool = false) {
+    init(
+        setNumber: Int,
+        repsText: String = "",
+        weightText: String = "",
+        isPR: Bool = false,
+        isWarmup: Bool = false,
+        completionLoggedAt: Date? = nil,
+        isPrefilledFromPrescription: Bool? = nil
+    ) {
         self.id = UUID()
         self.setNumber = setNumber
         self.repsText = repsText
         self.weightText = weightText
         self.isPR = isPR
         self.isWarmup = isWarmup
+        self.completionLoggedAt = completionLoggedAt
+        self.isPrefilledFromPrescription = isPrefilledFromPrescription
     }
 }
 

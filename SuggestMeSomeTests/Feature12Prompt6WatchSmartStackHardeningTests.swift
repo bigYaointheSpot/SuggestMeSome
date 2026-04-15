@@ -101,6 +101,47 @@ struct Feature12Prompt6WatchSmartStackHardeningTests {
         #expect(store.session?.exerciseEntries[0].sets[0].repsText == "")
     }
 
+    @Test func restTimerTransitionPolicyKeepsRestAliveAcrossSetAdvance() {
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        let previous = makeCurrentContext(capturedAt: now, versionID: "run-1::w1s1::planned")
+        var advanced = previous
+        advanced.loggedSetsInExercise = 1
+        advanced.currentSetNumber = 2
+        advanced.nextSetNumber = 2
+        advanced.currentSetTargetSummary = "5 reps @ 185 lbs"
+        advanced.capturedAt = now.addingTimeInterval(2)
+
+        #expect(
+            WatchRestTimerTransitionPolicy.sessionIdentity(for: previous)
+            == WatchRestTimerTransitionPolicy.sessionIdentity(for: advanced)
+        )
+        #expect(
+            WatchRestTimerTransitionPolicy.shouldStopRestTimer(
+                previousContext: previous,
+                currentContext: advanced
+            ) == false
+        )
+    }
+
+    @Test func restTimerTransitionPolicyStopsForEndedOrReplacedSession() {
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        let previous = makeCurrentContext(capturedAt: now, versionID: "run-1::w1s1::planned")
+        let replaced = makeCurrentContext(capturedAt: now.addingTimeInterval(2), versionID: "run-1::w1s1::runtime")
+
+        #expect(
+            WatchRestTimerTransitionPolicy.shouldStopRestTimer(
+                previousContext: previous,
+                currentContext: replaced
+            )
+        )
+        #expect(
+            WatchRestTimerTransitionPolicy.shouldStopRestTimer(
+                previousContext: previous,
+                currentContext: nil
+            )
+        )
+    }
+
     @Test func activeSessionBroadcastCarriesAllWorkoutAttribution() async throws {
         let bridge = MockWatchCompanionBridge()
         let coordinator = WatchSessionCoordinator(bridge: bridge)
