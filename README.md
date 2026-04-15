@@ -2668,6 +2668,32 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
   - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination generic/platform=watchOS -derivedDataPath /tmp/SuggestMeSomeDerivedData CODE_SIGNING_ALLOWED=NO` (pass; watch device-architecture compile with embedded widget extension)
   - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/SuggestMeSomeDerivedData -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests -only-testing:SuggestMeSomeTests/Feature10Prompt8IntegrationHardeningTests -only-testing:SuggestMeSomeTests/Feature11Prompt5WatchContinuityTests -only-testing:SuggestMeSomeTests/Feature11Prompt7IntegrationHardeningTests -only-testing:SuggestMeSomeTests/Feature12Prompt4WatchActionsTests -only-testing:SuggestMeSomeTests/Feature12Prompt6WatchSmartStackHardeningTests` (pass; focused watch regression slice)
 - Watch/widget schemes and targets used: `SuggestMeSomeWatch` / `SuggestMeSomeWatch`, `SuggestMeSomeWatchWidget` / `SuggestMeSomeWatchWidget`
+- Bug fixes:
+  - reviewed post-Prompt 6 watch-fix follow-up work in `a5ae20a`, `8f7734e`, `8ef77e7`, and `0c74c9b`
+  - locked in the rule that the iPhone remains source of truth for persisted workout state, while the watch may render an optimistic next-set UI only as a temporary presentation layer
+  - made watch set editing watch-local until explicit `Complete Set`; delayed or stale Crown tick actions are ignored on iPhone so they cannot mutate the wrong set after progression
+  - introduced `WatchCurrentSetPresentationPolicy` in `SuggestMeSome/Models/WatchPayloadContracts.swift` so the watch keeps a stable displayed set cursor, ignores same-set refresh regressions, detects when phone progress has actually caught up, and suppresses stale behind-phone contexts when a fresher live snapshot exists
+  - updated `SuggestMeSomeWatch/WatchActiveWorkoutView.swift` so `Complete Set` creates an optimistic next-set card, shows an explicit syncing state while the phone saves, waits for phone confirmation before unlocking the next controls, and clears end-of-exercise waiting when the next exercise truly arrives
+  - taught the watch UI to use `WatchLiveWorkoutSnapshot` as a valid catch-up signal when `currentSessionContext` lags, which fixes the "iPhone is saving the last set" dead-end caused by live progress arriving ahead of the context payload
+  - fixed the "Preparing first set…" regression by ensuring the watch never blanks its only usable `currentContext` while filtering stale refreshes; stale phone context can no longer overwrite a better displayed state, but the only interactive context is still rendered
+  - hardened watch-to-phone execution transport in `SuggestMeSomeWatch/WatchCompanionSessionStore.swift` so execution actions are always queued durably with `transferUserInfo`, even when reachability is currently live
+  - hardened phone-to-watch transport in `SuggestMeSome/Services/Watch/WatchCompanionBridge.swift` by mirroring live workout, current-session, and completion payloads over `sendMessage` when reachable while still keeping `updateApplicationContext` as the durable latest-state channel
+  - cached and replayed the latest launch, progress, live workout, current-session context, Today Plan, and completion payloads on the iPhone bridge so watch reactivation/reachability changes can rebuild the active screen instead of falling back to stale or incomplete state
+  - updated `SuggestMeSome/Services/Watch/WatchSessionCoordinator.swift` to rebroadcast authoritative active-session state even after ignored/stale watch actions, letting the watch recover cleanly from optimistic divergence
+  - updated `SuggestMeSome/Views/DailyCoach/DailyCoachView.swift` to republish Today Plan snapshots only when the watch-facing signature changes, keeping the watch surface warm without spamming duplicate payloads
+  - expanded focused regression coverage in `SuggestMeSomeTests/Feature12Prompt4WatchActionsTests.swift` and `SuggestMeSomeTests/Feature12Prompt6WatchSmartStackHardeningTests.swift` for delayed tick rejection, optimistic-vs-phone catch-up, live-snapshot catch-up, stale-context suppression, and post-ignore rebroadcast recovery
+  - files edited across the follow-up fixes:
+    - `SuggestMeSome/Models/WatchPayloadContracts.swift`
+    - `SuggestMeSome/Services/ActiveWorkoutSessionStore.swift`
+    - `SuggestMeSome/Services/Watch/WatchCompanionBridge.swift`
+    - `SuggestMeSome/Services/Watch/WatchSessionCoordinator.swift`
+    - `SuggestMeSome/Views/DailyCoach/DailyCoachView.swift`
+    - `SuggestMeSomeWatch/WatchActiveWorkoutView.swift`
+    - `SuggestMeSomeWatch/WatchCompanionSessionStore.swift`
+    - `SuggestMeSomeTests/Feature12Prompt4WatchActionsTests.swift`
+    - `SuggestMeSomeTests/Feature12Prompt6WatchSmartStackHardeningTests.swift`
+  - focused validation/build/tests run during the bug-fix follow-up:
+    - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests -only-testing:SuggestMeSomeTests/Feature11Prompt5WatchContinuityTests -only-testing:SuggestMeSomeTests/Feature12Prompt6WatchSmartStackHardeningTests CODE_SIGNING_ALLOWED=NO` (pass)
 
 ---
 
