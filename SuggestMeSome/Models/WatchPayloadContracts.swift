@@ -212,6 +212,66 @@ enum WatchRestTimerTransitionPolicy {
     }
 }
 
+enum WatchCurrentSetPresentationPolicy {
+    private static func setOrdinal(for context: WatchCurrentSessionContext) -> Int {
+        if context.isCardio {
+            return context.loggedSetsInExercise
+        }
+        return context.currentSetNumber ?? context.nextSetNumber ?? (context.totalSetsInExercise + 1)
+    }
+
+    static func setSignature(for context: WatchCurrentSessionContext?) -> String? {
+        guard let context, !context.isCardio else { return nil }
+        let setNumber = context.currentSetNumber ?? context.nextSetNumber ?? -1
+        return "\(context.exerciseIndex)-\(setNumber)-\(context.loggedSetsInExercise)"
+    }
+
+    static func shouldReplaceDisplayedContext(
+        existing: WatchCurrentSessionContext?,
+        incoming: WatchCurrentSessionContext?
+    ) -> Bool {
+        guard let incoming else { return false }
+        guard let existing else { return true }
+
+        let existingSession = WatchRestTimerTransitionPolicy.sessionIdentity(for: existing)
+        let incomingSession = WatchRestTimerTransitionPolicy.sessionIdentity(for: incoming)
+        if existingSession != incomingSession {
+            return true
+        }
+
+        if incoming.exerciseIndex != existing.exerciseIndex {
+            return incoming.exerciseIndex > existing.exerciseIndex
+        }
+
+        return setOrdinal(for: incoming) > setOrdinal(for: existing)
+    }
+
+    static func optimisticNextSetContext(
+        afterCompleting context: WatchCurrentSessionContext,
+        completedReps: Int?,
+        completedWeight: Double?,
+        capturedAt: Date = Date()
+    ) -> WatchCurrentSessionContext? {
+        guard !context.isCardio else { return nil }
+        guard let currentSetNumber = context.currentSetNumber ?? context.nextSetNumber else { return nil }
+
+        let nextSetNumber = currentSetNumber + 1
+        guard nextSetNumber <= context.totalSetsInExercise else { return nil }
+
+        var updated = context
+        updated.loggedSetsInExercise = min(context.totalSetsInExercise, context.loggedSetsInExercise + 1)
+        updated.currentSetNumber = nextSetNumber
+        updated.nextSetNumber = nextSetNumber
+        updated.nextPrescribedReps = nil
+        updated.nextPrescribedWeight = nil
+        updated.currentSetTargetSummary = nil
+        updated.currentSetCompletedReps = completedReps ?? context.currentSetCompletedReps ?? context.nextPrescribedReps
+        updated.currentSetCompletedWeight = completedWeight ?? context.currentSetCompletedWeight ?? context.nextPrescribedWeight
+        updated.capturedAt = capturedAt
+        return updated
+    }
+}
+
 // MARK: - Live Workout Snapshot
 
 /// Richer, forward-compatible progress snapshot. `WatchWorkoutProgressSnapshot`

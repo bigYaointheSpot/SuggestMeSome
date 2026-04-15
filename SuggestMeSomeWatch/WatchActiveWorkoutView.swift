@@ -25,7 +25,8 @@ struct WatchActiveWorkoutView: View {
     var onExecutionAction: (WatchWorkoutExecutionActionDTO) -> Void = { _ in }
 
     @StateObject private var restTimer = WatchRestTimerController()
-    @State private var localSetSummary: WatchInteractiveSetSummary?
+    @State private var displayedContext: WatchCurrentSessionContext?
+    @State private var awaitingPhoneAdvance: AwaitingPhoneAdvance?
 
     var body: some View {
         ScrollView {
@@ -40,8 +41,11 @@ struct WatchActiveWorkoutView: View {
             .padding(.top, 2)
             .padding(.bottom, 8)
         }
-        .onChange(of: currentSetSignature) { _, _ in
-            localSetSummary = nil
+        .onAppear {
+            synchronizeDisplayedContext()
+        }
+        .onChange(of: currentContext) { _, _ in
+            synchronizeDisplayedContext()
         }
         .onChange(of: restTimerSessionIdentity) { oldIdentity, newIdentity in
             guard restTimer.isRunning else { return }
@@ -109,8 +113,8 @@ struct WatchActiveWorkoutView: View {
 
     @ViewBuilder
     private var currentBlock: some View {
-        if let currentContext {
-            currentExerciseCard(currentContext)
+        if let activeContext {
+            currentExerciseCard(activeContext)
         } else if hasPendingActiveWorkout {
             pendingContextCard
         } else {
@@ -155,10 +159,11 @@ struct WatchActiveWorkoutView: View {
                 Text(context.exerciseName)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
-                Text(setSummary(for: context, preview: localSetSummary))
+                Text(setProgressSummary(for: context))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                    .accessibilityLabel(setAccessibilityLabel(for: context))
             }
 
             if restTimer.isRunning {
@@ -172,10 +177,7 @@ struct WatchActiveWorkoutView: View {
             } else {
                 WatchCrownSetLoggingControls(
                     context: context,
-                    onExecutionAction: handleCrownAction,
-                    onPreviewChange: { preview in
-                        localSetSummary = preview
-                    }
+                    onExecutionAction: handleCrownAction
                 )
                 .id(currentSetSignature)
             }
@@ -219,7 +221,7 @@ struct WatchActiveWorkoutView: View {
     }
 
     private var planKindLabel: String? {
-        switch liveWorkout?.sessionPlanKind ?? currentContext?.sessionPlanKind {
+        switch liveWorkout?.sessionPlanKind ?? activeContext?.sessionPlanKind ?? currentContext?.sessionPlanKind {
         case .planned:          return "Planned"
         case .overlayAdjusted:  return "Adjusted"
         case .runtimeAdjusted:  return "Live"
@@ -228,39 +230,35 @@ struct WatchActiveWorkoutView: View {
     }
 
     private var currentSetSignature: String {
-        guard let currentContext else { return "nil" }
-        let set = currentContext.currentSetNumber ?? currentContext.nextSetNumber ?? -1
-        return "\(currentContext.exerciseIndex)-\(set)-\(currentContext.loggedSetsInExercise)"
+        WatchCurrentSetPresentationPolicy.setSignature(for: activeContext) ?? "nil"
     }
 
     private var restTimerSessionIdentity: String? {
-        WatchRestTimerTransitionPolicy.sessionIdentity(for: currentContext)
+        WatchRestTimerTransitionPolicy.sessionIdentity(for: activeContext)
     }
 
-    private func setSummary(
-        for context: WatchCurrentSessionContext,
-        preview: WatchInteractiveSetSummary?
-    ) -> String {
-        let setNumber = context.currentSetNumber ?? context.nextSetNumber
-        let summaryText = previewSummary(for: context, preview: preview) ?? context.currentSetTargetSummary
-        if let setNumber, context.totalSetsInExercise > 0, !context.isCardio {
-            if let summary = summaryText, !summary.isEmpty {
-                return "Set \(setNumber)/\(context.totalSetsInExercise) · \(summary)"
-            }
-            return "Set \(setNumber) of \(context.totalSetsInExercise)"
+    private var activeContext: WatchCurrentSessionContext? {
+        if shouldSuppressCurrentContextWhileAwaitingAdvance {
+            return displayedContext
         }
-        if let summary = summaryText, !summary.isEmpty {
-            return summary
+        return displayedContext ?? currentContext
+    }
+
+    private func setProgressSummary(for context: WatchCurrentSessionContext) -> String {
+        let setNumber = context.currentSetNumber ?? context.nextSetNumber
+        if let setNumber, context.totalSetsInExercise > 0, !context.isCardio {
+            return "Set \(setNumber) of \(context.totalSetsInExercise)"
         }
         return "Exercise \(context.exerciseIndex + 1) of \(context.totalExercisesInSession)"
     }
 
-    private func previewSummary(
-        for context: WatchCurrentSessionContext,
-        preview: WatchInteractiveSetSummary?
-    ) -> String? {
-        guard let preview, preview.signature == currentSetSignature else { return nil }
-        return preview.summary
+    private func setAccessibilityLabel(for context: WatchCurrentSessionContext) -> String {
+        if let setNumber = context.currentSetNumber ?? context.nextSetNumber,
+           context.totalSetsInExercise > 0,
+           !context.isCardio {
+            return "Current set \(setNumber) of \(context.totalSetsInExercise)"
+        }
+        return "Exercise \(context.exerciseIndex + 1) of \(context.totalExercisesInSession)"
     }
 
     private func nextSetHint(for context: WatchCurrentSessionContext) -> String {
@@ -276,6 +274,10 @@ struct WatchActiveWorkoutView: View {
 
     private func handleCrownAction(_ action: WatchWorkoutExecutionActionDTO) {
         if action.actionKind == .completeCurrentSet {
+            applyLocalCompletionTransition(
+                completedReps: action.completedReps,
+                completedWeight: action.completedWeight
+            )
             playActionHaptic(.success)
         }
         onExecutionAction(action)
@@ -309,10 +311,84 @@ struct WatchActiveWorkoutView: View {
             ticks: ticks
         )
     }
+
+    private func synchronizeDisplayedContext() {
+        guard let currentContext else {
+            displayedContext = nil
+            awaitingPhoneAdvance = nil
+            return
+        }
+
+        if awaitingPhoneAdvance?.isSatisfied(by: currentContext) == true {
+            awaitingPhoneAdvance = nil
+        }
+
+        guard !shouldSuppressCurrentContextWhileAwaitingAdvance else { return }
+
+        guard WatchCurrentSetPresentationPolicy.shouldReplaceDisplayedContext(
+            existing: displayedContext,
+            incoming: currentContext
+        ) else {
+            if displayedContext == nil {
+                displayedContext = currentContext
+            }
+            return
+        }
+
+        displayedContext = currentContext
+    }
+
+    private var shouldSuppressCurrentContextWhileAwaitingAdvance: Bool {
+        guard let awaitingPhoneAdvance else { return false }
+        return awaitingPhoneAdvance.shouldSuppress(currentContext)
+    }
+
+    private func applyLocalCompletionTransition(
+        completedReps: Int?,
+        completedWeight: Double?
+    ) {
+        guard let context = activeContext else { return }
+        awaitingPhoneAdvance = nil
+
+        if let nextContext = WatchCurrentSetPresentationPolicy.optimisticNextSetContext(
+            afterCompleting: context,
+            completedReps: completedReps,
+            completedWeight: completedWeight
+        ) {
+            displayedContext = nextContext
+            return
+        }
+
+        displayedContext = nil
+        if let sessionIdentity = WatchRestTimerTransitionPolicy.sessionIdentity(for: context) {
+            awaitingPhoneAdvance = AwaitingPhoneAdvance(
+                sessionIdentity: sessionIdentity,
+                completedExerciseIndex: context.exerciseIndex
+            )
+        }
+    }
 }
 
 private enum WatchActionHaptic {
     case success
+}
+
+private struct AwaitingPhoneAdvance: Equatable {
+    let sessionIdentity: String
+    let completedExerciseIndex: Int
+
+    func shouldSuppress(_ currentContext: WatchCurrentSessionContext?) -> Bool {
+        guard let currentContext else { return false }
+        return WatchRestTimerTransitionPolicy.sessionIdentity(for: currentContext) == sessionIdentity
+            && currentContext.exerciseIndex <= completedExerciseIndex
+    }
+
+    func isSatisfied(by currentContext: WatchCurrentSessionContext) -> Bool {
+        guard WatchRestTimerTransitionPolicy.sessionIdentity(for: currentContext) == sessionIdentity else {
+            return true
+        }
+        return currentContext.exerciseIndex > completedExerciseIndex
+    }
 }
 
 // MARK: - Plan Kind Chip
@@ -397,28 +473,21 @@ struct WatchCrownSetLoggingControls: View {
 
     let context: WatchCurrentSessionContext
     let onExecutionAction: (WatchWorkoutExecutionActionDTO) -> Void
-    let onPreviewChange: (WatchInteractiveSetSummary) -> Void
 
     @State private var repsValue: Double
     @State private var weightValue: Double
-    @State private var lastSentRepsValue: Double
-    @State private var lastSentWeightValue: Double
     @FocusState private var focusedField: FocusedField?
 
     init(
         context: WatchCurrentSessionContext,
-        onExecutionAction: @escaping (WatchWorkoutExecutionActionDTO) -> Void = { _ in },
-        onPreviewChange: @escaping (WatchInteractiveSetSummary) -> Void = { _ in }
+        onExecutionAction: @escaping (WatchWorkoutExecutionActionDTO) -> Void = { _ in }
     ) {
         self.context = context
         self.onExecutionAction = onExecutionAction
-        self.onPreviewChange = onPreviewChange
         let initialReps = context.currentSetCompletedReps ?? context.nextPrescribedReps ?? 0
         let initialWeight = context.currentSetCompletedWeight ?? context.nextPrescribedWeight ?? 0
         _repsValue = State(initialValue: Double(initialReps))
         _weightValue = State(initialValue: initialWeight)
-        _lastSentRepsValue = State(initialValue: Double(initialReps))
-        _lastSentWeightValue = State(initialValue: initialWeight)
     }
 
     var body: some View {
@@ -436,8 +505,7 @@ struct WatchCrownSetLoggingControls: View {
                 sensitivity: .medium,
                 isContinuous: false,
                 isHapticFeedbackEnabled: true
-            )
-            .onChange(of: repsValue) { _, newValue in sendRepsDelta(newValue) }
+                )
 
             crownRow(
                 title: "Weight",
@@ -452,8 +520,7 @@ struct WatchCrownSetLoggingControls: View {
                 sensitivity: .medium,
                 isContinuous: false,
                 isHapticFeedbackEnabled: true
-            )
-            .onChange(of: weightValue) { _, newValue in sendWeightDelta(newValue) }
+                )
 
             Button {
                 onExecutionAction(
@@ -477,7 +544,6 @@ struct WatchCrownSetLoggingControls: View {
             if focusedField == nil {
                 focusedField = .reps
             }
-            publishPreview()
         }
     }
 
@@ -520,62 +586,6 @@ struct WatchCrownSetLoggingControls: View {
         .accessibilityHint("Double tap to focus, then turn the Digital Crown to adjust.")
     }
 
-    private func sendRepsDelta(_ newValue: Double) {
-        publishPreview()
-        let newReps = Int(newValue.rounded())
-        let oldReps = Int(lastSentRepsValue.rounded())
-        let ticks = newReps - oldReps
-        guard ticks != 0 else { return }
-        lastSentRepsValue = Double(newReps)
-        onExecutionAction(
-            makeAction(.applyCrownTicksToCurrentSetReps, ticks: ticks)
-        )
-    }
-
-    private func sendWeightDelta(_ newValue: Double) {
-        publishPreview()
-        let step = max(0.1, context.crownWeightStep ?? 5)
-        let ticks = Int(((newValue - lastSentWeightValue) / step).rounded())
-        guard ticks != 0 else { return }
-        lastSentWeightValue += Double(ticks) * step
-        onExecutionAction(
-            makeAction(.applyCrownTicksToCurrentSetWeight, ticks: ticks)
-        )
-    }
-
-    private func publishPreview() {
-        onPreviewChange(
-            WatchInteractiveSetSummary(
-                signature: contextSignature,
-                summary: makeSummary(
-                    reps: Int(repsValue.rounded()),
-                    weight: weightValue,
-                    unit: context.nextPrescribedWeightUnit
-                )
-            )
-        )
-    }
-
-    private var contextSignature: String {
-        let setNumber = context.currentSetNumber ?? context.nextSetNumber ?? -1
-        return "\(context.exerciseIndex)-\(setNumber)-\(context.loggedSetsInExercise)"
-    }
-
-    private func makeSummary(reps: Int, weight: Double, unit: String?) -> String {
-        var parts: [String] = []
-        if reps > 0 {
-            parts.append("\(reps) reps")
-        }
-        if weight > 0 {
-            if let unit, !unit.isEmpty {
-                parts.append("@ \(weight.formatted(.number.precision(.fractionLength(0...1)))) \(unit)")
-            } else {
-                parts.append("@ \(weight.formatted(.number.precision(.fractionLength(0...1))))")
-            }
-        }
-        return parts.isEmpty ? "Adjust reps and weight" : parts.joined(separator: " ")
-    }
-
     private func makeAction(
         _ kind: WatchWorkoutExecutionActionKind,
         ticks: Int? = nil,
@@ -593,11 +603,6 @@ struct WatchCrownSetLoggingControls: View {
             completedWeight: completedWeight
         )
     }
-}
-
-struct WatchInteractiveSetSummary: Equatable {
-    let signature: String
-    let summary: String
 }
 
 // MARK: - Previews

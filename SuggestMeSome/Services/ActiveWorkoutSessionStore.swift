@@ -193,6 +193,20 @@ final class ActiveWorkoutSessionStore {
             )
         }
 
+        switch action.actionKind {
+        case .applyCrownTicksToCurrentSetWeight, .applyCrownTicksToCurrentSetReps:
+            // Feature 12 final hardening keeps crown editing watch-local until
+            // the user commits the set. Ignoring incremental ticks here also
+            // protects the phone draft from delayed queued actions sent by an
+            // older or stale watch binary.
+            return WatchWorkoutExecutionActionApplyResult(
+                status: .ignoredIncompatibleAction,
+                updatedEntries: current.exerciseEntries
+            )
+        case .completeCurrentSet, .completeCardioBlock:
+            break
+        }
+
         let result = WatchPayloadMapper.applyExecutionAction(
             action,
             to: current.exerciseEntries

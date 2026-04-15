@@ -142,6 +142,58 @@ struct Feature12Prompt6WatchSmartStackHardeningTests {
         )
     }
 
+    @Test func currentSetPresentationPolicyIgnoresSameSetRefreshesAndAcceptsAdvance() {
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        let current = makeCurrentContext(capturedAt: now, versionID: "run-1::w1s1::planned")
+        var sameSetRefresh = current
+        sameSetRefresh.currentSetTargetSummary = "8 reps @ 205 lbs"
+        sameSetRefresh.nextPrescribedWeight = 205
+        sameSetRefresh.capturedAt = now.addingTimeInterval(1)
+        var advanced = current
+        advanced.loggedSetsInExercise = 1
+        advanced.currentSetNumber = 2
+        advanced.nextSetNumber = 2
+        advanced.capturedAt = now.addingTimeInterval(2)
+
+        #expect(
+            WatchCurrentSetPresentationPolicy.shouldReplaceDisplayedContext(
+                existing: current,
+                incoming: sameSetRefresh
+            ) == false
+        )
+        #expect(
+            WatchCurrentSetPresentationPolicy.shouldReplaceDisplayedContext(
+                existing: current,
+                incoming: advanced
+            )
+        )
+    }
+
+    @Test func currentSetPresentationPolicyKeepsOptimisticAdvanceAheadOfStaleRefresh() throws {
+        let now = Date(timeIntervalSince1970: 1_780_000_010)
+        let current = makeCurrentContext(capturedAt: now, versionID: "run-1::w1s1::planned")
+        let optimistic = try unwrap(
+            WatchCurrentSetPresentationPolicy.optimisticNextSetContext(
+                afterCompleting: current,
+                completedReps: 5,
+                completedWeight: 185,
+                capturedAt: now.addingTimeInterval(1)
+            )
+        )
+        var staleRefresh = current
+        staleRefresh.capturedAt = now.addingTimeInterval(2)
+
+        #expect(optimistic.currentSetNumber == 2)
+        #expect(optimistic.loggedSetsInExercise == 1)
+        #expect(optimistic.nextPrescribedWeight == nil)
+        #expect(
+            WatchCurrentSetPresentationPolicy.shouldReplaceDisplayedContext(
+                existing: optimistic,
+                incoming: staleRefresh
+            ) == false
+        )
+    }
+
     @Test func activeSessionBroadcastCarriesAllWorkoutAttribution() async throws {
         let bridge = MockWatchCompanionBridge()
         let coordinator = WatchSessionCoordinator(bridge: bridge)

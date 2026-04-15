@@ -241,6 +241,99 @@ struct Feature12Prompt4WatchActionsTests {
         #expect(store.session == nil)
     }
 
+    @Test func staleDelayedTickCannotMutateNextSetAfterWatchCompletion() {
+        let defaults = UserDefaults(suiteName: "Feature12Prompt4WatchActionsTests.delayedTick")!
+        defaults.removePersistentDomain(forName: "Feature12Prompt4WatchActionsTests.delayedTick")
+        let workoutID = UUID()
+        let store = ActiveWorkoutSessionStore(
+            userDefaults: defaults,
+            persistenceKey: "activeWorkoutSession.delayedTick"
+        )
+        store.startSession(
+            id: workoutID,
+            startTime: Date(timeIntervalSince1970: 1_780_000_000),
+            exerciseEntries: [
+                DraftExerciseEntry(
+                    exerciseName: "Bench Press",
+                    unit: .lbs,
+                    orderIndex: 0,
+                    sets: [
+                        DraftSet(setNumber: 1),
+                        DraftSet(setNumber: 2)
+                    ],
+                    prescribedTargetReps: 5,
+                    prescribedWeight: 135,
+                    prescribedWeightUnit: "lbs"
+                )
+            ]
+        )
+
+        let completeAction = WatchWorkoutExecutionActionDTO(
+            workoutID: workoutID,
+            actionKind: .completeCurrentSet,
+            exerciseIndex: 0,
+            setNumber: 1,
+            completedReps: 8,
+            completedWeight: 155
+        )
+        let delayedTick = WatchWorkoutExecutionActionDTO(
+            workoutID: workoutID,
+            actionKind: .applyCrownTicksToCurrentSetWeight,
+            exerciseIndex: 0,
+            setNumber: 1,
+            ticks: 1,
+            createdAt: completeAction.createdAt.addingTimeInterval(-1)
+        )
+
+        let completionResult = store.applyWatchExecutionAction(completeAction)
+        let delayedResult = store.applyWatchExecutionAction(delayedTick)
+
+        #expect(completionResult.didApply)
+        #expect(delayedResult.status == .ignoredIncompatibleAction)
+        #expect(store.session?.exerciseEntries[0].sets[0].repsText == "8")
+        #expect(store.session?.exerciseEntries[0].sets[0].weightText == "155")
+        #expect(store.session?.exerciseEntries[0].sets[1].weightText == "")
+    }
+
+    @Test func activeWorkoutStoreIgnoresIncrementalTickActionsForWatchLocalEditing() {
+        let defaults = UserDefaults(suiteName: "Feature12Prompt4WatchActionsTests.localOnlyTicks")!
+        defaults.removePersistentDomain(forName: "Feature12Prompt4WatchActionsTests.localOnlyTicks")
+        let workoutID = UUID()
+        let store = ActiveWorkoutSessionStore(
+            userDefaults: defaults,
+            persistenceKey: "activeWorkoutSession.localOnlyTicks"
+        )
+        store.startSession(
+            id: workoutID,
+            startTime: Date(timeIntervalSince1970: 1_780_000_000),
+            exerciseEntries: [
+                DraftExerciseEntry(
+                    exerciseName: "Bench Press",
+                    unit: .lbs,
+                    orderIndex: 0,
+                    sets: [DraftSet(setNumber: 1)],
+                    prescribedTargetReps: 5,
+                    prescribedWeight: 135,
+                    prescribedWeightUnit: "lbs"
+                )
+            ]
+        )
+
+        let tickAction = WatchWorkoutExecutionActionDTO(
+            workoutID: workoutID,
+            actionKind: .applyCrownTicksToCurrentSetWeight,
+            exerciseIndex: 0,
+            setNumber: 1,
+            ticks: 2
+        )
+
+        let result = store.applyWatchExecutionAction(tickAction)
+
+        #expect(result.status == .ignoredIncompatibleAction)
+        #expect(store.session?.exerciseEntries[0].sets[0].weightText == "")
+        #expect(store.session?.exerciseEntries[0].sets[0].repsText == "")
+    }
+
     private func makePartialEntry(
         name: String,
         orderIndex: Int,
