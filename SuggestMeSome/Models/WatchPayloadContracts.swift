@@ -220,6 +220,26 @@ enum WatchCurrentSetPresentationPolicy {
         return context.currentSetNumber ?? context.nextSetNumber ?? (context.totalSetsInExercise + 1)
     }
 
+    private static func compareProgress(
+        _ lhs: WatchCurrentSessionContext,
+        _ rhs: WatchCurrentSessionContext
+    ) -> ComparisonResult? {
+        let lhsSession = WatchRestTimerTransitionPolicy.sessionIdentity(for: lhs)
+        let rhsSession = WatchRestTimerTransitionPolicy.sessionIdentity(for: rhs)
+        guard lhsSession == rhsSession else { return nil }
+
+        if lhs.exerciseIndex != rhs.exerciseIndex {
+            return lhs.exerciseIndex < rhs.exerciseIndex ? .orderedAscending : .orderedDescending
+        }
+
+        let lhsOrdinal = setOrdinal(for: lhs)
+        let rhsOrdinal = setOrdinal(for: rhs)
+        if lhsOrdinal == rhsOrdinal {
+            return .orderedSame
+        }
+        return lhsOrdinal < rhsOrdinal ? .orderedAscending : .orderedDescending
+    }
+
     static func setSignature(for context: WatchCurrentSessionContext?) -> String? {
         guard let context, !context.isCardio else { return nil }
         let setNumber = context.currentSetNumber ?? context.nextSetNumber ?? -1
@@ -244,6 +264,31 @@ enum WatchCurrentSetPresentationPolicy {
         }
 
         return setOrdinal(for: incoming) > setOrdinal(for: existing)
+    }
+
+    static func isAheadOfPhone(
+        displayedContext: WatchCurrentSessionContext?,
+        phoneContext: WatchCurrentSessionContext?
+    ) -> Bool {
+        guard let displayedContext, let phoneContext else { return false }
+        return compareProgress(displayedContext, phoneContext) == .orderedDescending
+    }
+
+    static func hasCaughtUp(
+        phoneContext: WatchCurrentSessionContext?,
+        to displayedContext: WatchCurrentSessionContext?
+    ) -> Bool {
+        guard let displayedContext else { return true }
+        guard let phoneContext else { return false }
+        guard let comparison = compareProgress(phoneContext, displayedContext) else {
+            return true
+        }
+        switch comparison {
+        case .orderedDescending, .orderedSame:
+            return true
+        case .orderedAscending:
+            return false
+        }
     }
 
     static func optimisticNextSetContext(

@@ -194,6 +194,85 @@ struct Feature12Prompt6WatchSmartStackHardeningTests {
         )
     }
 
+    @Test func currentSetPresentationPolicyDetectsPhoneCatchUpToOptimisticAdvance() throws {
+        let now = Date(timeIntervalSince1970: 1_780_000_020)
+        let current = makeCurrentContext(capturedAt: now, versionID: "run-1::w1s1::planned")
+        let optimistic = try unwrap(
+            WatchCurrentSetPresentationPolicy.optimisticNextSetContext(
+                afterCompleting: current,
+                completedReps: 5,
+                completedWeight: 185,
+                capturedAt: now.addingTimeInterval(1)
+            )
+        )
+        var caughtUp = current
+        caughtUp.loggedSetsInExercise = 1
+        caughtUp.currentSetNumber = 2
+        caughtUp.nextSetNumber = 2
+        caughtUp.nextPrescribedReps = 5
+        caughtUp.nextPrescribedWeight = 185
+        caughtUp.capturedAt = now.addingTimeInterval(2)
+
+        #expect(
+            WatchCurrentSetPresentationPolicy.isAheadOfPhone(
+                displayedContext: optimistic,
+                phoneContext: current
+            )
+        )
+        #expect(
+            !WatchCurrentSetPresentationPolicy.hasCaughtUp(
+                phoneContext: current,
+                to: optimistic
+            )
+        )
+        #expect(
+            WatchCurrentSetPresentationPolicy.hasCaughtUp(
+                phoneContext: caughtUp,
+                to: optimistic
+            )
+        )
+    }
+
+    @Test func ignoredWatchActionRebroadcastsCurrentSessionStateForRecovery() async throws {
+        let bridge = MockWatchCompanionBridge()
+        let coordinator = WatchSessionCoordinator(bridge: bridge)
+        let defaults = UserDefaults(suiteName: "Feature12Prompt6WatchSmartStackHardeningTests.rebroadcast")!
+        defaults.removePersistentDomain(forName: "Feature12Prompt6WatchSmartStackHardeningTests.rebroadcast")
+        let workoutID = UUID()
+        let store = ActiveWorkoutSessionStore(
+            userDefaults: defaults,
+            persistenceKey: "activeWorkoutSession.prompt6Rebroadcast"
+        )
+        store.startSession(
+            id: workoutID,
+            startTime: Date(timeIntervalSince1970: 1_780_000_000),
+            exerciseEntries: [makePartialEntry()],
+            sessionPlanKind: .planned,
+            sessionSourceLabels: ["Program"],
+            sessionVersionStableID: "run-1::w1s1::planned"
+        )
+        coordinator.installExecutionActionHandler(activeWorkoutSessionStore: store)
+
+        bridge.executionActionHandler?(
+            WatchWorkoutExecutionActionDTO(
+                workoutID: workoutID,
+                actionKind: .completeCurrentSet,
+                exerciseIndex: 0,
+                setNumber: 2,
+                completedReps: 5,
+                completedWeight: 185
+            )
+        )
+        await Task.yield()
+        await Task.yield()
+
+        let current = try unwrap(bridge.sessionContexts.last)
+        #expect(current.workoutID == workoutID)
+        #expect(current.currentSetNumber == 1)
+        #expect(current.loggedSetsInExercise == 0)
+        #expect(bridge.liveSnapshots.last?.workoutID == workoutID)
+    }
+
     @Test func activeSessionBroadcastCarriesAllWorkoutAttribution() async throws {
         let bridge = MockWatchCompanionBridge()
         let coordinator = WatchSessionCoordinator(bridge: bridge)

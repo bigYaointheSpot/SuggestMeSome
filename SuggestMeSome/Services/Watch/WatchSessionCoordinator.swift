@@ -636,8 +636,11 @@ final class WatchSessionCoordinator {
     func installExecutionActionHandler(activeWorkoutSessionStore: ActiveWorkoutSessionStore) {
         bridge.executionActionHandler = { [weak activeWorkoutSessionStore, weak self] action in
             guard let activeWorkoutSessionStore, let self else { return }
-            let result = activeWorkoutSessionStore.applyWatchExecutionAction(action)
-            guard result.didApply, let session = activeWorkoutSessionStore.session else { return }
+            _ = activeWorkoutSessionStore.applyWatchExecutionAction(action)
+            guard let session = activeWorkoutSessionStore.session,
+                  session.id == action.workoutID else {
+                return
+            }
             Task { @MainActor in
                 await self.broadcastActiveSessionState(session)
             }

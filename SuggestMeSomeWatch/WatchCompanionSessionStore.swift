@@ -324,18 +324,22 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
             return
         }
 
+        // Completion actions must survive flaky reachability. Queue durable
+        // delivery even when a live message path is available; the phone
+        // dedupes by actionID.
+        session.transferUserInfo(message)
+
         if session.isReachable {
             session.sendMessage(message, replyHandler: nil) { [weak self] _ in
-                session.transferUserInfo(message)
                 Task { @MainActor in
                     self?.refreshSessionStatus(message: "Action queued for iPhone.")
                 }
             }
             refreshSessionStatus(message: "Sent to iPhone.")
-        } else {
-            session.transferUserInfo(message)
-            refreshSessionStatus(message: "Action queued for iPhone.")
+            return
         }
+
+        refreshSessionStatus(message: "Action queued for iPhone.")
     }
 }
 

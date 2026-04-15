@@ -26,6 +26,7 @@ struct WatchActiveWorkoutView: View {
 
     @StateObject private var restTimer = WatchRestTimerController()
     @State private var displayedContext: WatchCurrentSessionContext?
+    @State private var awaitingPhoneCommitContext: WatchCurrentSessionContext?
     @State private var awaitingPhoneAdvance: AwaitingPhoneAdvance?
 
     var body: some View {
@@ -115,6 +116,8 @@ struct WatchActiveWorkoutView: View {
     private var currentBlock: some View {
         if let activeContext {
             currentExerciseCard(activeContext)
+        } else if awaitingPhoneAdvance != nil {
+            syncingCommitCard
         } else if hasPendingActiveWorkout {
             pendingContextCard
         } else {
@@ -172,6 +175,8 @@ struct WatchActiveWorkoutView: View {
                     nextSetHint: nextSetHint(for: context),
                     onSkip: { restTimer.skip() }
                 )
+            } else if isAwaitingPhoneCommitForCurrentSet {
+                syncingCurrentSetPanel(context)
             } else if context.isCardio {
                 cardioTarget(context)
             } else {
@@ -183,6 +188,45 @@ struct WatchActiveWorkoutView: View {
             }
         }
         .watchCard()
+    }
+
+    private var syncingCommitCard: some View {
+        WatchEmptyStatePanel(
+            systemImage: "arrow.triangle.2.circlepath",
+            title: "Syncing with iPhone",
+            message: "Finishing the last set. The next block appears when iPhone confirms it.",
+            subMessage: sessionStatus.message
+        )
+    }
+
+    private func syncingCurrentSetPanel(_ context: WatchCurrentSessionContext) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.semibold))
+                Text("Syncing")
+                    .font(.caption2.weight(.semibold))
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+            }
+            .foregroundStyle(WatchPalette.primary)
+
+            Text(setProgressSummary(for: context))
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .accessibilityLabel(setAccessibilityLabel(for: context))
+
+            Text("iPhone is saving the last set. Next-set controls unlock as soon as it confirms.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(4)
+
+            Text(sessionStatus.message)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func cardioTarget(_ context: WatchCurrentSessionContext) -> some View {
@@ -235,6 +279,13 @@ struct WatchActiveWorkoutView: View {
 
     private var restTimerSessionIdentity: String? {
         WatchRestTimerTransitionPolicy.sessionIdentity(for: activeContext)
+    }
+
+    private var isAwaitingPhoneCommitForCurrentSet: Bool {
+        WatchCurrentSetPresentationPolicy.isAheadOfPhone(
+            displayedContext: awaitingPhoneCommitContext,
+            phoneContext: currentContext
+        )
     }
 
     private var activeContext: WatchCurrentSessionContext? {
@@ -315,12 +366,27 @@ struct WatchActiveWorkoutView: View {
     private func synchronizeDisplayedContext() {
         guard let currentContext else {
             displayedContext = nil
+            awaitingPhoneCommitContext = nil
             awaitingPhoneAdvance = nil
             return
         }
 
         if awaitingPhoneAdvance?.isSatisfied(by: currentContext) == true {
             awaitingPhoneAdvance = nil
+        }
+
+        if WatchCurrentSetPresentationPolicy.hasCaughtUp(
+            phoneContext: currentContext,
+            to: awaitingPhoneCommitContext
+        ) {
+            if awaitingPhoneCommitContext != nil {
+                displayedContext = currentContext
+            }
+            awaitingPhoneCommitContext = nil
+        }
+
+        if awaitingPhoneCommitContext != nil {
+            return
         }
 
         guard !shouldSuppressCurrentContextWhileAwaitingAdvance else { return }
@@ -348,6 +414,7 @@ struct WatchActiveWorkoutView: View {
         completedWeight: Double?
     ) {
         guard let context = activeContext else { return }
+        awaitingPhoneCommitContext = nil
         awaitingPhoneAdvance = nil
 
         if let nextContext = WatchCurrentSetPresentationPolicy.optimisticNextSetContext(
@@ -356,6 +423,7 @@ struct WatchActiveWorkoutView: View {
             completedWeight: completedWeight
         ) {
             displayedContext = nextContext
+            awaitingPhoneCommitContext = nextContext
             return
         }
 
