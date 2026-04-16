@@ -504,7 +504,8 @@ struct AIProgramGeneratorView: View {
             level: level,
             durationWeeks: selectedDuration,
             sessionsPerWeek: selectedFrequency,
-            oneRepMaxes: oneRMs
+            oneRepMaxes: oneRMs,
+            carryForwardContext: initialPrefill?.carryForwardContext
         )
 
         lastInput = input

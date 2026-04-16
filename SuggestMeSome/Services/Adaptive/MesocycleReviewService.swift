@@ -133,7 +133,7 @@ enum MesocycleReviewService {
             frictionSignalKinds: frictionSignals.map(\.kind)
         )
 
-        let recommendations = buildRankedRecommendations(
+        let recommendations = NextBlockRecommendationEngine.rankedRecommendations(
             input: recommendationInput,
             currentDurationWeeks: run.program?.lengthInWeeks ?? 6,
             currentSessionsPerWeek: run.program?.sessionsPerWeek ?? 3,
@@ -142,8 +142,9 @@ enum MesocycleReviewService {
             workoutsInWindow: sortedProgramWorkouts + sortedStandaloneWorkouts
         )
 
-        let defaultPrefill = recommendations.first?.prefill ?? fallbackPrefill(
-            run: run,
+        let defaultPrefill = recommendations.first(where: \.isPrimaryRecommendation)?.prefill ?? recommendations.first?.prefill ?? NextBlockRecommendationEngine.fallbackPrefill(
+            runStableID: run.resolvedSyncStableID,
+            recommendationStableID: nil,
             focus: focus ?? .generalFitness,
             level: inferredLevel,
             durationWeeks: run.program?.lengthInWeeks ?? 6,
@@ -151,7 +152,8 @@ enum MesocycleReviewService {
             endDate: endDate,
             personalRecords: personalRecords,
             workoutsInWindow: sortedProgramWorkouts + sortedStandaloneWorkouts,
-            note: "Fallback prefill built from the completed block snapshot."
+            note: "Fallback prefill built from the completed block snapshot.",
+            input: recommendationInput
         )
 
         return MesocycleReviewSnapshot(

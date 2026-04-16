@@ -21,6 +21,26 @@ struct ProgramGenerationInput {
     /// Used to validate exercises exist and to record 1RM context for display.
     /// Actual weight rounding (nearest 5 lbs / 2.5 kg) is applied at display time.
     let oneRepMaxes: [String: (weight: Double, unit: String)]
+    /// Optional post-block context carried from a ranked recommendation selection.
+    /// Current generation stays backward-compatible and may ignore this context,
+    /// but later flows can inspect it for explainability or pre-generation editing.
+    let carryForwardContext: ProgramGenerationCarryForwardContext?
+
+    init(
+        focus: ProgramFocus,
+        level: ProgramLevel,
+        durationWeeks: Int,
+        sessionsPerWeek: Int,
+        oneRepMaxes: [String: (weight: Double, unit: String)],
+        carryForwardContext: ProgramGenerationCarryForwardContext? = nil
+    ) {
+        self.focus = focus
+        self.level = level
+        self.durationWeeks = durationWeeks
+        self.sessionsPerWeek = sessionsPerWeek
+        self.oneRepMaxes = oneRepMaxes
+        self.carryForwardContext = carryForwardContext
+    }
 }
 
 enum ProgramLevel: String, CaseIterable, Codable {

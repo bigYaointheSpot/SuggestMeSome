@@ -2751,6 +2751,31 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+#### Prompt 3 [Ranked Next Block Recommendations and Prefill Context] — 2026-04-16
+
+- Added `NextBlockRecommendationEngine.swift` as a deterministic backend for post-block follow-up planning:
+  - returns a ranked list of 2–3 next-block recommendations instead of a single answer
+  - marks one primary recommendation explicitly and keeps all recommendations in a `pending` state until the user chooses to generate from the editable defaults
+  - scores continuity, productive pivots, consistency rebuilds, and conditioning-biased options from explainable inputs including adherence, missed sessions, PR/lift progress, current focus family, and conservative standalone-workout influence
+  - degrades gracefully to broader focuses such as `generalFitness` or `fullBody` when the completed block does not provide enough specific signal
+- Expanded Feature 13 payoff-layer types in `MesocycleReviewTypes.swift`:
+  - replaced the narrow next-block prefill payload with `NextBlockPrefillContext` while preserving `MesocycleNextBlockPrefill` compatibility
+  - added editable carry-forward context for suggested focus/style, duration, sessions/week, level, notable exercises to preserve, rationale text, carried 1RM/intensity context, and per-field provenance metadata (`recommendation` vs `carryForwardHistory`)
+  - added recommendation fit metadata (`isPrimaryRecommendation`, `fitScore`, `fitNote`, `requiresExplicitAcceptance`) so later UI can explain and confirm choices before applying anything
+- Integrated the richer prefill into existing generation seams without breaking current flows:
+  - `ProgramGenerationInput` now accepts optional `carryForwardContext`
+  - `AIProgramGeneratorView` passes the carried recommendation context into the existing program-generation flow
+  - `MesocycleReviewService` now builds ranked recommendations through the dedicated engine and uses the engine’s richer primary prefill as the default next-block handoff
+  - `MesocycleReviewView` now opens `AIProgramGeneratorView` with the primary editable prefill instead of a blank generator state
+- Added focused validation in `Feature13Prompt3NextBlockRecommendationEngineTests.swift` covering:
+  - strong hypertrophy-style outcomes ranking a strength-oriented follow-up first
+  - low-adherence cases rebuilding consistency with mapped carry-forward generator context
+  - standalone conditioning influence adding a ranked option conservatively without displacing stronger continuity recommendations
+
+**Commit:** `feat: add next block recommendation engine and prefill context`
+
+---
+
 
 ## Project Setup
 

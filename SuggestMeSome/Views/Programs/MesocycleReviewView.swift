@@ -49,8 +49,7 @@ struct MesocycleReviewView: View {
             )
         }
         .fullScreenCover(isPresented: $showingAIGenerator) {
-            // TODO: Pass snapshot.defaultNextBlockPrefill when AIProgramGeneratorView accepts prefill
-            AIProgramGeneratorView()
+            AIProgramGeneratorView(prefill: snapshot.defaultNextBlockPrefill)
         }
     }
 }
