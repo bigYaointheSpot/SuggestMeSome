@@ -2730,6 +2730,27 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+#### Prompt 2 [Mesocycle Review UI] — 2026-04-16
+
+- Added `MesocycleReviewView.swift` with all required post-block review sections:
+  - header: block name, date range, completion/focus/level/model capsule badges
+  - headline metrics row: four `MesocycleMetricTile` tiles (adherence %, sessions ratio, new PRs, avg session duration)
+  - "What Improved" section: icon-led highlight rows (hidden when empty)
+  - "What Held You Back" section: icon-led friction rows with severity badges (hidden when empty)
+  - expandable phase breakdown with chevron animation, per-phase completion ratio badges
+  - coach-tone narrative summary card
+  - ranked next-block recommendation card with rationale bullets; reserved "View Next Block" CTA stub-opens `AIProgramGeneratorView`
+  - bottom CTA bar (Close + View Next Block) matching `ProgramReviewView`'s action bar pattern
+  - `MesocycleReviewSnapshot.mock` static property for previews and stubs
+- Added manual navigation hook in `ProgramRunExpandableRow.expandedContent` — "Block Review" row appears only for completed runs, matching `adaptationHistoryRow` visual style
+- Added auto-present hook in `WorkoutView`:
+  - captures `wasAlreadyComplete` before save; after `WorkoutSaveCoordinator` returns, detects newly-completed blocks via `!wasAlreadyComplete && run.isCompleted`
+  - presents `MesocycleReviewView` as a sheet with `onDismiss: { dismiss() }` — no change to the PR celebration path; `dismissCelebration()` routes through the block review when the block just completed
+
+**Commit:** `feat: add mesocycle review UI with auto and manual presentation hooks`
+
+---
+
 
 ## Project Setup
 

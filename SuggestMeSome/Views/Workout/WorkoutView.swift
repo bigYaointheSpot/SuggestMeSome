@@ -45,6 +45,10 @@ struct WorkoutView: View {
     @State private var newPRCount = 0
     @State private var celebrationScale: CGFloat = 0.5
 
+    // Block review — auto-presented when the final workout completes the program run
+    @State private var showBlockReview = false
+    @State private var blockJustCompleted = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -82,6 +86,12 @@ struct WorkoutView: View {
                     isCardio: isCardio
                 )
                 exerciseEntries.append(entry)
+            }
+        }
+        .sheet(isPresented: $showBlockReview, onDismiss: { dismiss() }) {
+            NavigationStack {
+                // TODO: Replace .mock with real snapshot from MesocycleReviewService when wired
+                MesocycleReviewView(snapshot: .mock)
             }
         }
         .confirmationDialog("End Workout?", isPresented: $showingEndConfirmation, titleVisibility: .visible) {
@@ -453,6 +463,7 @@ struct WorkoutView: View {
 
     private func saveWorkout() {
         guard isActive, let start = startTime else { return }
+        let wasAlreadyComplete = programWorkout?.programRun.isCompleted ?? false
         let activeSessionForCompletion = activeWorkoutSessionStore.session
         let coordinator = WorkoutSaveCoordinator(modelContext: modelContext)
         let request = WorkoutSaveRequest(
@@ -467,6 +478,8 @@ struct WorkoutView: View {
         )
         let savedWorkout = coordinator.saveWorkout(using: request)
         let prCount = savedWorkout.exerciseEntries.flatMap(\.sets).filter(\.isPR).count
+        let didCompleteBlock = !wasAlreadyComplete && (programWorkout?.programRun.isCompleted ?? false)
+        blockJustCompleted = didCompleteBlock
         broadcastWatchCompletion(
             activeSession: activeSessionForCompletion,
             savedWorkout: savedWorkout,
@@ -484,6 +497,8 @@ struct WorkoutView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 dismissCelebration()
             }
+        } else if didCompleteBlock {
+            showBlockReview = true
         } else {
             dismiss()
         }
@@ -527,7 +542,11 @@ struct WorkoutView: View {
             showPRCelebration = false
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            dismiss()
+            if blockJustCompleted {
+                showBlockReview = true
+            } else {
+                dismiss()
+            }
         }
     }
 
