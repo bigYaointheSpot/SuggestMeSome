@@ -14,6 +14,7 @@ struct AIProgramGeneratorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query private var allPRs: [PersonalRecord]
+    private let initialPrefill: MesocycleNextBlockPrefill?
 
     // MARK: AppStorage (persists across sessions)
 
@@ -45,6 +46,34 @@ struct AIProgramGeneratorView: View {
     @State private var lastInput: ProgramGenerationInput?
 
     private let service = ProgramGenerationService()
+
+    init(prefill: MesocycleNextBlockPrefill? = nil) {
+        self.initialPrefill = prefill
+        _selectedFocus = State(initialValue: prefill?.focus)
+        _selectedLevel = State(initialValue: prefill?.level)
+        _selectedDuration = State(initialValue: prefill?.durationWeeks ?? 0)
+        _selectedFrequency = State(initialValue: prefill?.sessionsPerWeek ?? 0)
+        _oneRMValues = State(initialValue: Dictionary(
+            uniqueKeysWithValues: (prefill?.oneRepMaxSuggestions ?? []).map { suggestion in
+                let value: String
+                switch suggestion.unit {
+                case .lbs:
+                    value = String(Int(suggestion.weight.rounded()))
+                case .kg:
+                    let rounded = suggestion.weight.rounded(toPlaces: 1)
+                    value = rounded == rounded.rounded(.towardZero)
+                        ? String(Int(rounded))
+                        : String(format: "%.1f", rounded)
+                }
+                return (suggestion.exerciseName, value)
+            }
+        ))
+        _oneRMUnits = State(initialValue: Dictionary(
+            uniqueKeysWithValues: (prefill?.oneRepMaxSuggestions ?? []).map {
+                ($0.exerciseName, $0.unit)
+            }
+        ))
+    }
 
     // MARK: Computed Helpers
 
@@ -487,5 +516,13 @@ struct AIProgramGeneratorView: View {
             isGenerating = false
             generatedProgram = program
         }
+    }
+}
+
+private extension Double {
+    func rounded(toPlaces places: Int) -> Double {
+        guard places >= 0 else { return self }
+        let scale = pow(10.0, Double(places))
+        return (self * scale).rounded() / scale
     }
 }

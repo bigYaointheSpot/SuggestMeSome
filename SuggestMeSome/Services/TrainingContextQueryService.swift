@@ -20,12 +20,42 @@ enum TrainingContextQueryService {
             .sorted { $0.startDate > $1.startDate }
     }
 
+    static func completedProgramRuns(from runs: [ProgramRun]) -> [ProgramRun] {
+        runs
+            .filter(\.isCompleted)
+            .sorted { ($0.endDate ?? $0.startDate) > ($1.endDate ?? $1.startDate) }
+    }
+
     static func runScopedWorkouts(for run: ProgramRun, in workouts: [Workout]) -> [Workout] {
         workouts.filter { $0.programRun?.id == run.id }
     }
 
     static func completedWorkoutCount(for run: ProgramRun, in workouts: [Workout]) -> Int {
         runScopedWorkouts(for: run, in: workouts).count
+    }
+
+    static func relevantStandaloneWorkouts(
+        for run: ProgramRun,
+        in workouts: [Workout]
+    ) -> [Workout] {
+        MesocycleReviewService.relevantStandaloneWorkouts(for: run, in: workouts)
+    }
+
+    static func isMesocycleReviewEligible(for run: ProgramRun) -> Bool {
+        MesocycleReviewService.isEligible(for: run)
+    }
+
+    static func mesocycleReview(
+        for run: ProgramRun,
+        workouts: [Workout],
+        personalRecords: [PersonalRecord]
+    ) -> MesocycleReviewSnapshot? {
+        guard isMesocycleReviewEligible(for: run) else { return nil }
+        return MesocycleReviewService.buildReview(
+            for: run,
+            allWorkouts: workouts,
+            personalRecords: personalRecords
+        )
     }
 
     static func latestWeeklyAnalysis(

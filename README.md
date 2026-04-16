@@ -2699,6 +2699,38 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 
 
+### Feature 13 — Structured Block Payoff Layer
+
+**Status:** In Progress
+
+---
+
+#### Prompt 1 [Mesocycle Review Domain Foundation] — 2026-04-16
+
+- Added non-persisted completed-block payoff types in `MesocycleReviewTypes.swift` so the app can represent:
+  - mesocycle review snapshots with stable IDs
+  - headline metrics for planned vs completed sessions, adherence, workout totals, PRs, and exercise consistency
+  - performance highlights, friction signals, phase recap rows, ranked next-block recommendations, and editable next-block prefill payloads
+  - recommendation decision placeholders (`pending`, `accepted`, `declined`) without introducing new mutable cross-object persistence
+- Added `MesocycleReviewService.swift` as a deterministic, pure analytics builder for completed `ProgramRun`s:
+  - builds a review from finished run data, linked program workouts, relevant standalone workouts inside the block window, and PR history
+  - exposes explainable helpers for planned vs completed sessions, adherence percentage, workout duration totals, PR summary, exercise consistency, standalone-workout influence, movement-pattern counts, and simple lift highlights
+  - keeps standalone workouts conservative by counting them toward continuity/workload context while explicitly excluding them from planned-session adherence
+  - generates a coaching-style narrative summary plus a ranked recommendation list with editable prefilled generator inputs
+- Extended shared seams without shipping new UI:
+  - `TrainingContextQueryService` now exposes completed-run mesocycle review eligibility, relevant standalone workout lookup, and a review snapshot builder for later Today Plan / Training Programs surfaces
+  - `AIProgramGeneratorView` now accepts an optional Feature 13 prefill so later prompts can start next-block generation from editable ranked-recommendation context instead of an instant one-tap generate path
+- Added focused validation in `Feature13Prompt1MesocycleReviewTests.swift` covering:
+  - completed-run review construction
+  - duplicate-session adherence handling
+  - conservative standalone influence behavior
+  - empty-data completed-run edge cases
+
+**Commit:** `feat: add mesocycle review domain foundation`
+
+---
+
+
 ## Project Setup
 
 - **Language:** Swift
