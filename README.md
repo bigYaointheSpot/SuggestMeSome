@@ -3162,6 +3162,33 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 3 [Explainable Adaptive Coach Loop] — 2026-04-17
+
+- Added a shared explainability and steering layer across adaptive program generation, next-block review, and daily session generation:
+  - introduced `AdaptiveReasonCode`, `AdaptiveAdjustment`, `AdaptiveExplanationBundle`, and `AdaptiveSteeringProfile` to describe why the engine changed something, what constraint it is protecting, and whether the change is automatic or review-required
+  - added `AdaptiveExplainabilityService` to produce deterministic explanation bundles, carry-forward sources, personalization deltas, and steering previews from `TrainingStateSnapshot`, `DoseTargetProfile`, `DailyProgramContext`, and continuity history
+  - extended continuity snapshots and decision events to store confirmed steering choices and edited adjustment deltas so accepted next-block preferences can bias future recommendations without adding a new persistence system
+- Made adaptive program and next-block flows explainable and steerable before generation:
+  - `ProgramGenerationService` now supports adaptive preview context so `AIProgramGeneratorView`, `ProgramReviewView`, and `NextBlockPrefillReviewSheet` can show base-vs-personalized changes, protected constraints, carry-forward sources, and governance level before generating the next block
+  - added shared `AdaptiveSteeringControlsCard` and `AdaptiveExplanationCard` surfaces so users can nudge progression, recovery, and continuity biases without dropping into full manual programming
+  - `NextBlockRecommendationEngine`, `MesocycleReviewService`, and continuity writeback now preserve prior steering choices, bias ranking toward accepted patterns, and route more meaningful changes through the existing review-confirmed prefill flow
+- Upgraded daily recommendation and workout building to explain why today looks the way it does while keeping hard guardrails intact:
+  - `SuggestMeSomeRecommendationService`, `SuggestMeSomeGenerationService`, `WorkoutGeneratorService`, and `SuggestMeSomeGeneratorFlowViewModel` now thread session-local steering through recommendation, workout build, and rebuild flows
+  - daily explanation bundles now surface interference protection, missed-volume backfill, recovery bias, preferred-anchor preservation, cardio inclusion or omission, and the guardrails that limited more aggressive steering
+  - deterministic slot construction remains intact, with steering able to influence intensity, underused-movement preference, and continuity behavior without overriding minimum focus exposure, interference protection, or recovery caps
+- Added focused Feature 15 Prompt 3 validation for:
+  - deterministic explainability and carry-forward previews
+  - continuity persistence of confirmed steering and edited adjustment snapshots
+  - daily steering propagation into recommendation and build flows
+  - guardrail enforcement when aggressive steering conflicts with recovery protection
+- Verification:
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature15Prompt3ExplainableCoachLoopTests -only-testing:SuggestMeSomeTests/Feature15Prompt2AdaptiveStateEngineTests -only-testing:SuggestMeSomeTests/Feature15Prompt2ProgramGenerationAdaptiveTests -only-testing:SuggestMeSomeTests/Feature15Prompt2DailyGenerationAdaptiveTests -only-testing:SuggestMeSomeTests/Feature4GeneratorValidationTests -only-testing:SuggestMeSomeTests/Feature9RecommendationEngineValidationTests -only-testing:SuggestMeSomeTests/Feature9SuggestMeSomeBuildValidationTests -only-testing:SuggestMeSomeTests/Feature10Prompt3ProgramGeneratorDecompositionTests -only-testing:SuggestMeSomeTests/Feature13Prompt3NextBlockRecommendationEngineTests`
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+
+**Commits:** `feat: add explainable adaptive coach loop`, `docs: document explainable adaptive coach loop`
+
+---
+
 
 ## Project Setup
 
