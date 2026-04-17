@@ -72,12 +72,18 @@ struct WatchTodayPlanView: View {
     }
 
     private func sessionHeader(_ plan: WatchTodayPlanSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Today")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(WatchPalette.primary)
-                .textCase(.uppercase)
-                .tracking(0.5)
+        let tint = WatchPalette.readinessTint(for: plan.readinessTier)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 6, height: 6)
+                Text("Today")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .textCase(.uppercase)
+                    .tracking(0.5)
+            }
             Text(plan.sessionLabel)
                 .font(.headline)
                 .lineLimit(2)
@@ -89,7 +95,14 @@ struct WatchTodayPlanView: View {
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, 2)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(tint.opacity(0.32), lineWidth: 0.5)
+        )
     }
 
     private func primarySuggestionCard(_ plan: WatchTodayPlanSnapshot) -> some View {

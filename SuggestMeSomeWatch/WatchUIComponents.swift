@@ -16,12 +16,24 @@ import SwiftUI
 
 enum WatchPalette {
     static let primary = Color.indigo
-    static let surface = Color.white.opacity(0.08)
+    // Bumped from 0.08 → 0.14 so card fills stay legible in direct sunlight
+    // without losing their subtle feel indoors.
+    static let surface = Color.white.opacity(0.14)
     static let surfaceStrong = Color.indigo.opacity(0.18)
-    static let strokeFaint = Color.white.opacity(0.12)
+    static let strokeFaint = Color.white.opacity(0.16)
     static let positive = Color.green
     static let warning = Color.orange
     static let danger = Color.red
+
+    /// Tint mapping for the readiness-tier header band on the Today Plan view.
+    static func readinessTint(for label: String) -> Color {
+        switch label.lowercased() {
+        case "strong":  return positive
+        case "neutral": return primary
+        case "low":     return warning
+        default:        return .secondary
+        }
+    }
 }
 
 // MARK: - Card Modifier

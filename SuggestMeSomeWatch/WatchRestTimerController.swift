@@ -26,6 +26,7 @@ enum WatchRestTimerDefaults {
 /// WatchKit is not available (e.g. indexing into the iOS target).
 enum WatchRestHapticCue {
     case start
+    case halfway
     case nextSetCue
     case complete
     case skip
@@ -38,6 +39,7 @@ final class WatchRestTimerController: ObservableObject {
     @Published private(set) var isRunning: Bool = false
 
     private var tickTask: Task<Void, Never>?
+    private var hasFiredHalfwayCue: Bool = false
 
     var progress: Double {
         guard totalSeconds > 0 else { return 0 }
@@ -51,6 +53,7 @@ final class WatchRestTimerController: ObservableObject {
         guard clamped > 0 else { return }
         totalSeconds = clamped
         remainingSeconds = clamped
+        hasFiredHalfwayCue = false
         isRunning = true
         playHaptic(.start)
 
@@ -87,6 +90,16 @@ final class WatchRestTimerController: ObservableObject {
             return
         }
         remainingSeconds -= 1
+        // Subtle wrist tap at the midpoint so users feel the pacing without
+        // needing to glance. Only fires once per rest period and only when
+        // the rest is long enough to have a meaningful midpoint.
+        if !hasFiredHalfwayCue,
+           totalSeconds >= 20,
+           remainingSeconds * 2 <= totalSeconds,
+           remainingSeconds > 3 {
+            hasFiredHalfwayCue = true
+            playHaptic(.halfway)
+        }
         if remainingSeconds == 3 {
             playHaptic(.nextSetCue)
         }
@@ -107,6 +120,7 @@ final class WatchRestTimerController: ObservableObject {
         let device = WKInterfaceDevice.current()
         switch cue {
         case .start:       device.play(.start)
+        case .halfway:     device.play(.click)
         case .nextSetCue:  device.play(.directionUp)
         case .complete:    device.play(.success)
         case .skip:        device.play(.click)
