@@ -84,6 +84,15 @@ struct SyncConflictResolutionPolicy {
         merged.endDate = maxDate(local.endDate, remote.endDate)
         merged.isCompleted = local.isCompleted || remote.isCompleted
         merged.trainingProgramStableID = winner.trainingProgramStableID ?? (winner.metadata.stableID == local.metadata.stableID ? remote.trainingProgramStableID : local.trainingProgramStableID)
+        merged.previousProgramRunStableID = winner.previousProgramRunStableID ?? (winner.metadata.stableID == local.metadata.stableID ? remote.previousProgramRunStableID : local.previousProgramRunStableID)
+        merged.recommendationDecisionHistoryJSON = mergeContinuityJSON(
+            local.recommendationDecisionHistoryJSON,
+            remote.recommendationDecisionHistoryJSON
+        )
+        merged.continuitySnapshotJSON = mergeContinuityJSON(
+            local.continuitySnapshotJSON,
+            remote.continuitySnapshotJSON
+        )
         return merged
     }
 
@@ -193,5 +202,21 @@ struct SyncConflictResolutionPolicy {
             }
         }
         return Array(merged.values)
+    }
+
+    private func mergeContinuityJSON(_ lhs: String?, _ rhs: String?) -> String? {
+        let lhsSnapshot: ProgramBlockContinuitySnapshot? = ProgramRunContinuityCodec.decode(lhs)
+        let rhsSnapshot: ProgramBlockContinuitySnapshot? = ProgramRunContinuityCodec.decode(rhs)
+
+        switch (lhsSnapshot, rhsSnapshot) {
+        case let (left?, right?):
+            return ProgramRunContinuityCodec.encode(left.merged(with: right))
+        case let (left?, nil):
+            return ProgramRunContinuityCodec.encode(left)
+        case let (nil, right?):
+            return ProgramRunContinuityCodec.encode(right)
+        case (nil, nil):
+            return lhs ?? rhs
+        }
     }
 }

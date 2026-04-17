@@ -2802,6 +2802,41 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+#### Prompt 5 [Block Continuity Logging and Long-Horizon Summaries] — 2026-04-16
+
+- Extended `ProgramRun` with additive continuity storage:
+  - `previousProgramRunStableID` to link the next block back to the completed source block using a stable ID instead of a fragile object reference
+  - `recommendationDecisionHistoryJSON` to persist the completed block's recommendation catalog plus accepted/declined decision events without mutating the underlying review snapshot types
+  - `continuitySnapshotJSON` to copy the accepted continuity payload onto the next `ProgramRun` so block-to-block context survives after generation and remains sync-friendly
+- Added `ProgramRunContinuityTypes.swift` with JSON-backed Codable snapshots for:
+  - ranked recommendation snapshots
+  - additive decision events with deterministic stable IDs (`recommendation::decision`)
+  - carried-forward context, edited prefill snapshots, and edited-field tracking for future Today Plan / Daily Coach consumers
+  - long-horizon summary payloads and insight rows
+- Added `ProgramRunContinuityService.swift`:
+  - records both declined and accepted next-block recommendation decisions on the completed source run
+  - preserves the accepted carry-forward context and any edited fields from `NextBlockPrefillReviewSheet`
+  - materializes the accepted continuity snapshot onto the new `ProgramRun` created from `ProgramReviewView`, including the previous-run stable ID link
+- Added `LongHorizonAdaptationSummaryService.swift` and exposed it through `TrainingContextQueryService.longHorizonAdaptationSummary(...)`:
+  - builds deterministic, readable insights across recent completed blocks
+  - summarizes adherence trend, key-lift or movement continuity, tolerated weekly frequency, repeated missed-session patterns, and standalone-workout influence
+  - degrades gracefully when there is only one completed block or no completed blocks yet
+- Wired the smallest possible view hooks:
+  - `MesocycleReviewView` now persists explicit accept/decline decisions when the user confirms or dismisses a recommendation
+  - `ProgramReviewView.startProgram()` now copies accepted continuity into the newly created run when generation came from a carried-forward next-block prefill
+- Updated sync-safe transport and merge behavior:
+  - `ProgramRunSyncDTO`, sync mappers, local repository upsert logic, and conflict resolution now carry and merge the additive continuity JSON alongside existing run progress fields
+  - continuity merge path unions recommendation events/catalog snapshots by stable ID instead of blindly overwriting the entire JSON blob
+- Added focused tests in `Feature13Prompt5ContinuityAndLongHorizonTests.swift` covering:
+  - declined + accepted decision logging on a completed block
+  - continuity linking into the next run
+  - multi-block readable summary generation with standalone conditioning influence
+  - graceful single-block fallback behavior
+
+**Commit:** `feat: add block continuity logging and long-horizon summaries`
+
+---
+
 
 ## Project Setup
 

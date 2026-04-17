@@ -58,6 +58,22 @@ enum TrainingContextQueryService {
         )
     }
 
+    static func longHorizonAdaptationSummary(
+        endingWith run: ProgramRun? = nil,
+        allRuns: [ProgramRun],
+        workouts: [Workout],
+        personalRecords: [PersonalRecord] = [],
+        maxBlocks: Int = 3
+    ) -> LongHorizonAdaptationSummary {
+        LongHorizonAdaptationSummaryService.buildSummary(
+            endingWith: run,
+            completedRuns: completedProgramRuns(from: allRuns),
+            allWorkouts: workouts,
+            personalRecords: personalRecords,
+            maxBlocks: maxBlocks
+        )
+    }
+
     static func latestWeeklyAnalysis(
         for run: ProgramRun?,
         in analyses: [WeeklyTrainingAnalysis]

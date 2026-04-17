@@ -305,7 +305,10 @@ extension ProgramRun {
             startDate: startDate,
             endDate: endDate,
             isCompleted: isCompleted,
-            trainingProgramStableID: program?.resolvedSyncStableID
+            trainingProgramStableID: program?.resolvedSyncStableID,
+            previousProgramRunStableID: previousProgramRunStableID,
+            recommendationDecisionHistoryJSON: recommendationDecisionHistoryJSON,
+            continuitySnapshotJSON: continuitySnapshotJSON
         )
     }
 
@@ -316,6 +319,9 @@ extension ProgramRun {
         startDate = dto.startDate
         endDate = dto.endDate
         isCompleted = dto.isCompleted
+        previousProgramRunStableID = dto.previousProgramRunStableID
+        recommendationDecisionHistoryJSON = dto.recommendationDecisionHistoryJSON
+        continuitySnapshotJSON = dto.continuitySnapshotJSON
         self.program = program
     }
 }

@@ -20,6 +20,15 @@ final class ProgramRun {
     var startDate: Date
     var endDate: Date?
     var isCompleted: Bool
+    /// Stable ID of the prior completed run when this block was started from a
+    /// carried-forward recommendation.
+    var previousProgramRunStableID: String?
+    /// JSON snapshot of completed-block recommendation decisions for sync-safe,
+    /// additive continuity logging on the source run.
+    var recommendationDecisionHistoryJSON: String?
+    /// JSON snapshot copied onto the next run so continuity survives even if the
+    /// source review is no longer loaded in memory.
+    var continuitySnapshotJSON: String?
 
     var program: TrainingProgram?
 
@@ -30,7 +39,10 @@ final class ProgramRun {
         syncLastModifiedAt: Date = Date(),
         startDate: Date,
         endDate: Date? = nil,
-        isCompleted: Bool = false
+        isCompleted: Bool = false,
+        previousProgramRunStableID: String? = nil,
+        recommendationDecisionHistoryJSON: String? = nil,
+        continuitySnapshotJSON: String? = nil
     ) {
         self.id = id
         self.syncStableID = syncStableID ?? id.uuidString
@@ -39,5 +51,8 @@ final class ProgramRun {
         self.startDate = startDate
         self.endDate = endDate
         self.isCompleted = isCompleted
+        self.previousProgramRunStableID = previousProgramRunStableID
+        self.recommendationDecisionHistoryJSON = recommendationDecisionHistoryJSON
+        self.continuitySnapshotJSON = continuitySnapshotJSON
     }
 }

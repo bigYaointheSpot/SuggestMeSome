@@ -593,8 +593,23 @@ struct ProgramReviewView: View {
 
     private func startProgram() {
         commitName()
-        let run = ProgramRun(startDate: Date.now)
+        let startDate = Date.now
+        let run = ProgramRun(startDate: startDate)
         run.program = program
+
+        if let sourceStableID = input.carryForwardContext?.sourceProgramRunStableID {
+            let sourceRun = ProgramRunContinuityService.sourceRun(
+                matching: sourceStableID,
+                context: modelContext
+            )
+            ProgramRunContinuityService.applyAcceptedContinuity(
+                to: run,
+                sourceRun: sourceRun,
+                input: input,
+                startedAt: startDate
+            )
+        }
+
         modelContext.insert(run)
         try? modelContext.save()
         onStartProgram()

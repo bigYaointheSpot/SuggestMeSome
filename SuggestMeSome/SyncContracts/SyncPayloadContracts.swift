@@ -136,6 +136,9 @@ struct ProgramRunSyncDTO: Codable, Equatable {
     var endDate: Date?
     var isCompleted: Bool
     var trainingProgramStableID: String?
+    var previousProgramRunStableID: String? = nil
+    var recommendationDecisionHistoryJSON: String? = nil
+    var continuitySnapshotJSON: String? = nil
 }
 
 struct DailyCoachCheckInSyncDTO: Codable, Equatable {

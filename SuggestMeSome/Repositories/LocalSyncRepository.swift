@@ -117,7 +117,10 @@ final class LocalSyncRepository: WorkoutSyncRepository, ProgramSyncRepository, D
                     syncLastModifiedAt: payload.metadata.lastModifiedAt,
                     startDate: payload.startDate,
                     endDate: payload.endDate,
-                    isCompleted: payload.isCompleted
+                    isCompleted: payload.isCompleted,
+                    previousProgramRunStableID: payload.previousProgramRunStableID,
+                    recommendationDecisionHistoryJSON: payload.recommendationDecisionHistoryJSON,
+                    continuitySnapshotJSON: payload.continuitySnapshotJSON
                 )
                 run.program = program
                 modelContext.insert(run)

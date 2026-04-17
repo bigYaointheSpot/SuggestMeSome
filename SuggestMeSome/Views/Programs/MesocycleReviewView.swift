@@ -6,6 +6,7 @@
 //  falls back to .mock if the backend is not yet wired.
 //
 
+import SwiftData
 import SwiftUI
 
 // MARK: - MesocycleReviewView
@@ -13,6 +14,7 @@ import SwiftUI
 struct MesocycleReviewView: View {
     let snapshot: MesocycleReviewSnapshot
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var isPhaseRecapExpanded = true
     @State private var showingAIGenerator = false
     @State private var selectedRecommendation: MesocycleNextBlockRecommendation?
@@ -58,12 +60,20 @@ struct MesocycleReviewView: View {
             NextBlockPrefillReviewSheet(
                 recommendation: rec,
                 onConfirm: { editedPrefill in
+                    persistDecision(
+                        recommendation: rec,
+                        decision: .accepted,
+                        editedPrefill: editedPrefill
+                    )
                     confirmedPrefill = editedPrefill
                     selectedRecommendation = nil
                     showingAIGenerator = true
                 },
                 onDecline: {
-                    // TODO: persist MesocycleRecommendationDecision.declined via review store in a later prompt.
+                    persistDecision(
+                        recommendation: rec,
+                        decision: .declined
+                    )
                     selectedRecommendation = nil
                 }
             )
@@ -80,6 +90,28 @@ struct MesocycleReviewView: View {
             confirmedPrefill = nil
             showingAIGenerator = true
         }
+    }
+
+    private func persistDecision(
+        recommendation: MesocycleNextBlockRecommendation,
+        decision: MesocycleRecommendationDecision,
+        editedPrefill: NextBlockPrefillContext? = nil
+    ) {
+        guard let sourceRun = ProgramRunContinuityService.sourceRun(
+            matching: snapshot.programRunStableID,
+            context: modelContext
+        ) else {
+            return
+        }
+
+        ProgramRunContinuityService.recordDecision(
+            on: sourceRun,
+            review: snapshot,
+            recommendation: recommendation,
+            decision: decision,
+            editedPrefill: editedPrefill
+        )
+        try? modelContext.save()
     }
 }
 
