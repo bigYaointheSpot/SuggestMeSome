@@ -37,6 +37,48 @@ extension SyncTrackableModel {
         syncVersion = max(1, syncVersion) + 1
         syncLastModifiedAt = date
     }
+
+    @discardableResult
+    func repairSyncMetadataIfNeeded(at date: Date = Date()) -> Bool {
+        var didRepair = false
+
+        let trimmedStableID = syncStableID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if syncStableID != trimmedStableID {
+            syncStableID = trimmedStableID
+            didRepair = true
+        }
+        if trimmedStableID?.isEmpty != false {
+            syncStableID = id.uuidString
+            didRepair = true
+        }
+        if syncVersion < 1 {
+            syncVersion = 1
+            didRepair = true
+        }
+        if syncLastModifiedAt == .distantPast {
+            syncLastModifiedAt = date
+            didRepair = true
+        }
+        if let tombstone = self as? any SyncTombstoneTrackable,
+           let deletedAt = tombstone.syncDeletedAt,
+           syncLastModifiedAt < deletedAt {
+            syncLastModifiedAt = deletedAt
+            didRepair = true
+        }
+
+        if didRepair {
+            syncVersion = max(1, syncVersion) + 1
+            syncLastModifiedAt = max(syncLastModifiedAt, date)
+        }
+
+        return didRepair
+    }
+
+    func assignReplacementSyncStableID(_ stableID: String, at date: Date = Date()) {
+        syncStableID = stableID
+        syncVersion = max(1, syncVersion) + 1
+        syncLastModifiedAt = date
+    }
 }
 
 extension SyncTrackableModel where Self: SyncTombstoneTrackable {

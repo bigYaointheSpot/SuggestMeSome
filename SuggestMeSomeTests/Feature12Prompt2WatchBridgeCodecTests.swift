@@ -118,4 +118,29 @@ struct Feature12Prompt2WatchBridgeCodecTests {
             Issue.record("Unexpected error: \(error)")
         }
     }
+
+    @Test func codecDecodesEnvelopeWrappedPayloadsForForwardCompatibility() throws {
+        let payload = WatchWorkoutLaunchPayload(
+            workoutID: UUID(),
+            startedAt: Date(timeIntervalSince1970: 1_700_800_000)
+        )
+        let payloadData = try WatchBridgeMessageCodec.encodeEnvelopePayload(
+            kind: .workoutLaunch,
+            payload: payload,
+            sentAt: Date(timeIntervalSince1970: 1_700_800_010)
+        )
+        let message = WatchBridgeMessage(
+            schemaVersion: WatchPayloadContractVersion.current,
+            kind: .workoutLaunch,
+            sentAt: Date(timeIntervalSince1970: 1_700_800_010),
+            payloadJSON: payloadData
+        )
+
+        let decoded = try WatchBridgeMessageCodec.decodePayload(
+            WatchWorkoutLaunchPayload.self,
+            from: message
+        )
+
+        #expect(decoded == payload)
+    }
 }

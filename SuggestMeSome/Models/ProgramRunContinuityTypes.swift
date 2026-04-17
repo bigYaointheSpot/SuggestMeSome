@@ -7,6 +7,30 @@
 
 import Foundation
 
+enum ProgramRunContinuityContractVersion {
+    static let v1 = 1
+    static let v2 = 2
+    static let current = v2
+}
+
+struct ProgramRunContinuityEnvelope<Payload: Codable>: Codable {
+    let schemaVersion: Int
+    let payload: Payload
+
+    init(
+        payload: Payload,
+        schemaVersion: Int = ProgramRunContinuityContractVersion.current
+    ) {
+        self.schemaVersion = schemaVersion
+        self.payload = payload
+    }
+}
+
+private struct ProgramRunContinuityDecodingEnvelope<Payload: Decodable>: Decodable {
+    let schemaVersion: Int
+    let payload: Payload
+}
+
 struct ProgramRunRecommendationSnapshot: Codable, Equatable {
     let stableID: String
     let rank: Int
@@ -157,12 +181,14 @@ struct LongHorizonAdaptationSummary: Codable, Equatable {
 }
 
 enum ProgramRunContinuityCodec {
-    static func encode<T: Encodable>(_ value: T?) -> String? {
+    static func encode<T: Codable>(_ value: T?) -> String? {
         guard let value else { return nil }
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .millisecondsSince1970
         encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(value) else { return nil }
+        guard let data = try? encoder.encode(
+            ProgramRunContinuityEnvelope(payload: value)
+        ) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
@@ -176,6 +202,9 @@ enum ProgramRunContinuityCodec {
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .millisecondsSince1970
+        if let wrapped = try? decoder.decode(ProgramRunContinuityDecodingEnvelope<T>.self, from: data) {
+            return wrapped.payload
+        }
         return try? decoder.decode(T.self, from: data)
     }
 }

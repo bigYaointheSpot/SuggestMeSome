@@ -7,6 +7,13 @@
 
 import Foundation
 
+private struct WatchPayloadDecodingEnvelope<Payload: Decodable>: Decodable {
+    let schemaVersion: Int
+    let kind: WatchPayloadKind
+    let sentAt: Date
+    let payload: Payload
+}
+
 struct WatchBridgeMessage: Equatable {
     let schemaVersion: Int
     let kind: WatchPayloadKind
@@ -95,6 +102,22 @@ enum WatchBridgeMessageCodec {
         }
     }
 
+    static func encodeEnvelopePayload<Payload: Codable & Equatable>(
+        kind: WatchPayloadKind,
+        payload: Payload,
+        sentAt: Date = Date(),
+        schemaVersion: Int = WatchPayloadContractVersion.current
+    ) throws -> Data {
+        try encodePayload(
+            WatchPayloadEnvelope(
+                kind: kind,
+                payload: payload,
+                sentAt: sentAt,
+                schemaVersion: schemaVersion
+            )
+        )
+    }
+
     static func decodePayload<Payload: Decodable>(
         _ type: Payload.Type,
         from message: WatchBridgeMessage
@@ -108,6 +131,9 @@ enum WatchBridgeMessageCodec {
     ) throws -> Payload {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .secondsSince1970
+        if let wrapped = try? decoder.decode(WatchPayloadDecodingEnvelope<Payload>.self, from: data) {
+            return wrapped.payload
+        }
         do {
             return try decoder.decode(type, from: data)
         } catch {
