@@ -977,6 +977,152 @@ struct Feature6ValidationTests {
         #expect((latestSnapshot?.weightedProgramSignal ?? 0) > (latestSnapshot?.weightedStandaloneSignal ?? 0))
     }
 
+    @Test func liftTrendTrackingDoesNotCrossContaminateOtherRuns() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let fixture = makeAdaptiveProgramFixture(name: "Powerlifting Intermediate")
+        persistProgram(fixture.program, context: context)
+
+        let targetRun = ProgramRun(startDate: day(0))
+        targetRun.program = fixture.program
+        context.insert(targetRun)
+
+        let otherRun = ProgramRun(startDate: day(0))
+        otherRun.program = fixture.program
+        context.insert(otherRun)
+
+        let targetAnalyses = [
+            WeeklyTrainingAnalysis(
+                weekStartDate: day(0),
+                weekEndDate: day(6),
+                programRun: targetRun,
+                trainingProgram: fixture.program,
+                programWeekNumber: 1,
+                isFinalized: true,
+                finalizedAt: day(7)
+            ),
+            WeeklyTrainingAnalysis(
+                weekStartDate: day(7),
+                weekEndDate: day(13),
+                programRun: targetRun,
+                trainingProgram: fixture.program,
+                programWeekNumber: 2,
+                isFinalized: true,
+                finalizedAt: day(14)
+            ),
+            WeeklyTrainingAnalysis(
+                weekStartDate: day(14),
+                weekEndDate: day(20),
+                programRun: targetRun,
+                trainingProgram: fixture.program,
+                programWeekNumber: 3,
+                isFinalized: true,
+                finalizedAt: day(21)
+            ),
+        ]
+        targetAnalyses.forEach { context.insert($0) }
+
+        let otherAnalyses = [
+            WeeklyTrainingAnalysis(
+                weekStartDate: day(0),
+                weekEndDate: day(6),
+                programRun: otherRun,
+                trainingProgram: fixture.program,
+                programWeekNumber: 1,
+                isFinalized: true,
+                finalizedAt: day(7)
+            ),
+            WeeklyTrainingAnalysis(
+                weekStartDate: day(7),
+                weekEndDate: day(13),
+                programRun: otherRun,
+                trainingProgram: fixture.program,
+                programWeekNumber: 2,
+                isFinalized: true,
+                finalizedAt: day(14)
+            ),
+            WeeklyTrainingAnalysis(
+                weekStartDate: day(14),
+                weekEndDate: day(20),
+                programRun: otherRun,
+                trainingProgram: fixture.program,
+                programWeekNumber: 3,
+                isFinalized: true,
+                finalizedAt: day(21)
+            ),
+        ]
+        otherAnalyses.forEach { context.insert($0) }
+
+        for index in targetAnalyses.indices {
+            _ = appendOutcome(
+                to: targetAnalyses[index],
+                context: context,
+                run: targetRun,
+                workoutDate: day((index * 7) + 2),
+                exerciseName: "Back Squats",
+                canonicalLiftKey: "squat",
+                scoreValue: 4 + Double(index),
+                performance: .overperformance,
+                fatigue: .manageable,
+                source: .programLinked,
+                confidence: .high,
+                signalWeight: 1.0,
+                isTopSet: true,
+                topSetWeight: 295 + Double(index * 10),
+                topSetReps: 3,
+                e1rm: 330 + Double(index * 12)
+            )
+
+            _ = appendOutcome(
+                to: otherAnalyses[index],
+                context: context,
+                run: otherRun,
+                workoutDate: day((index * 7) + 2),
+                exerciseName: "Back Squats",
+                canonicalLiftKey: "squat",
+                scoreValue: -8 - Double(index),
+                performance: .underperformance,
+                fatigue: .high,
+                source: .programLinked,
+                confidence: .high,
+                signalWeight: 1.0,
+                isTopSet: true,
+                topSetWeight: 245 - Double(index * 10),
+                topSetReps: 3,
+                e1rm: 280 - Double(index * 15)
+            )
+        }
+
+        let summary = LiftTrendTrackingService.updateTrends(for: targetAnalyses[2], context: context)
+        try context.save()
+
+        #expect(summary["squat"] == .improving)
+
+        let trends = try fetchAll(LiftPerformanceTrend.self, context)
+        let targetTrend = trends.first {
+            $0.programRun?.id == targetRun.id && $0.canonicalLiftKey == "squat"
+        }
+        let otherTrend = trends.first {
+            $0.programRun?.id == otherRun.id && $0.canonicalLiftKey == "squat"
+        }
+
+        #expect(targetTrend?.trendStatus == .improving)
+        #expect(otherTrend == nil)
+
+        let snapshots = try fetchAll(LiftTrendSnapshot.self, context)
+        let targetSnapshots = snapshots.filter {
+            $0.programRun?.id == targetRun.id && $0.canonicalLiftKey == "squat"
+        }
+        let otherSnapshots = snapshots.filter {
+            $0.programRun?.id == otherRun.id && $0.canonicalLiftKey == "squat"
+        }
+
+        #expect(targetSnapshots.count == 1)
+        #expect(targetSnapshots[0].analysis?.id == targetAnalyses[2].id)
+        #expect(otherSnapshots.isEmpty)
+    }
+
     @Test func variationSwapCreatesActiveOverlayWithoutMutatingBaseProgram() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
