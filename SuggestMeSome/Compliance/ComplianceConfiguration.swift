@@ -68,6 +68,11 @@ enum ComplianceConfiguration {
     static let placeholderConsumerHealthNoticeURL = URL(string: "https://suggestmesome.example/consumer-health")!
     static let requiresOrganizationAccountBeforeRelease = true
 
+    static let adultsOnlyDisclosure = "SuggestMeSome is intended for adults age 18 and older."
+    static let wellnessDisclaimerDisclosure = "SuggestMeSome provides fitness and wellness guidance only. It is not medical advice, diagnosis, or treatment, and it should not be used for emergency or medical decisions."
+    static let smartGuidanceDisclosure = "Some workouts, programs, and coaching explanations are generated from your logged training data and app logic. Review recommendations before acting on them."
+    static let consumerHealthDataDisclosure = "Your workouts, readiness check-ins, recovery data, and coaching outputs can reveal health information. SuggestMeSome uses this data to provide the features you request and does not use Apple Health data for advertising."
+    static let freeWorkoutLoggingDisclosure = "Manual workout logging, history, editing, export, and deletion remain available without Premium Unlock."
     static let premiumUnlockDisclosure = "Premium Unlock is a one-time purchase. It unlocks coaching, analytics, smart generation, Apple Health integration, and Apple Watch features. Manual workout logging remains free."
 
     static let appleHealthDisclosure = "If you choose to connect Apple Health, SuggestMeSome may read sleep, resting heart rate, heart rate variability, active energy, step count, body mass, and workouts, and may write workout summaries you save in SuggestMeSome. Apple Health access is optional and can be changed anytime."
@@ -76,13 +81,19 @@ enum ComplianceConfiguration {
 
     static let deleteLocalDataDisclosure = "Delete Local Data removes SuggestMeSome data from this device. It does not delete records stored in Apple Health."
 
-    static let releaseGateChecklist: [String] = [
-        "Convert the Apple Developer membership to an organization account before public submission.",
-        "Replace placeholder company name, support email, privacy email, and hosted legal URLs.",
-        "Publish hosted Privacy Policy, Terms of Use, and Consumer Health Data Notice pages.",
-        "Complete the App Store Connect privacy questionnaire and paid IAP metadata.",
-        "Review final legal text with counsel before release."
-    ]
+    static var releaseGateChecklist: [String] {
+        var items: [String] = []
+        if requiresOrganizationAccountBeforeRelease {
+            items.append("Convert the Apple Developer membership to an organization account before public submission.")
+        }
+        items.append(contentsOf: [
+            "Replace placeholder company name, support email, privacy email, and hosted legal URLs.",
+            "Publish hosted Privacy Policy, Terms of Use, and Consumer Health Data Notice pages.",
+            "Complete the App Store Connect privacy questionnaire and paid IAP metadata.",
+            "Review final legal text with counsel before release."
+        ])
+        return items
+    }
 
     static let legalDocuments: [LegalDocumentVersion] = [
         LegalDocumentVersion(
@@ -157,11 +168,13 @@ enum ComplianceConfiguration {
 
             ## Product scope
 
-            \(appName) is a fitness and wellness app for adults age 18 and older. It provides workout logging, smart workout and program suggestions, analytics, and wellness-oriented coaching support.
+            \(adultsOnlyDisclosure)
+
+            \(appName) provides workout logging, smart workout and program suggestions, analytics, and wellness-oriented coaching support.
 
             ## No medical use
 
-            \(appName) provides fitness and wellness guidance only. It is not medical advice, diagnosis, or treatment, and it should not be used for emergency or medical decisions.
+            \(wellnessDisclaimerDisclosure)
 
             ## User responsibility
 
@@ -236,7 +249,7 @@ enum ComplianceConfiguration {
             title: "Smart Guidance Disclosure",
             summary: "How smart generation and coaching outputs are produced and how to use them.",
             bodyMarkdown: """
-            Some workouts, programs, and coaching explanations are generated from your logged training data and app logic. Review recommendations before acting on them.
+            \(smartGuidanceDisclosure)
 
             \(appName) is currently designed as a local-first product. Smart guidance reflects your logged workouts, optional Apple Health data, saved program state, and deterministic app logic. It should be reviewed as a training suggestion, not treated as a guaranteed or authoritative instruction.
             """,
@@ -250,7 +263,7 @@ enum ComplianceConfiguration {
             title: "Wellness Disclaimer",
             summary: "Important non-medical framing for workout, readiness, and recovery outputs.",
             bodyMarkdown: """
-            SuggestMeSome provides fitness and wellness guidance only. It is not medical advice, diagnosis, or treatment, and it should not be used for emergency or medical decisions.
+            \(wellnessDisclaimerDisclosure)
 
             Recovery and readiness outputs are estimates based on your logged workouts, check-ins, and optional Apple Health data. They are not diagnostic measurements or medical advice.
             """,

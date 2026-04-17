@@ -14,7 +14,6 @@ struct SettingsTab: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(PurchaseManager.self) private var purchaseManager
     @Query(sort: \Workout.date) private var allWorkouts: [Workout]
-    @Query private var allExerciseEntries: [ExerciseEntry]
 
     // MARK: Preferences
     @AppStorage("globalWeightUnit") private var globalWeightUnit: String = WeightUnit.lbs.rawValue
@@ -173,9 +172,7 @@ struct SettingsTab: View {
             }
 
             NavigationLink {
-                PremiumFeatureDestination(feature: .healthData) {
-                    HealthDataSettingsView()
-                }
+                HealthDataSettingsView()
             } label: {
                 Label("Apple Health", systemImage: "heart.text.square.fill")
                     .foregroundStyle(.red)

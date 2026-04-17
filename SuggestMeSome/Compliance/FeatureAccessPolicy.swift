@@ -5,8 +5,6 @@
 //  Feature 14 - Shared premium feature gating policy.
 //
 
-import Foundation
-
 enum PremiumFeature: String, CaseIterable, Identifiable {
     case dailyCoach
     case dashboardAnalytics

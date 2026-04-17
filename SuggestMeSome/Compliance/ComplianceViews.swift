@@ -100,7 +100,7 @@ struct AboutThisGuidanceView: View {
             VStack(alignment: .leading, spacing: 16) {
                 guidanceCallout(
                     title: "Wellness, not medical care",
-                    text: "SuggestMeSome provides fitness and wellness guidance only. It is not medical advice, diagnosis, or treatment, and it should not be used for emergency or medical decisions."
+                    text: ComplianceConfiguration.wellnessDisclaimerDisclosure
                 )
                 guidanceCallout(
                     title: "Recovery and readiness are estimates",
@@ -108,7 +108,7 @@ struct AboutThisGuidanceView: View {
                 )
                 guidanceCallout(
                     title: "Smart guidance should be reviewed",
-                    text: "Some workouts, programs, and coaching explanations are generated from your logged training data and app logic. Review recommendations before acting on them."
+                    text: ComplianceConfiguration.smartGuidanceDisclosure
                 )
                 guidanceCallout(
                     title: "Apple Health is optional",
@@ -144,7 +144,7 @@ struct LocalDataInfoView: View {
             }
 
             Section("What stays available for free") {
-                Text("Manual workout logging, history, editing, export, and deletion remain available without Premium Unlock.")
+                Text(ComplianceConfiguration.freeWorkoutLoggingDisclosure)
             }
 
             Section("Where to manage it") {
@@ -293,7 +293,7 @@ struct PaywallView: View {
                 .font(.headline)
             Text(ComplianceConfiguration.premiumUnlockDisclosure)
                 .foregroundStyle(.secondary)
-            Text("Manual workout logging, history, editing, export, and delete tools remain free.")
+            Text(ComplianceConfiguration.freeWorkoutLoggingDisclosure)
                 .foregroundStyle(.secondary)
             Button("About This Guidance") {
                 showingAboutGuidance = true
@@ -378,43 +378,43 @@ struct PremiumGateView: View {
     }
 }
 
-struct PremiumFeatureGate<Content: View>: View {
+private struct FeatureGateContainer<Content: View>: View {
     let feature: PremiumFeature
+    let wrapLockedStateInNavigationStack: Bool
     @ViewBuilder let content: () -> Content
 
     @Environment(PurchaseManager.self) private var purchaseManager
 
-    var body: some View {
-        switch FeatureAccessPolicy.decision(
-            for: feature,
+    private var isAccessible: Bool {
+        FeatureAccessPolicy.isAccessible(
+            feature,
             entitlementState: purchaseManager.entitlementState
-        ) {
-        case .granted:
+        )
+    }
+
+    var body: some View {
+        if isAccessible {
             content()
-        case .premiumRequired(let feature):
+        } else if wrapLockedStateInNavigationStack {
             NavigationStack {
                 PremiumGateView(feature: feature)
             }
+        } else {
+            PremiumGateView(feature: feature)
         }
     }
 }
 
-struct PremiumFeatureDestination<Content: View>: View {
+struct PremiumFeatureGate<Content: View>: View {
     let feature: PremiumFeature
     @ViewBuilder let content: () -> Content
 
-    @Environment(PurchaseManager.self) private var purchaseManager
-
     var body: some View {
-        switch FeatureAccessPolicy.decision(
-            for: feature,
-            entitlementState: purchaseManager.entitlementState
-        ) {
-        case .granted:
-            content()
-        case .premiumRequired(let feature):
-            PremiumGateView(feature: feature)
-        }
+        FeatureGateContainer(
+            feature: feature,
+            wrapLockedStateInNavigationStack: true,
+            content: content
+        )
     }
 }
 
@@ -429,7 +429,7 @@ struct HealthDataPreflightView: View {
         List {
             Section("Before You Connect Apple Health") {
                 Text(ComplianceConfiguration.appleHealthDisclosure)
-                Text("Your workouts, readiness check-ins, recovery data, and coaching outputs can reveal health information. SuggestMeSome uses this data to provide the features you request and does not use Apple Health data for advertising.")
+                Text(ComplianceConfiguration.consumerHealthDataDisclosure)
                     .foregroundStyle(.secondary)
             }
 
@@ -509,17 +509,17 @@ struct ComplianceOnboardingFlow: View {
                 case .ageGate:
                     copyStep(
                         title: "Adults 18+",
-                        body: "SuggestMeSome is intended for adults age 18 and older."
+                        body: ComplianceConfiguration.adultsOnlyDisclosure
                     )
                 case .wellness:
                     copyStep(
                         title: "Wellness, not medical care",
-                        body: "SuggestMeSome provides fitness and wellness guidance only. It is not medical advice, diagnosis, or treatment, and it should not be used for emergency or medical decisions."
+                        body: ComplianceConfiguration.wellnessDisclaimerDisclosure
                     )
                 case .automation:
                     copyStep(
                         title: "Smart guidance disclosure",
-                        body: "Some workouts, programs, and coaching explanations are generated from your logged training data and app logic. Review recommendations before acting on them."
+                        body: ComplianceConfiguration.smartGuidanceDisclosure
                     )
                 case .documents:
                     documentStep
