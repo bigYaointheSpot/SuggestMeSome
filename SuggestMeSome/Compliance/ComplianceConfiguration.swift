@@ -59,7 +59,7 @@ struct LegalDocumentRecord: Codable, Equatable {
 enum ComplianceConfiguration {
     static let appName = "SuggestMeSome"
     static let premiumUnlockProductID = "premium_unlock"
-    static let placeholderSellerName = "Your Legal Name"
+    static let placeholderSellerName = "Alexander Yao"
     static let placeholderSupportEmail = "support@suggestmesome.example"
     static let placeholderPrivacyEmail = "privacy@suggestmesome.example"
     static let placeholderWebsiteURL = URL(string: "https://suggestmesome.example")!

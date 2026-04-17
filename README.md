@@ -3057,6 +3057,17 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 5 [Seller Placeholder Personalization] — 2026-04-17
+
+- Replaced the individual-seller name placeholder with `Alexander Yao`:
+  - compliance-generated privacy, support, and legal previews now use `Alexander Yao` anywhere the seller name placeholder is interpolated
+- Added focused regression coverage for:
+  - the shared compliance configuration continuing to expose `Alexander Yao` as the seller placeholder value
+
+**Commit:** `refactor: personalize seller placeholder name`
+
+---
+
 
 ## Project Setup
 

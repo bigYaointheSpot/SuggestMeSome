@@ -161,6 +161,7 @@ struct Feature14ComplianceAndMonetizationTests {
         let consumerHealthNotice = ComplianceConfiguration.document(for: .consumerHealthNotice)
 
         #expect(privacyPolicy.containsPlaceholders)
+        #expect(ComplianceConfiguration.placeholderSellerName == "Alexander Yao")
         #expect(privacyPolicy.bodyMarkdown.contains("published by **\(ComplianceConfiguration.placeholderSellerName)**"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("does not use Apple Health data for advertising"))
         #expect(
