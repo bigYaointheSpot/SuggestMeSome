@@ -216,6 +216,82 @@ struct Feature13Prompt5ContinuityAndLongHorizonTests {
         })
     }
 
+    @Test func latestCompletedRunHelperPrefersNewestCompletedBlock() {
+        let olderRun = ProgramRun(
+            syncStableID: "run-older",
+            startDate: day(0),
+            endDate: day(13),
+            isCompleted: true
+        )
+        let activeRun = ProgramRun(
+            syncStableID: "run-active",
+            startDate: day(20),
+            isCompleted: false
+        )
+        let newerRun = ProgramRun(
+            syncStableID: "run-newer",
+            startDate: day(40),
+            endDate: day(53),
+            isCompleted: true
+        )
+
+        let latest = TrainingContextQueryService.latestCompletedRun(
+            from: [activeRun, olderRun, newerRun]
+        )
+
+        #expect(latest?.resolvedSyncStableID == newerRun.resolvedSyncStableID)
+    }
+
+    @Test func latestCompletedMesocycleReviewHelperBuildsReviewFromNewestCompletedBlock() {
+        let olderProgram = makeProgram(
+            stableID: "program-older",
+            name: "Older Block",
+            lengthInWeeks: 2,
+            sessionsPerWeek: 2
+        )
+        let olderRun = ProgramRun(
+            syncStableID: "run-older",
+            startDate: day(0),
+            endDate: day(13),
+            isCompleted: true
+        )
+        olderRun.program = olderProgram
+
+        let newerProgram = makeProgram(
+            stableID: "program-newer",
+            name: "Newer Block",
+            lengthInWeeks: 2,
+            sessionsPerWeek: 3
+        )
+        let newerRun = ProgramRun(
+            syncStableID: "run-newer",
+            startDate: day(20),
+            endDate: day(33),
+            isCompleted: true
+        )
+        newerRun.program = newerProgram
+
+        let workouts = [
+            makeProgramWorkout(date: day(0), run: olderRun, week: 1, session: 1, exerciseName: "Bench Press", weight: 185),
+            makeProgramWorkout(date: day(2), run: olderRun, week: 1, session: 2, exerciseName: "Bench Press", weight: 190),
+            makeProgramWorkout(date: day(20), run: newerRun, week: 1, session: 1, exerciseName: "Bench Press", weight: 205),
+            makeProgramWorkout(date: day(23), run: newerRun, week: 1, session: 2, exerciseName: "Bench Press", weight: 210),
+            makeProgramWorkout(date: day(27), run: newerRun, week: 1, session: 3, exerciseName: "Bench Press", weight: 215),
+            makeStandaloneConditioningWorkout(date: day(30))
+        ]
+
+        let review = TrainingContextQueryService.latestCompletedMesocycleReview(
+            from: [olderRun, newerRun],
+            workouts: workouts,
+            personalRecords: []
+        )
+
+        #expect(review?.programRunStableID == newerRun.resolvedSyncStableID)
+        #expect(review?.programName == "Newer Block")
+        #expect(review?.standaloneInfluence.includedWorkoutCount == 1)
+        #expect(review?.defaultNextBlockPrefill.sourceProgramRunStableID == newerRun.resolvedSyncStableID)
+    }
+
     private func makeProgram(
         stableID: String,
         name: String,

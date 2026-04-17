@@ -47,6 +47,7 @@ struct WorkoutView: View {
 
     // Block review — auto-presented when the final workout completes the program run
     @State private var showBlockReview = false
+    @State private var pendingBlockReviewSnapshot: MesocycleReviewSnapshot?
     @State private var blockJustCompleted = false
 
     var body: some View {
@@ -88,10 +89,14 @@ struct WorkoutView: View {
                 exerciseEntries.append(entry)
             }
         }
-        .sheet(isPresented: $showBlockReview, onDismiss: { dismiss() }) {
+        .sheet(isPresented: $showBlockReview, onDismiss: {
+            pendingBlockReviewSnapshot = nil
+            dismiss()
+        }) {
             NavigationStack {
-                // TODO: Replace .mock with real snapshot from MesocycleReviewService when wired
-                MesocycleReviewView(snapshot: .mock)
+                if let pendingBlockReviewSnapshot {
+                    MesocycleReviewView(snapshot: pendingBlockReviewSnapshot)
+                }
             }
         }
         .confirmationDialog("End Workout?", isPresented: $showingEndConfirmation, titleVisibility: .visible) {
@@ -463,7 +468,9 @@ struct WorkoutView: View {
 
     private func saveWorkout() {
         guard isActive, let start = startTime else { return }
-        let wasAlreadyComplete = programWorkout?.programRun.isCompleted ?? false
+        let saveProgramContext = workoutSaveProgramContext()
+        let runForSave = saveProgramContext?.run
+        let wasAlreadyComplete = runForSave?.isCompleted ?? false
         let activeSessionForCompletion = activeWorkoutSessionStore.session
         let coordinator = WorkoutSaveCoordinator(modelContext: modelContext)
         let request = WorkoutSaveRequest(
@@ -472,14 +479,15 @@ struct WorkoutView: View {
             caloriesText: caloriesText,
             comments: comments,
             exerciseEntries: exerciseEntries,
-            programContext: workoutSaveProgramContext(),
+            programContext: saveProgramContext,
             healthKitEnabled: healthKitEnabled,
             healthKitWritebackEnabled: writeAppWorkoutsToHealthKit
         )
         let savedWorkout = coordinator.saveWorkout(using: request)
         let prCount = savedWorkout.exerciseEntries.flatMap(\.sets).filter(\.isPR).count
-        let didCompleteBlock = !wasAlreadyComplete && (programWorkout?.programRun.isCompleted ?? false)
+        let didCompleteBlock = !wasAlreadyComplete && (runForSave?.isCompleted ?? false)
         blockJustCompleted = didCompleteBlock
+        pendingBlockReviewSnapshot = didCompleteBlock ? mesocycleReviewSnapshot(for: runForSave) : nil
         broadcastWatchCompletion(
             activeSession: activeSessionForCompletion,
             savedWorkout: savedWorkout,
@@ -498,7 +506,10 @@ struct WorkoutView: View {
                 dismissCelebration()
             }
         } else if didCompleteBlock {
-            showBlockReview = true
+            showBlockReview = pendingBlockReviewSnapshot != nil
+            if pendingBlockReviewSnapshot == nil {
+                dismiss()
+            }
         } else {
             dismiss()
         }
@@ -542,12 +553,21 @@ struct WorkoutView: View {
             showPRCelebration = false
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            if blockJustCompleted {
+            if blockJustCompleted, pendingBlockReviewSnapshot != nil {
                 showBlockReview = true
             } else {
                 dismiss()
             }
         }
+    }
+
+    private func mesocycleReviewSnapshot(for run: ProgramRun?) -> MesocycleReviewSnapshot? {
+        guard let run else { return nil }
+        return TrainingContextQueryService.mesocycleReview(
+            for: run,
+            workouts: TrainingContextQueryService.fetchWorkouts(context: modelContext),
+            personalRecords: TrainingContextQueryService.fetchPersonalRecords(context: modelContext)
+        )
     }
 
     // MARK: - PR Celebration Overlay

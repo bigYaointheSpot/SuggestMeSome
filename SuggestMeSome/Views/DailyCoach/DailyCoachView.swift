@@ -47,6 +47,13 @@ struct DailyCoachView: View {
     @Query(sort: \HealthKitDailySummary.dayStart, order: .reverse)
     private var healthKitDailySummaries: [HealthKitDailySummary]
 
+    @Query(filter: #Predicate<ProgramRun> { run in run.isCompleted == true },
+           sort: \ProgramRun.startDate, order: .reverse)
+    private var completedRuns: [ProgramRun]
+
+    @Query(sort: \PersonalRecord.dateAchieved, order: .reverse)
+    private var personalRecords: [PersonalRecord]
+
     @AppStorage("healthkit.enabled") private var healthKitEnabled = false
     @AppStorage("healthkit.dailyCoachEnabled") private var useHealthKitInDailyCoach = false
 
@@ -135,6 +142,34 @@ struct DailyCoachView: View {
         return checkIns.first { Calendar.current.startOfDay(for: $0.date) == today }
     }
 
+    private var latestCompletedRun: ProgramRun? {
+        TrainingContextQueryService.latestCompletedRun(from: completedRuns)
+    }
+
+    private var latestCompletedReviewSnapshot: MesocycleReviewSnapshot? {
+        TrainingContextQueryService.latestCompletedMesocycleReview(
+            from: completedRuns,
+            workouts: Array(recentWorkouts),
+            personalRecords: Array(personalRecords)
+        )
+    }
+
+    private var isBetweenBlocks: Bool {
+        focusRun == nil && latestCompletedRun != nil
+    }
+
+    private var longHorizonSummary: LongHorizonAdaptationSummary? {
+        guard latestCompletedRun != nil else { return nil }
+        let summary = TrainingContextQueryService.longHorizonAdaptationSummary(
+            endingWith: latestCompletedRun,
+            allRuns: Array(completedRuns),
+            workouts: Array(recentWorkouts),
+            personalRecords: Array(personalRecords),
+            maxBlocks: 3
+        )
+        return summary.blockCount > 0 ? summary : nil
+    }
+
     // MARK: Sheet / navigation state
 
     @State private var showingCheckInSheet = false
@@ -148,6 +183,10 @@ struct DailyCoachView: View {
     @State private var showingDraftReview = false
     @State private var confirmedDraftLaunch = false
     @State private var launchRequestPendingDiscard: TodayPlanLaunchRequest?
+
+    // Block review / next block generation
+    @State private var blockReviewSnapshot: MesocycleReviewSnapshot?
+    @State private var showingNextBlockGenerator = false
 
     // Proposal review/confirmation
     @State private var showingProposalReview = false
@@ -166,6 +205,9 @@ struct DailyCoachView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     todayTrainingCard
+                    if isBetweenBlocks {
+                        betweenBlocksContextCard
+                    }
                     readinessCard
                     coachRecommendationCard
                     if let rescue = todayPlan.adherenceRescue {
@@ -176,6 +218,20 @@ struct DailyCoachView: View {
                     }
                     latestSessionSummaryCard
                     latestWeeklyReviewCard
+                    if !completedRuns.isEmpty {
+                        BlockContinuityCard(
+                            completedRuns: Array(completedRuns),
+                            activeRun: focusRun,
+                            onReviewLastBlock: presentLatestCompletedReview
+                        )
+                    }
+                    if let summary = longHorizonSummary {
+                        LongHorizonSummaryCard(
+                            summary: summary,
+                            onReviewBlock: presentLatestCompletedReview,
+                            onGenerateNextBlock: { showingNextBlockGenerator = true }
+                        )
+                    }
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
@@ -299,12 +355,70 @@ struct DailyCoachView: View {
         } message: {
             Text(proposalActionErrorMessage ?? "Unknown error")
         }
+        .sheet(item: $blockReviewSnapshot) { snapshot in
+            MesocycleReviewView(snapshot: snapshot)
+        }
+        .sheet(isPresented: $showingNextBlockGenerator) {
+            AIProgramGeneratorView(prefill: latestCompletedReviewSnapshot?.defaultNextBlockPrefill)
+        }
         .onAppear {
             publishTodayPlanToWatchIfNeeded(force: true)
         }
         .onChange(of: watchTodayPlanSignature) { _, _ in
             publishTodayPlanToWatchIfNeeded()
         }
+    }
+
+    // MARK: - Between Blocks Contextual Card
+
+    private var betweenBlocksContextCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "pause.circle")
+                    .foregroundStyle(.orange)
+                Text("Between Blocks")
+                    .font(.headline)
+            }
+
+            Divider()
+
+            Text("Your last block is complete. Review how it went or generate your next training block when you're ready.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button {
+                    presentLatestCompletedReview()
+                } label: {
+                    Text("Review Last Block")
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color(.tertiarySystemBackground))
+                        .foregroundStyle(.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    showingNextBlockGenerator = true
+                } label: {
+                    Text("Generate Next Block")
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color.orange)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.3), lineWidth: 1))
     }
 
     // MARK: - Today's Training Card
@@ -1486,6 +1600,10 @@ struct DailyCoachView: View {
 
     private func prepareReviewSheet() {
         launch(request: .startRuntimeAdjusted)
+    }
+
+    private func presentLatestCompletedReview() {
+        blockReviewSnapshot = latestCompletedReviewSnapshot
     }
 
     private func commitStagedProposalDecision(_ staged: StagedTodayPlanProposalDecision) {

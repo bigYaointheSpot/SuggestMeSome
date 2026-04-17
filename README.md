@@ -2837,6 +2837,51 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+### Feature 13 Prompt 6 — Continuity and Long-Horizon UI Surfaces
+
+Exposed block continuity and multi-block trend information in Daily Coach as the primary home, with a lighter contextual card in the same view when the user is between blocks.
+
+**New views:**
+- `BlockContinuityCard` — horizontal strip showing up to 3 recent completed blocks → active block (or between-blocks state) → next block placeholder; "Review Last Block" CTA; teal accent for current block
+- `LongHorizonSummaryCard` — multi-block headline from `LongHorizonAdaptationSummaryService`, up to 3 insight bullet rows (adherence trend, movement continuity, tolerated frequency, etc.), dual CTA bar ("Review Block" / "Generate Next Block"); indigo accent; hidden when no completed blocks exist
+
+**DailyCoachView changes:**
+- Added `@Query` for `completedRuns` (isCompleted == true) and `personalRecords`
+- Added `isBetweenBlocks` and `longHorizonSummary` computed properties
+- `betweenBlocksContextCard` — lighter contextual surface shown immediately after `todayTrainingCard` when user has no active program but has at least one completed block; orange accent; CTAs into review and generation flows
+- `BlockContinuityCard` and `LongHorizonSummaryCard` inserted after `latestWeeklyReviewCard` as the primary Daily Coach long-horizon section
+- Two new sheet states: `showingBlockReview` (presents `MesocycleReviewView(snapshot: .mock)` — wirable) and `showingNextBlockGenerator` (presents `AIProgramGeneratorView()`)
+
+**Wired:** card layout, insight rendering, empty-state guards, between-blocks detection, sheet presentation for both review and generator flows
+**Stubbed:** `MesocycleReviewView` still uses `.mock` snapshot — replace with `MesocycleReviewService.buildReview(for:)` when backend is ready
+
+**Commit:** `feat: expose continuity and long-horizon trend UI in Daily Coach`
+
+---
+
+#### Prompt 7 [Feature 13 Integration Hardening and Regression Pass] — 2026-04-16
+
+- Replaced the remaining Feature 13 `.mock` review seams with real completed-block analytics:
+  - `WorkoutView` now auto-presents a real `MesocycleReviewView` snapshot after a program-ending workout
+  - `TrainingProgramsTab` now opens manual block review with full workout + PR context, including standalone-workout influence
+  - `DailyCoachView` now routes "Review Last Block" and long-horizon review actions through the latest completed real snapshot instead of placeholder data
+- Hardened the end-of-block completion path:
+  - resumed or restored program workouts now still detect newly completed runs correctly when saved
+  - PR celebration flow keeps the existing UX, then presents the real block review only after the celebration dismisses
+- Tightened next-block continuity handoff in Daily Coach:
+  - between-block and long-horizon "Generate Next Block" entry now opens `AIProgramGeneratorView(prefill:)` with the latest completed block's default carry-forward context instead of a blank generator
+  - long-horizon summary selection now routes through `TrainingContextQueryService.longHorizonAdaptationSummary(...)` to reduce glue duplication
+- Added focused query helpers and regression coverage:
+  - `TrainingContextQueryService` now exposes latest-completed-run review helpers plus a shared workout fetch helper
+  - `Feature13Prompt5ContinuityAndLongHorizonTests.swift` now verifies latest completed block selection and review construction
+- This hardening pass builds directly on:
+  - Feature 10's sync-stable run identity, which keeps review and continuity linking deterministic
+  - Feature 11's Daily Coach / Today Plan surfaces, which now behave as a coherent handoff into Feature 13 payoff flows
+
+**Commit:** `fix: harden feature 13 review and continuity flows`
+
+---
+
 
 ## Project Setup
 

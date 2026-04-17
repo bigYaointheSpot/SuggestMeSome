@@ -26,6 +26,10 @@ enum TrainingContextQueryService {
             .sorted { ($0.endDate ?? $0.startDate) > ($1.endDate ?? $1.startDate) }
     }
 
+    static func latestCompletedRun(from runs: [ProgramRun]) -> ProgramRun? {
+        completedProgramRuns(from: runs).first
+    }
+
     static func runScopedWorkouts(for run: ProgramRun, in workouts: [Workout]) -> [Workout] {
         workouts.filter { $0.programRun?.id == run.id }
     }
@@ -54,6 +58,19 @@ enum TrainingContextQueryService {
         return MesocycleReviewService.buildReview(
             for: run,
             allWorkouts: workouts,
+            personalRecords: personalRecords
+        )
+    }
+
+    static func latestCompletedMesocycleReview(
+        from runs: [ProgramRun],
+        workouts: [Workout],
+        personalRecords: [PersonalRecord]
+    ) -> MesocycleReviewSnapshot? {
+        guard let run = latestCompletedRun(from: runs) else { return nil }
+        return mesocycleReview(
+            for: run,
+            workouts: workouts,
             personalRecords: personalRecords
         )
     }
@@ -156,5 +173,9 @@ enum TrainingContextQueryService {
 
     static func fetchPersonalRecords(context: ModelContext) -> [PersonalRecord] {
         (try? context.fetch(FetchDescriptor<PersonalRecord>())) ?? []
+    }
+
+    static func fetchWorkouts(context: ModelContext) -> [Workout] {
+        (try? context.fetch(FetchDescriptor<Workout>())) ?? []
     }
 }

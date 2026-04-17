@@ -92,7 +92,7 @@
 			path = SuggestMeSomeWatch;
 			sourceTree = "<group>";
 		};
-		F81201072F86000000000107 /* SuggestMeSomeWatchWidget */ = {
+		F81201072F86000000000107 /* SuggestMeSomeWatchWidget/Sources */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = SuggestMeSomeWatchWidget/Sources;
 			sourceTree = "<group>";
@@ -169,7 +169,7 @@
 			children = (
 				F8FB3BBF2F82D7ED0002A1DF /* SuggestMeSome */,
 				F81200072F83000000000007 /* SuggestMeSomeWatch */,
-				F81201072F86000000000107 /* SuggestMeSomeWatchWidget */,
+				F81201072F86000000000107 /* SuggestMeSomeWatchWidget/Sources */,
 				F81200082F83000000000008 /* Shared Watch Contracts */,
 				F8FB3BCF2F82D7EE0002A1DF /* SuggestMeSomeTests */,
 				F8FB3BD92F82D7EE0002A1DF /* SuggestMeSomeUITests */,
@@ -229,7 +229,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				F81201072F86000000000107 /* SuggestMeSomeWatchWidget */,
+				F81201072F86000000000107 /* SuggestMeSomeWatchWidget/Sources */,
 			);
 			name = SuggestMeSomeWatchWidget;
 			packageProductDependencies = (

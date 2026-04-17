@@ -352,3 +352,7 @@ struct MesocycleReviewSnapshot: Codable, Equatable {
     let rankedRecommendations: [MesocycleNextBlockRecommendation]
     let defaultNextBlockPrefill: MesocycleNextBlockPrefill
 }
+
+extension MesocycleReviewSnapshot: Identifiable {
+    var id: String { reviewStableID }
+}

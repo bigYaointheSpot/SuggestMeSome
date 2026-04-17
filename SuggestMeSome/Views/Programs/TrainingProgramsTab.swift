@@ -12,12 +12,10 @@ import SwiftData
 
 struct TrainingProgramsTab: View {
     @Query private var programRuns: [ProgramRun]
-    @Query(
-        filter: #Predicate<Workout> { $0.programRun != nil },
-        sort: \Workout.date,
-        order: .reverse
-    )
+    @Query(sort: \Workout.date, order: .reverse)
     private var allWorkouts: [Workout]
+    @Query(sort: \PersonalRecord.dateAchieved, order: .reverse)
+    private var personalRecords: [PersonalRecord]
     @State private var showingAIGenerator = false
 
     var sortedRuns: [ProgramRun] {
@@ -99,7 +97,11 @@ struct TrainingProgramsTab: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(sortedRuns) { run in
-                        ProgramRunExpandableRow(run: run, allWorkouts: allWorkouts)
+                        ProgramRunExpandableRow(
+                            run: run,
+                            allWorkouts: allWorkouts,
+                            personalRecords: personalRecords
+                        )
                         Divider()
                     }
                 }
@@ -155,6 +157,7 @@ struct ProgramRunRow: View {
 struct ProgramRunExpandableRow: View {
     @Bindable var run: ProgramRun
     let allWorkouts: [Workout]
+    let personalRecords: [PersonalRecord]
     @Environment(\.modelContext) private var modelContext
     @Query private var allProposals: [AdaptationProposal]
     @Query private var allEvents: [AdaptationEventHistory]
@@ -190,6 +193,14 @@ struct ProgramRunExpandableRow: View {
         case .aiGenerated: return "AI Generated"
         case nil: return "Unknown"
         }
+    }
+
+    private var blockReviewSnapshot: MesocycleReviewSnapshot? {
+        TrainingContextQueryService.mesocycleReview(
+            for: run,
+            workouts: allWorkouts,
+            personalRecords: personalRecords
+        )
     }
 
     var body: some View {
@@ -388,33 +399,43 @@ struct ProgramRunExpandableRow: View {
     // MARK: Block Review Row
 
     private var blockReviewRow: some View {
-        NavigationLink {
-            // TODO: Replace .mock with MesocycleReviewService.buildSnapshot(for: run) when wired
-            MesocycleReviewView(snapshot: .mock)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "chart.bar.doc.horizontal")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.teal)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Block Review")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    Text("See what happened and what's next")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        Group {
+            if let blockReviewSnapshot {
+                NavigationLink {
+                    MesocycleReviewView(snapshot: blockReviewSnapshot)
+                } label: {
+                    blockReviewRowLabel
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.tertiary)
+                .buttonStyle(.plain)
+            } else {
+                blockReviewRowLabel
+                    .opacity(0.6)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .background(Color(.secondarySystemBackground))
+    }
+
+    private var blockReviewRowLabel: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "chart.bar.doc.horizontal")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.teal)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Block Review")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("See what happened and what's next")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
     }
 
     // MARK: End Program Row
