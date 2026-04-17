@@ -384,7 +384,7 @@ enum ComplianceConfiguration {
             - Paid model: one-time Premium Unlock
             - Seller route: individual seller
             - Apple Health posture: optional and user-controlled
-            - Cloud/account posture: \(accountBackendLaunchMode.title)
+            - Cloud/account posture: local contract-validation mode until a production backend is connected for public cloud accounts
             """,
             hostedURL: supportURL,
             requiresOnboardingAcceptance: false,
