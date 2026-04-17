@@ -2882,6 +2882,32 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 8 [Backend Scalability Hardening Pass] — 2026-04-16
+
+- Added backend persistence and compatibility guardrails:
+  - `PersistenceMaintenanceCoordinator` now records schema version state at startup and runs sync-metadata audits before deeper backend expansion
+  - continuity and watch payload storage now decode through version-aware envelopes while preserving legacy payload compatibility
+- Unified backend read seams behind typed snapshots:
+  - `TrainingReadRepository` now serves shared history, coach, recommendation, and adaptive proposal snapshots so continuity, recommendation, and adaptive services stop re-fetching overlapping context independently
+  - adaptive weekly proposal services now work from one run-scoped snapshot instead of repeated full-table fetches
+- Hardened non-UI write and session boundaries:
+  - `WorkoutSaveCoordinator` now separates primary persistence from post-save side effects and returns structured non-fatal failure reporting for adaptive analysis, completion updates, and HealthKit writeback scheduling
+  - active workout session persistence now uses a dedicated versioned store, and watch execution replay runs through a pure reducer with duplicate-action protection
+- Added focused backend regression coverage for:
+  - persistence/schema maintenance and sync-metadata repair
+  - continuity/watch codec compatibility
+  - read snapshot scoping and bounded adaptive history loading
+  - workout save durability and HealthKit writeback scheduling
+  - active session restore and duplicate watch-action handling
+- This pass builds directly on:
+  - Feature 10's sync-ready contracts and query-layer hardening
+  - Feature 11's execution-flow foundation, which now rides on a safer workout save pipeline
+  - Feature 12's watch execution transport seams, which now sit behind stronger persistence and replay boundaries
+
+**Commits:** `refactor: add persistence maintenance safeguards`, `refactor: unify training read snapshots`, `refactor: harden workout save and session persistence`, `refactor: consolidate adaptive read snapshots`
+
+---
+
 
 ## Project Setup
 
