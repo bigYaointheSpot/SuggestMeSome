@@ -4,15 +4,22 @@ struct ProgramGenerationCardioPlanner {
 
     func resolveCardioPrescription(
         sessionName: String,
+        cardioSessionType: ProgramCardioSessionType? = nil,
         focusProfile: ProgramFocusProgrammingProfile,
-        schedule: ProgramGenerationWeekSchedule
+        schedule: ProgramGenerationWeekSchedule,
+        doseTargetProfile: DoseTargetProfile? = nil
     ) -> ProgramGenerationCardioPrescription {
-        let sessionType = resolveCardioSessionType(sessionName: sessionName)
+        let sessionType = resolveCardioSessionType(
+            sessionName: sessionName,
+            explicitType: cardioSessionType
+        )
         let fallbackRule = defaultCardioSessionRule(for: sessionType)
         let rule = focusProfile.cardioProgrammingProfile?.sessionRules[sessionType] ?? fallbackRule
 
         let workingIndex = schedule.progressionIndex
-        let baseMinutes = cardioMinutes(for: rule, progressionIndex: workingIndex)
+        let scaledMinutes = Double(cardioMinutes(for: rule, progressionIndex: workingIndex)) *
+            (doseTargetProfile?.cardioDurationScale ?? 1.0)
+        let baseMinutes = max(15, Int(scaledMinutes.rounded()))
         let adjustedMinutes: Int
         if schedule.isDeload {
             adjustedMinutes = max(15, Int((Double(baseMinutes) * rule.deloadDurationScale).rounded()))
@@ -20,9 +27,11 @@ struct ProgramGenerationCardioPlanner {
             adjustedMinutes = baseMinutes
         }
 
+        let intensityShift = ((doseTargetProfile?.intensityScale ?? 1.0) - 1.0) * 6.0
+        let resolvedRPE = rule.targetRPE + intensityShift
         let adjustedRPE = schedule.isDeload
-            ? clampedRPE(rule.targetRPE - 0.8)
-            : clampedRPE(rule.targetRPE)
+            ? clampedRPE(resolvedRPE - 0.8)
+            : clampedRPE(resolvedRPE)
         let fatiguePerMinute = cardioFatiguePerMinute(targetRPE: adjustedRPE)
         let highFatiguePerMinute = cardioHighFatiguePerMinute(targetRPE: adjustedRPE)
 
@@ -34,7 +43,11 @@ struct ProgramGenerationCardioPlanner {
         )
     }
 
-    func resolveCardioSessionType(sessionName: String) -> ProgramCardioSessionType {
+    func resolveCardioSessionType(
+        sessionName: String,
+        explicitType: ProgramCardioSessionType? = nil
+    ) -> ProgramCardioSessionType {
+        if let explicitType { return explicitType }
         let lower = sessionName.lowercased()
         if lower.contains("recovery") { return .recovery }
         if lower.contains("long") { return .longSession }

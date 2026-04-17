@@ -129,6 +129,21 @@ struct SessionDefinition {
     /// Rotate for variety; generator picks `accessoryCount` from this pool.
     let accessoryPool: [TemplateExercise]
     let accessoryCount: Int
+    let cardioArchetype: ProgramCardioSessionType?
+
+    init(
+        sessionName: String,
+        primaryExercises: [TemplateExercise],
+        accessoryPool: [TemplateExercise],
+        accessoryCount: Int,
+        cardioArchetype: ProgramCardioSessionType? = nil
+    ) {
+        self.sessionName = sessionName
+        self.primaryExercises = primaryExercises
+        self.accessoryPool = accessoryPool
+        self.accessoryCount = accessoryCount
+        self.cardioArchetype = cardioArchetype
+    }
 }
 
 // MARK: - FocusTemplate
@@ -1995,8 +2010,8 @@ private extension FocusTemplateLibrary {
 // MARK: - Cardio Endurance
 // All sessions draw from the Cardio muscle group.
 // defaultReps represents target duration in minutes before progression adjustments.
-// Session names encode cardio archetype so ProgramGenerationService can apply
-// session-type progression rules (easy, threshold, interval, long, recovery).
+// Cardio archetype metadata is explicit so progression rules do not depend on
+// string parsing, but session names remain human-readable for the UI.
 
 private extension FocusTemplateLibrary {
     static var cardioEnduranceTemplate: FocusTemplate {
@@ -2012,7 +2027,8 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Rowing Machine",   role: .cardio, defaultSets: 1, defaultReps: 25, percentage1RM: nil, targetRPE: 6),
                 .init(exerciseName: "Stairmaster",      role: .cardio, defaultSets: 1, defaultReps: 25, percentage1RM: nil, targetRPE: 6),
             ],
-            accessoryCount: 0
+            accessoryCount: 0,
+            cardioArchetype: .easyAerobic
         )
 
         let thresholdDay = SessionDefinition(
@@ -2025,7 +2041,8 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Incline Treadmill",role: .cardio, defaultSets: 1, defaultReps: 26, percentage1RM: nil, targetRPE: 8),
                 .init(exerciseName: "Stairmaster",      role: .cardio, defaultSets: 1, defaultReps: 24, percentage1RM: nil, targetRPE: 8),
             ],
-            accessoryCount: 0
+            accessoryCount: 0,
+            cardioArchetype: .threshold
         )
 
         let intervalDay = SessionDefinition(
@@ -2039,7 +2056,8 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Treadmill",     role: .cardio, defaultSets: 1, defaultReps: 22, percentage1RM: nil, targetRPE: 9),
                 .init(exerciseName: "Stairmaster",   role: .cardio, defaultSets: 1, defaultReps: 20, percentage1RM: nil, targetRPE: 8),
             ],
-            accessoryCount: 0
+            accessoryCount: 0,
+            cardioArchetype: .interval
         )
 
         let longSteadyStateDay = SessionDefinition(
@@ -2053,7 +2071,8 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Rowing Machine",   role: .cardio, defaultSets: 1, defaultReps: 40, percentage1RM: nil, targetRPE: 5),
                 .init(exerciseName: "Stairmaster",      role: .cardio, defaultSets: 1, defaultReps: 35, percentage1RM: nil, targetRPE: 5),
             ],
-            accessoryCount: 0
+            accessoryCount: 0,
+            cardioArchetype: .longSession
         )
 
         let activeRecoveryDay = SessionDefinition(
@@ -2066,7 +2085,8 @@ private extension FocusTemplateLibrary {
                 .init(exerciseName: "Treadmill",    role: .cardio, defaultSets: 1, defaultReps: 30, percentage1RM: nil, targetRPE: 4),
                 .init(exerciseName: "Rowing Machine",role: .cardio,defaultSets: 1, defaultReps: 25, percentage1RM: nil, targetRPE: 4),
             ],
-            accessoryCount: 0
+            accessoryCount: 0,
+            cardioArchetype: .recovery
         )
 
         return FocusTemplate(

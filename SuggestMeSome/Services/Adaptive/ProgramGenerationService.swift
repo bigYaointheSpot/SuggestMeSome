@@ -129,6 +129,18 @@ struct ProgramGenerationService {
         context: ModelContext,
         shuffleSeed: Int
     ) -> TrainingProgram {
+        let adaptiveEngine = AdaptiveTrainingStateEngine(context: context)
+        let trainingState = input.stateSnapshotOverride ?? adaptiveEngine.buildSnapshot(
+            focus: input.focus,
+            level: input.level,
+            sessionsPerWeek: input.sessionsPerWeek
+        )
+        let doseTargetProfile = adaptiveEngine.buildDoseTargetProfile(
+            focus: input.focus,
+            level: input.level,
+            sessionsPerWeek: input.sessionsPerWeek,
+            snapshot: trainingState
+        )
         let focusProfile = programmingProfile(for: input.focus)
         let strategy = progressionResolver.resolveStrategy(
             focusProfile: focusProfile,
@@ -160,7 +172,9 @@ struct ProgramGenerationService {
         let schedules = weekScheduleBuilder.buildWeekSchedules(
             strategy: strategy,
             durationWeeks: input.durationWeeks,
-            focusProfile: focusProfile
+            focusProfile: focusProfile,
+            trainingState: trainingState,
+            doseTargetProfile: doseTargetProfile
         )
 
         let weeklyAccessoryPlan = accessoryPlanner.buildAdaptiveAccessoryPlan(
@@ -170,7 +184,8 @@ struct ProgramGenerationService {
             focusProfile: focusProfile,
             level: input.level,
             sessionsPerWeek: resolvedFrequency,
-            seed: shuffleSeed
+            seed: shuffleSeed,
+            doseTargetProfile: doseTargetProfile
         )
 
         for schedule in schedules {
@@ -218,6 +233,8 @@ struct ProgramGenerationService {
                         session: sessionTemplate,
                         orderIdx: orderIdx,
                         context: context,
+                        doseTargetProfile: doseTargetProfile,
+                        cardioSessionType: sessionDef.cardioArchetype,
                         usedLiftMapping: &usedLiftMapping,
                         usedTopSetBackoff: &usedTopSetBackoff
                     )
@@ -238,6 +255,8 @@ struct ProgramGenerationService {
                         session: sessionTemplate,
                         orderIdx: orderIdx,
                         context: context,
+                        doseTargetProfile: doseTargetProfile,
+                        cardioSessionType: sessionDef.cardioArchetype,
                         usedLiftMapping: &usedLiftMapping,
                         usedTopSetBackoff: &usedTopSetBackoff,
                         accessorySelectionReason: accessory.reason
@@ -270,6 +289,8 @@ struct ProgramGenerationService {
         session: ProgramSessionTemplate,
         orderIdx: Int,
         context: ModelContext,
+        doseTargetProfile: DoseTargetProfile,
+        cardioSessionType: ProgramCardioSessionType?,
         usedLiftMapping: inout Bool,
         usedTopSetBackoff: inout Bool,
         accessorySelectionReason: ProgramAccessorySelectionReason? = nil
@@ -292,8 +313,10 @@ struct ProgramGenerationService {
         if templateEx.role == .cardio {
             let cardioPrescription = cardioPlanner.resolveCardioPrescription(
                 sessionName: session.sessionName ?? "",
+                cardioSessionType: cardioSessionType,
                 focusProfile: focusProfile,
-                schedule: schedule
+                schedule: schedule,
+                doseTargetProfile: doseTargetProfile
             )
             let ex = ProgramSessionExercise(
                 exerciseName: templateEx.exerciseName,
@@ -311,13 +334,19 @@ struct ProgramGenerationService {
             return idx + 1
         }
 
-        let params = progressionResolver.computeParams(
+        let resolvedParams = progressionResolver.computeParams(
             exercise: templateEx,
             strategy: strategy,
             focusProfile: focusProfile,
             schedule: schedule,
             sessionIdx: sessionIdx,
             sessionsPerWeek: sessionsPerWeek
+        )
+        let params = adaptiveAdjustedParams(
+            from: resolvedParams,
+            isPrimary: isPrimary,
+            schedule: schedule,
+            doseTargetProfile: doseTargetProfile
         )
         let effectiveWorkingSets = schedule.isDeload ? max(2, params.sets / 2) : params.sets
         let workingBlocks = progressionResolver.buildWorkingSetBlocks(
@@ -422,5 +451,35 @@ struct ProgramGenerationService {
         let supported = template.sessionDefinitions.keys.sorted()
         let closest = supported.min(by: { abs($0 - frequency) < abs($1 - frequency) }) ?? frequency
         return template.sessionDefinitions[closest] ?? []
+    }
+
+    private func adaptiveAdjustedParams(
+        from params: ProgramGenerationExerciseParams,
+        isPrimary: Bool,
+        schedule: ProgramGenerationWeekSchedule,
+        doseTargetProfile: DoseTargetProfile
+    ) -> ProgramGenerationExerciseParams {
+        let setScale = isPrimary ? doseTargetProfile.sessionStressScale : doseTargetProfile.weeklyVolumeScale
+        let adjustedSets = max(1, Int((Double(params.sets) * setScale).rounded()))
+        let adjustedPercentage = params.percentage1RM.map {
+            let base = $0 * doseTargetProfile.intensityScale
+            let deloadAdjusted = schedule.isDeload ? base * 0.97 : base
+            return min(0.95, max(0.50, deloadAdjusted))
+        }
+        let adjustedRPE = params.rpe.map {
+            let value = $0 - (doseTargetProfile.rirOffset * 0.35) + ((doseTargetProfile.intensityScale - 1.0) * 4.0)
+            return min(10.0, max(5.5, value))
+        }
+        let adjustedRIR = params.rir.map {
+            min(5.0, max(0.0, $0 + doseTargetProfile.rirOffset))
+        }
+
+        return ProgramGenerationExerciseParams(
+            sets: adjustedSets,
+            reps: params.reps,
+            percentage1RM: adjustedPercentage,
+            rpe: adjustedRPE,
+            rir: adjustedRIR
+        )
     }
 }

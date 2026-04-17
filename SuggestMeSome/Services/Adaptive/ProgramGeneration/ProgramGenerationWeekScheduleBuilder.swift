@@ -5,34 +5,63 @@ struct ProgramGenerationWeekScheduleBuilder {
     func buildWeekSchedules(
         strategy: ProgramGenerationProgressionStrategy,
         durationWeeks: Int,
-        focusProfile: ProgramFocusProgrammingProfile
+        focusProfile: ProgramFocusProgrammingProfile,
+        trainingState: TrainingStateSnapshot? = nil,
+        doseTargetProfile: DoseTargetProfile? = nil
     ) -> [ProgramGenerationWeekSchedule] {
+        let adaptiveDeloadInterval = doseTargetProfile?.deloadIntervalOverride
+        let schedules: [ProgramGenerationWeekSchedule]
         switch strategy.family {
         case .strengthSkill:
             switch strategy.level {
             case .advanced:
-                return buildAdvancedWeekSchedules(durationWeeks: durationWeeks)
+                schedules = buildAdvancedWeekSchedules(durationWeeks: durationWeeks)
             case .beginner, .intermediate:
-                return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: 4)
+                schedules = buildLinearWeekSchedules(
+                    durationWeeks: durationWeeks,
+                    deloadEvery: adaptiveDeloadInterval ?? 4
+                )
             }
         case .mixedStrengthHypertrophy:
             switch strategy.level {
             case .advanced:
-                return buildMixedAdvancedWeekSchedules(durationWeeks: durationWeeks)
+                schedules = buildMixedAdvancedWeekSchedules(durationWeeks: durationWeeks)
             case .beginner, .intermediate:
-                return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: 4)
+                schedules = buildLinearWeekSchedules(
+                    durationWeeks: durationWeeks,
+                    deloadEvery: adaptiveDeloadInterval ?? 4
+                )
             }
         case .hypertrophyVolume:
-            return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: 5)
+            schedules = buildLinearWeekSchedules(
+                durationWeeks: durationWeeks,
+                deloadEvery: adaptiveDeloadInterval ?? 5
+            )
         case .balancedTraining:
             let deloadInterval = strategy.level == .advanced ? 5 : 4
-            return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: deloadInterval)
+            schedules = buildLinearWeekSchedules(
+                durationWeeks: durationWeeks,
+                deloadEvery: adaptiveDeloadInterval ?? deloadInterval
+            )
         case .enduranceConditioning:
             if focusProfile.defaultDeloadStyle == .enduranceStepBack {
-                return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: 3)
+                schedules = buildLinearWeekSchedules(
+                    durationWeeks: durationWeeks,
+                    deloadEvery: adaptiveDeloadInterval ?? 3
+                )
+            } else {
+                schedules = buildLinearWeekSchedules(
+                    durationWeeks: durationWeeks,
+                    deloadEvery: adaptiveDeloadInterval ?? 4
+                )
             }
-            return buildLinearWeekSchedules(durationWeeks: durationWeeks, deloadEvery: 4)
         }
+
+        return applyAdaptiveRecoveryBias(
+            to: schedules,
+            trainingState: trainingState,
+            doseTargetProfile: doseTargetProfile
+        )
     }
 
     private func buildLinearWeekSchedules(
@@ -70,6 +99,43 @@ struct ProgramGenerationWeekScheduleBuilder {
     private func buildMixedAdvancedWeekSchedules(durationWeeks: Int) -> [ProgramGenerationWeekSchedule] {
         let sequence = mixedAdvancedPhaseSequence(durationWeeks: durationWeeks)
         return buildPhasedSchedules(from: sequence)
+    }
+
+    private func applyAdaptiveRecoveryBias(
+        to schedules: [ProgramGenerationWeekSchedule],
+        trainingState: TrainingStateSnapshot?,
+        doseTargetProfile: DoseTargetProfile?
+    ) -> [ProgramGenerationWeekSchedule] {
+        guard
+            let trainingState,
+            !trainingState.hasSparseHistory,
+            trainingState.shouldBiasRecovery || doseTargetProfile?.deloadIntervalOverride != nil,
+            !schedules.contains(where: { $0.weekNumber <= 3 && $0.isDeload }),
+            schedules.count >= 3
+        else {
+            return schedules
+        }
+
+        let earlyDeloadWeek = min(3, schedules.count)
+        var workingIndex = 0
+        var lastWorkingIndex = 0
+
+        return schedules.map { schedule in
+            let isDeload = schedule.isDeload || schedule.weekNumber == earlyDeloadWeek
+            let updated = ProgramGenerationWeekSchedule(
+                weekNumber: schedule.weekNumber,
+                isDeload: isDeload,
+                progressionIndex: isDeload ? lastWorkingIndex : workingIndex,
+                advancedPhase: schedule.advancedPhase,
+                phaseWeekIndex: schedule.phaseWeekIndex,
+                phaseLength: schedule.phaseLength
+            )
+            if !isDeload {
+                lastWorkingIndex = workingIndex
+                workingIndex += 1
+            }
+            return updated
+        }
     }
 
     private func buildPhasedSchedules(

@@ -18,17 +18,24 @@ struct ProgramGenerationAccessoryPlanner {
         focusProfile: ProgramFocusProgrammingProfile,
         level: ProgramLevel,
         sessionsPerWeek: Int,
-        seed: Int
+        seed: Int,
+        doseTargetProfile: DoseTargetProfile? = nil
     ) -> [Int: [[ProgramGenerationSelectedAccessory]]] {
-        let volumeTargets = ProgramExerciseMetadataService.weeklyVolumeTargets(focus: focus, level: level)
+        let volumeTargets = scaledVolumeTargets(
+            ProgramExerciseMetadataService.weeklyVolumeTargets(focus: focus, level: level),
+            scale: doseTargetProfile?.weeklyVolumeScale ?? 1.0
+        )
         let movementTargets = ProgramExerciseMetadataService.weeklyMovementPatternTargets(
             focus: focus,
             sessionsPerWeek: sessionsPerWeek
         )
-        let fatigueBudgets = ProgramExerciseMetadataService.fatigueBudgets(
-            focus: focus,
-            level: level,
-            sessionsPerWeek: sessionsPerWeek
+        let fatigueBudgets = scaledFatigueBudgets(
+            ProgramExerciseMetadataService.fatigueBudgets(
+                focus: focus,
+                level: level,
+                sessionsPerWeek: sessionsPerWeek
+            ),
+            scale: doseTargetProfile?.fatigueBudgetScale ?? 1.0
         )
 
         var planByWeek: [Int: [[ProgramGenerationSelectedAccessory]]] = [:]
@@ -77,7 +84,8 @@ struct ProgramGenerationAccessoryPlanner {
                     focus: focus,
                     sessionName: sessionDef.sessionName,
                     requested: sessionDef.accessoryCount,
-                    available: sessionDef.accessoryPool.count
+                    available: sessionDef.accessoryPool.count,
+                    adjustment: doseTargetProfile?.accessoryCountAdjustment ?? 0
                 )
                 guard selectionCount > 0 else { continue }
 
@@ -447,9 +455,10 @@ struct ProgramGenerationAccessoryPlanner {
         focus: ProgramFocus,
         sessionName: String,
         requested: Int,
-        available: Int
+        available: Int,
+        adjustment: Int
     ) -> Int {
-        var count = min(requested, available)
+        var count = min(max(0, requested + adjustment), available)
         switch focus {
         case .generalFitness:
             count = min(count, 3)
@@ -474,6 +483,38 @@ struct ProgramGenerationAccessoryPlanner {
         default:
             return count
         }
+    }
+
+    private func scaledVolumeTargets(
+        _ targets: ProgramWeeklyVolumeTargets,
+        scale: Double
+    ) -> ProgramWeeklyVolumeTargets {
+        ProgramWeeklyVolumeTargets(
+            ranges: Dictionary(uniqueKeysWithValues: ProgramVolumeMuscle.allCases.map { muscle in
+                let range = targets.range(for: muscle)
+                let scaledMin = max(0, Int((range.minHardSets * scale).rounded()))
+                let scaledMax = max(scaledMin, Int((range.maxHardSets * scale).rounded()))
+                return (
+                    muscle,
+                    ProgramWeeklyTargetRange(
+                        minHardSets: Double(scaledMin),
+                        maxHardSets: Double(scaledMax)
+                    )
+                )
+            })
+        )
+    }
+
+    private func scaledFatigueBudgets(
+        _ budgets: ProgramFatigueBudgets,
+        scale: Double
+    ) -> ProgramFatigueBudgets {
+        ProgramFatigueBudgets(
+            weekBudget: budgets.weekBudget * scale,
+            sessionBudget: budgets.sessionBudget * scale,
+            deadliftSessionBudget: budgets.deadliftSessionBudget * scale,
+            adjacentSessionPairBudget: budgets.adjacentSessionPairBudget * scale
+        )
     }
 
     private func isJunkBodybuildingAccessory(
