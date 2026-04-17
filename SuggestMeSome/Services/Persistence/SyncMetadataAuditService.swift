@@ -67,32 +67,73 @@ enum SyncMetadataAuditService {
         auditedAt: Date
     ) -> SyncMetadataAuditEntityReport {
         let rows = (try? context.fetch(FetchDescriptor<Model>())) ?? []
-        var seenStableIDs: Set<String> = []
-        var repairedRows = 0
+        let duplicatePriorityByID = Dictionary(uniqueKeysWithValues: rows.map { row in
+            (
+                row.id,
+                DuplicateResolutionPriority(
+                    syncLastModifiedAt: row.syncLastModifiedAt,
+                    syncVersion: row.syncVersion,
+                    id: row.id
+                )
+            )
+        })
+        var repairedRowIDs: Set<UUID> = []
         var duplicateStableIDRepairs = 0
 
         for row in rows {
-            let hadRepair = row.repairSyncMetadataIfNeeded(at: auditedAt)
+            if row.repairSyncMetadataIfNeeded(at: auditedAt) {
+                repairedRowIDs.insert(row.id)
+            }
+        }
 
-            let resolvedStableID = row.resolvedSyncStableID
-            if seenStableIDs.contains(resolvedStableID) {
-                row.assignReplacementSyncStableID(row.id.uuidString, at: auditedAt)
+        let grouped = Dictionary(grouping: rows, by: \.resolvedSyncStableID)
+        for group in grouped.values where group.count > 1 {
+            let sorted = group.sorted { lhs, rhs in
+                let lhsPriority = duplicatePriorityByID[lhs.id] ?? .init(
+                    syncLastModifiedAt: lhs.syncLastModifiedAt,
+                    syncVersion: lhs.syncVersion,
+                    id: lhs.id
+                )
+                let rhsPriority = duplicatePriorityByID[rhs.id] ?? .init(
+                    syncLastModifiedAt: rhs.syncLastModifiedAt,
+                    syncVersion: rhs.syncVersion,
+                    id: rhs.id
+                )
+                return lhsPriority.sortsBefore(rhsPriority)
+            }
+            guard let keeper = sorted.first else { continue }
+
+            keeper.markSyncUpdated(at: auditedAt)
+            repairedRowIDs.insert(keeper.id)
+
+            for duplicate in sorted.dropFirst() {
+                duplicate.assignReplacementSyncStableID(duplicate.id.uuidString, at: auditedAt)
                 duplicateStableIDRepairs += 1
-                repairedRows += hadRepair ? 0 : 1
-                seenStableIDs.insert(row.resolvedSyncStableID)
-            } else {
-                seenStableIDs.insert(resolvedStableID)
-                if hadRepair {
-                    repairedRows += 1
-                }
+                repairedRowIDs.insert(duplicate.id)
             }
         }
 
         return SyncMetadataAuditEntityReport(
             entityName: entityName,
             totalRows: rows.count,
-            repairedRows: repairedRows,
+            repairedRows: repairedRowIDs.count,
             duplicateStableIDRepairs: duplicateStableIDRepairs
         )
+    }
+}
+
+private struct DuplicateResolutionPriority {
+    let syncLastModifiedAt: Date
+    let syncVersion: Int
+    let id: UUID
+
+    func sortsBefore(_ other: DuplicateResolutionPriority) -> Bool {
+        if syncLastModifiedAt != other.syncLastModifiedAt {
+            return syncLastModifiedAt > other.syncLastModifiedAt
+        }
+        if syncVersion != other.syncVersion {
+            return syncVersion > other.syncVersion
+        }
+        return id.uuidString < other.id.uuidString
     }
 }

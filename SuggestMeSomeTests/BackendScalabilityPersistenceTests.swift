@@ -53,8 +53,8 @@ struct BackendScalabilityPersistenceTests {
 
         #expect(report.repairedRows == 3)
         #expect(report.duplicateStableIDRepairs == 1)
-        #expect(first.syncStableID == "duplicate-workout")
-        #expect(second.syncStableID == second.id.uuidString)
+        #expect(first.syncStableID == first.id.uuidString)
+        #expect(second.syncStableID == "duplicate-workout")
         #expect(first.syncVersion >= 2)
         #expect(second.syncVersion >= 2)
         #expect(blankStableID.syncStableID == blankStableID.id.uuidString)
