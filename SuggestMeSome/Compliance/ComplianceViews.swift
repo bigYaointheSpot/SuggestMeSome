@@ -54,7 +54,7 @@ struct LegalDocumentView: View {
             Label("Pre-launch placeholder content", systemImage: "exclamationmark.triangle.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.orange)
-            Text("Replace placeholder company, contact, and hosted URL values before public release.")
+            Text("Replace placeholder seller, contact, and hosted URL values before public release.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

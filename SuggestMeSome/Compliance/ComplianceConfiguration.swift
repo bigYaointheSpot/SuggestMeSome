@@ -59,14 +59,14 @@ struct LegalDocumentRecord: Codable, Equatable {
 enum ComplianceConfiguration {
     static let appName = "SuggestMeSome"
     static let premiumUnlockProductID = "premium_unlock"
-    static let placeholderLegalEntityName = "SuggestMeSome Labs LLC"
+    static let placeholderSellerName = "Your Legal Name"
     static let placeholderSupportEmail = "support@suggestmesome.example"
     static let placeholderPrivacyEmail = "privacy@suggestmesome.example"
     static let placeholderWebsiteURL = URL(string: "https://suggestmesome.example")!
     static let placeholderPrivacyPolicyURL = URL(string: "https://suggestmesome.example/privacy")!
     static let placeholderTermsURL = URL(string: "https://suggestmesome.example/terms")!
     static let placeholderConsumerHealthNoticeURL = URL(string: "https://suggestmesome.example/consumer-health")!
-    static let requiresOrganizationAccountBeforeRelease = true
+    static let requiresOrganizationAccountBeforeRelease = false
 
     static let adultsOnlyLegalDisclosure = "SuggestMeSome is intended for adults age 18 and older."
     static let onboardingEligibilityTitle = "Training eligibility"
@@ -84,17 +84,14 @@ enum ComplianceConfiguration {
     static let deleteLocalDataDisclosure = "Delete Local Data removes SuggestMeSome data from this device. It does not delete records stored in Apple Health."
 
     static var releaseGateChecklist: [String] {
-        var items: [String] = []
-        if requiresOrganizationAccountBeforeRelease {
-            items.append("Convert the Apple Developer membership to an organization account before public submission.")
-        }
-        items.append(contentsOf: [
-            "Replace placeholder company name, support email, privacy email, and hosted legal URLs.",
+        [
+            "Replace the placeholder seller name, support email, privacy email, and hosted legal URLs.",
+            "Confirm you are comfortable publishing with your legal personal seller name visible on the App Store.",
+            "If you distribute in the EU, complete the DSA trader-status review and be ready for Apple to display required contact information.",
             "Publish hosted Privacy Policy, Terms of Use, and Consumer Health Data Notice pages.",
             "Complete the App Store Connect privacy questionnaire and paid IAP metadata.",
             "Review final legal text with counsel before release."
-        ])
-        return items
+        ]
     }
 
     static let legalDocuments: [LegalDocumentVersion] = [
@@ -106,11 +103,11 @@ enum ComplianceConfiguration {
             bodyMarkdown: """
             **Pre-launch placeholder**
 
-            This policy uses placeholder company and contact details. Replace them before public release.
+            This policy uses placeholder seller and contact details. Replace them before public release.
 
             ## Overview
 
-            \(appName) is published by **\(placeholderLegalEntityName)**. The app is designed as a local-first fitness and wellness product. It stores your workout history, exercise library, personal records, readiness check-ins, and premium entitlement state on your device. Optional Apple Health access can add wellness and workout data to the features you request.
+            \(appName) is published by **\(placeholderSellerName)**. The app is designed as a local-first fitness and wellness product. It stores your workout history, exercise library, personal records, readiness check-ins, and premium entitlement state on your device. Optional Apple Health access can add wellness and workout data to the features you request.
 
             ## Data categories
 
@@ -166,7 +163,7 @@ enum ComplianceConfiguration {
             bodyMarkdown: """
             **Pre-launch placeholder**
 
-            Replace the entity and contact details before public release.
+            Replace the seller and contact details before public release.
 
             ## Product scope
 
@@ -281,7 +278,7 @@ enum ComplianceConfiguration {
             bodyMarkdown: """
             **Support**
 
-            Company: \(placeholderLegalEntityName)
+            Seller: \(placeholderSellerName)
 
             Support: \(placeholderSupportEmail)
 

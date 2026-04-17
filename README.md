@@ -3039,6 +3039,24 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 4 [Individual Seller Readiness] — 2026-04-17
+
+- Switched the compliance/release posture from `organization required` to `individual seller ready`:
+  - removed the built-in release gate that required converting the Apple Developer membership to an organization account before launch
+  - updated the compliance configuration to use an individual seller placeholder instead of an LLC-style legal-entity placeholder
+- Refined the legal and support copy to match the individual-publisher route:
+  - privacy, support, and placeholder warnings now refer to the app’s `seller` rather than a `company`
+  - the support document now previews `Seller` details instead of `Company` details
+- Updated the release checklist for the individual route:
+  - added explicit reminders that the App Store seller name will be the developer’s legal personal name
+  - added an EU-focused DSA reminder so individual distribution decisions are reviewed before launch
+- Added regression coverage for:
+  - the individual-seller configuration default and the new release-checklist language
+
+**Commit:** `refactor: make compliance individual-seller ready`
+
+---
+
 
 ## Project Setup
 

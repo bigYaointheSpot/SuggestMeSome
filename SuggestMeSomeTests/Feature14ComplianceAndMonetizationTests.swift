@@ -140,6 +140,7 @@ struct Feature14ComplianceAndMonetizationTests {
             ComplianceConfiguration.premiumUnlockDisclosure ==
             "Premium Unlock is a one-time purchase. It unlocks coaching, analytics, smart generation, Apple Health integration, and Apple Watch features. Manual workout logging remains free."
         )
+        #expect(!ComplianceConfiguration.requiresOrganizationAccountBeforeRelease)
         #expect(
             ComplianceConfiguration.onboardingEligibilityTitle == "Training eligibility"
         )
@@ -160,7 +161,11 @@ struct Feature14ComplianceAndMonetizationTests {
         let consumerHealthNotice = ComplianceConfiguration.document(for: .consumerHealthNotice)
 
         #expect(privacyPolicy.containsPlaceholders)
+        #expect(privacyPolicy.bodyMarkdown.contains("published by **\(ComplianceConfiguration.placeholderSellerName)**"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("does not use Apple Health data for advertising"))
+        #expect(
+            ComplianceConfiguration.releaseGateChecklist.contains(where: { $0.contains("legal personal seller name visible on the App Store") })
+        )
     }
 
     @Test func importedWorkoutCopyUsesAppleHealthLabels() {
