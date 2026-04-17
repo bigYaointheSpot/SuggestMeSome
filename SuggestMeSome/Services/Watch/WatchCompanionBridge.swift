@@ -95,6 +95,10 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestLiveWorkoutSnapshot = nil
         latestCurrentSessionContext = nil
         latestSessionCompletionPayload = nil
+        LiveWorkoutActivityController.shared.start(
+            launch: payload,
+            sessionLabel: Self.sessionLabel(for: payload)
+        )
 #if canImport(WatchConnectivity)
         guard let session else { return }
         guard hasPremiumWatchAccess else {
@@ -142,6 +146,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     func sendLiveWorkoutSnapshot(_ snapshot: WatchLiveWorkoutSnapshot) async {
         latestLiveWorkoutSnapshot = snapshot
         latestSessionCompletionPayload = nil
+        LiveWorkoutActivityController.shared.update(with: snapshot)
 #if canImport(WatchConnectivity)
         guard let session else { return }
         guard hasPremiumWatchAccess else {
@@ -179,6 +184,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestWorkoutProgressSnapshot = nil
         latestLiveWorkoutSnapshot = nil
         latestCurrentSessionContext = nil
+        LiveWorkoutActivityController.shared.end()
 #if canImport(WatchConnectivity)
         guard let session else { return }
         guard hasPremiumWatchAccess else {
@@ -238,6 +244,17 @@ extension DefaultWatchCompanionBridge {
 
     static func decodePayload<Payload: Codable>(_ type: Payload.Type, from data: Data) -> Payload? {
         try? WatchBridgeMessageCodec.decodePayload(type, from: data)
+    }
+
+    /// Best-effort label for the Live Activity surface at launch time. The
+    /// companion bridge doesn't yet know exercises/sets — just the program
+    /// cadence — so we derive a short wrist-style title from the week/session
+    /// indices and let the first live snapshot overwrite it with the real one.
+    static func sessionLabel(for payload: WatchWorkoutLaunchPayload) -> String {
+        if let week = payload.programWeekNumber, let session = payload.programSessionNumber {
+            return "Week \(week) · Session \(session)"
+        }
+        return "Workout"
     }
 }
 
