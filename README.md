@@ -2908,6 +2908,27 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 9 [Backend Scalability Domain Extractions] — 2026-04-16
+
+- Split the next four backend growth seams behind stable public APIs:
+  - `LiftTrendTrackingService` now delegates scoped analysis loading, trend-point normalization, metric computation, and persistence to focused helpers instead of one monolithic file
+  - `LocalSyncRepository` now stays as the facade while workout, program, coach, adaptive, and HealthKit summary sync logic live in domain-specific stores backed by shared sync-store utilities
+  - `HealthKitWorkoutImportService` now separates HealthKit workout querying, sample-to-snapshot mapping, and imported-workout persistence
+  - `HealthKitRecoverySyncService` now separates windowing, concurrent HealthKit metric fetching, daily snapshot assembly, and summary upsert persistence
+- Added focused regression coverage for the new backend boundaries:
+  - lift-trend tracking now proves scoped program-run isolation
+  - sync repository tests now cover program/adaptive graph linking plus coach and HealthKit summary upserts
+  - HealthKit import tests now verify re-import preserves the original import timestamp while still marking sync updates
+  - HealthKit recovery tests now verify the latest source-update timestamp is persisted across updates
+- This extraction pass keeps current app behavior intact while making future backend scaling safer:
+  - adaptive history reads are more intentionally scoped
+  - sync growth no longer funnels through one all-purpose repository file
+  - HealthKit import and recovery rules can evolve without bloating their service entrypoints
+
+**Commits:** `refactor: split lift trend tracking service`, `refactor: split local sync repository`, `refactor: split healthkit workout import service`, `refactor: split healthkit recovery sync service`
+
+---
+
 
 ## Project Setup
 
