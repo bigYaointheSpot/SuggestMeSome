@@ -653,6 +653,8 @@ struct DailyCoachView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            guidanceSafetyRow
+
             launchSourceRow(
                 source: currentLaunchSource(for: rec),
                 hasRelevantPendingProposal: relevantProposalForTodayPlan != nil
@@ -748,6 +750,19 @@ struct DailyCoachView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.indigo.opacity(0.4), lineWidth: 1.5))
         .shadow(color: Color.indigo.opacity(0.12), radius: 10, x: 0, y: 2)
+    }
+
+    private var guidanceSafetyRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Safety Note")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(ComplianceConfiguration.doctorCheckDisclosure)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 8)
     }
 
     private func recommendationDetailRow(_ item: DailyCoachSuggestionItem) -> some View {

@@ -3078,6 +3078,32 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+### Feature 15 — U.S. individual-seller launch compliance hardening
+
+#### Prompt 1 [U.S. Individual-Seller Launch Compliance Plan] — 2026-04-17
+
+- Replaced the old placeholder-heavy compliance configuration with a U.S.-focused launch shell:
+  - finalized the in-app seller/contact configuration around `Alexander Yao` plus assumed hosted legal/support URLs under `suggestmesome.app`
+  - rewrote the bundled Privacy Policy, Terms of Use, Consumer Health Data Notice, Wellness Disclaimer, Smart Guidance Disclosure, and Support document to remove `.example` placeholders and add stronger U.S. launch-readiness language
+  - added explicit disclosures for doctor-check guidance, Apple Health/consumer-health handling, CloudKit exclusion, retention expectations, and production-backend release gates
+- Added an app-side account and privacy-rights domain for future cloud rollout:
+  - introduced `UserAccount`, `SessionState`, `PrivacyRequestType`, `PrivacyRequestStatus`, `PrivacyRequestRecord`, `ConsumerHealthConsentRecord`, `AuthService`, and `AccountManager`
+  - implemented a local contract-validation auth/privacy service that lets the app create a local account, sign in, submit privacy requests, manage consumer-health consent, and delete the local account without pretending a production backend already exists
+  - added `AccountSettingsView`, `DataExportRequestView`, `PrivacyChoicesView`, and `DeleteAccountView`, then wired them into `Settings`
+- Hardened the health and premium disclosure surfaces:
+  - added the stronger doctor-check and CloudKit-exclusion messaging to Apple Health preflight, Apple Health settings, Daily Coach, the paywall, and the shared “About This Guidance” view
+  - kept free local workout export/deletion available while clarifying which account/privacy flows are still in local contract-validation mode
+- Added focused validation for:
+  - the new real seller/contact/legal configuration with no placeholder compliance documents
+  - account creation, sign-in, consent capture, privacy-request submission, and local account deletion flows in the new `AccountManager`
+- Verification:
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator'`
+  - attempted targeted compliance test/build-for-testing runs, but sandboxed CoreSimulator and local provisioning constraints prevented executing the test target in this environment
+
+**Commit:** `feat: add us launch compliance shell`
+
+---
+
 
 ## Project Setup
 

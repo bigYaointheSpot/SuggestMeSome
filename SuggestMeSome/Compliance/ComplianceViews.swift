@@ -25,10 +25,6 @@ struct LegalDocumentView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if document.containsPlaceholders {
-                    placeholderNotice
-                }
-
                 Text(document.summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -48,20 +44,6 @@ struct LegalDocumentView: View {
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
     }
-
-    private var placeholderNotice: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Pre-launch placeholder content", systemImage: "exclamationmark.triangle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.orange)
-            Text("Replace placeholder seller, contact, and hosted URL values before public release.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .background(Color.orange.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
 }
 
 struct SupportInfoView: View {
@@ -70,9 +52,10 @@ struct SupportInfoView: View {
     var body: some View {
         List {
             Section("Contact") {
-                Link(ComplianceConfiguration.placeholderSupportEmail, destination: URL(string: "mailto:\(ComplianceConfiguration.placeholderSupportEmail)")!)
-                Link(ComplianceConfiguration.placeholderPrivacyEmail, destination: URL(string: "mailto:\(ComplianceConfiguration.placeholderPrivacyEmail)")!)
-                Link(ComplianceConfiguration.placeholderWebsiteURL.absoluteString, destination: ComplianceConfiguration.placeholderWebsiteURL)
+                Link(ComplianceConfiguration.supportEmail, destination: URL(string: "mailto:\(ComplianceConfiguration.supportEmail)")!)
+                Link(ComplianceConfiguration.privacyEmail, destination: URL(string: "mailto:\(ComplianceConfiguration.privacyEmail)")!)
+                Link("Support Center", destination: ComplianceConfiguration.supportURL)
+                Link(ComplianceConfiguration.websiteURL.absoluteString, destination: ComplianceConfiguration.websiteURL)
             }
 
             Section {
@@ -80,9 +63,9 @@ struct SupportInfoView: View {
                     Text(item)
                 }
             } header: {
-                Text("Release Gates")
+                Text("U.S. Launch Checklist")
             } footer: {
-                Text("These placeholder contact details and hosted URLs must be finalized before public release.")
+                Text("Hosted legal pages, App Store metadata, and the production account backend still need to be finished before a public cloud-backed launch.")
             }
 
             Section("Document Preview") {
@@ -107,6 +90,10 @@ struct AboutThisGuidanceView: View {
                     text: ComplianceConfiguration.wellnessDisclaimerDisclosure
                 )
                 guidanceCallout(
+                    title: "Check with a doctor when health questions are involved",
+                    text: ComplianceConfiguration.doctorCheckDisclosure
+                )
+                guidanceCallout(
                     title: "Recovery and readiness are estimates",
                     text: ComplianceConfiguration.dailyCoachGuidanceDisclosure
                 )
@@ -117,6 +104,10 @@ struct AboutThisGuidanceView: View {
                 guidanceCallout(
                     title: "Apple Health is optional",
                     text: ComplianceConfiguration.appleHealthDisclosure
+                )
+                guidanceCallout(
+                    title: "Cloud storage limits",
+                    text: ComplianceConfiguration.cloudSyncStorageDisclosure
                 )
             }
             .padding()
@@ -145,6 +136,10 @@ struct LocalDataInfoView: View {
         List {
             Section("Delete Local Data") {
                 Text(ComplianceConfiguration.deleteLocalDataDisclosure)
+            }
+
+            Section("Apple Health and Cloud Storage") {
+                Text(ComplianceConfiguration.cloudSyncStorageDisclosure)
             }
 
             Section("What stays available for free") {
@@ -299,6 +294,8 @@ struct PaywallView: View {
                 .foregroundStyle(.secondary)
             Text(ComplianceConfiguration.freeWorkoutLoggingDisclosure)
                 .foregroundStyle(.secondary)
+            Text(ComplianceConfiguration.doctorCheckDisclosure)
+                .foregroundStyle(.secondary)
             Button("About This Guidance") {
                 showingAboutGuidance = true
             }
@@ -368,6 +365,9 @@ struct PaywallView: View {
                 }
                 Button("Terms") {
                     showingDocumentKind = .termsOfUse
+                }
+                Button("Consumer Health") {
+                    showingDocumentKind = .consumerHealthNotice
                 }
                 Button("Support") {
                     showingSupport = true
@@ -473,6 +473,10 @@ struct HealthDataPreflightView: View {
                 Text(ComplianceConfiguration.appleHealthDisclosure)
                 Text(ComplianceConfiguration.consumerHealthDataDisclosure)
                     .foregroundStyle(.secondary)
+                Text(ComplianceConfiguration.doctorCheckDisclosure)
+                    .foregroundStyle(.secondary)
+                Text(ComplianceConfiguration.cloudSyncStorageDisclosure)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Data Apple Health May Provide") {
@@ -556,7 +560,7 @@ struct ComplianceOnboardingFlow: View {
                 case .wellness:
                     copyStep(
                         title: "Wellness, not medical care",
-                        body: ComplianceConfiguration.wellnessDisclaimerDisclosure
+                        body: "\(ComplianceConfiguration.wellnessDisclaimerDisclosure)\n\n\(ComplianceConfiguration.doctorCheckDisclosure)"
                     )
                 case .automation:
                     copyStep(

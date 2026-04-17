@@ -13,6 +13,7 @@ import SwiftData
 struct SettingsTab: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(PurchaseManager.self) private var purchaseManager
+    @Environment(AccountManager.self) private var accountManager
     @Query(sort: \Workout.date) private var allWorkouts: [Workout]
 
     // MARK: Preferences
@@ -73,6 +74,7 @@ struct SettingsTab: View {
                 preferencesSection
                 workoutSection
                 quickLinksSection
+                accountSection
                 premiumSection
                 legalPrivacySection
                 dataManagementSection
@@ -247,6 +249,25 @@ struct SettingsTab: View {
         }
     }
 
+    private var accountSection: some View {
+        Section {
+            NavigationLink {
+                AccountSettingsView()
+            } label: {
+                HStack {
+                    Label("Account & Cloud", systemImage: "person.crop.circle.badge.checkmark")
+                    Spacer()
+                    Text(accountSummaryText)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("Account")
+        } footer: {
+            Text(ComplianceConfiguration.accountLaunchModeDisclosure)
+        }
+    }
+
     private var legalPrivacySection: some View {
         Section {
             NavigationLink {
@@ -294,7 +315,7 @@ struct SettingsTab: View {
             NavigationLink {
                 DataExportView()
             } label: {
-                Label("Export Workout Data", systemImage: "square.and.arrow.up")
+                Label("Export Local Workout Data", systemImage: "square.and.arrow.up")
                     .foregroundStyle(.green)
             }
 
@@ -306,6 +327,13 @@ struct SettingsTab: View {
         } header: {
             Text("Legal & Privacy")
         }
+    }
+
+    private var accountSummaryText: String {
+        if let currentUser = accountManager.currentUser {
+            return currentUser.email
+        }
+        return accountManager.launchMode.title
     }
 
     private var dataManagementSection: some View {

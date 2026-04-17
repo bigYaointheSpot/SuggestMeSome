@@ -14,6 +14,7 @@ struct SuggestMeSomeApp: App {
     @State private var activeWorkoutSessionStore = ActiveWorkoutSessionStore()
     @State private var purchaseManager = PurchaseManager.shared
     @State private var complianceStateStore = ComplianceStateStore.shared
+    @State private var accountManager = AccountManager.shared
 
     private static let sharedSchema = Schema([
             MuscleGroup.self,
@@ -99,6 +100,7 @@ struct SuggestMeSomeApp: App {
                 .environment(activeWorkoutSessionStore)
                 .environment(purchaseManager)
                 .environment(complianceStateStore)
+                .environment(accountManager)
                 .onAppear {
                     _ = PersistenceMaintenanceCoordinator.runStartupMaintenance(
                         context: sharedModelContainer.mainContext

@@ -502,6 +502,9 @@ struct HealthDataSettingsView: View {
             Text("You can change these permissions at any time in Apple Health or in Settings > Privacy & Security > Health.")
             Text(ComplianceConfiguration.premiumUnlockDisclosure)
             Text(ComplianceConfiguration.appleHealthDisclosure)
+            Text(ComplianceConfiguration.dailyCoachGuidanceDisclosure)
+            Text(ComplianceConfiguration.doctorCheckDisclosure)
+            Text(ComplianceConfiguration.cloudSyncStorageDisclosure)
         }
         .font(.footnote)
         .foregroundStyle(.secondary)

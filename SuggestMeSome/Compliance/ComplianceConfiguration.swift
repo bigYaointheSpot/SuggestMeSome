@@ -2,8 +2,8 @@
 //  ComplianceConfiguration.swift
 //  SuggestMeSome
 //
-//  Feature 14 - Paid app compliance configuration, legal documents, and
-//  release-gate placeholders.
+//  Feature 15 - U.S. individual-seller compliance configuration, legal
+//  documents, and launch-readiness copy.
 //
 
 import Foundation
@@ -59,79 +59,125 @@ struct LegalDocumentRecord: Codable, Equatable {
 enum ComplianceConfiguration {
     static let appName = "SuggestMeSome"
     static let premiumUnlockProductID = "premium_unlock"
-    static let placeholderSellerName = "Alexander Yao"
-    static let placeholderSupportEmail = "support@suggestmesome.example"
-    static let placeholderPrivacyEmail = "privacy@suggestmesome.example"
-    static let placeholderWebsiteURL = URL(string: "https://suggestmesome.example")!
-    static let placeholderPrivacyPolicyURL = URL(string: "https://suggestmesome.example/privacy")!
-    static let placeholderTermsURL = URL(string: "https://suggestmesome.example/terms")!
-    static let placeholderConsumerHealthNoticeURL = URL(string: "https://suggestmesome.example/consumer-health")!
+    static let sellerName = "Alexander Yao"
+    static let supportEmail = "support@suggestmesome.app"
+    static let privacyEmail = "privacy@suggestmesome.app"
+    static let websiteURL = URL(string: "https://www.suggestmesome.app")!
+    static let supportURL = URL(string: "https://www.suggestmesome.app/support")!
+    static let privacyPolicyURL = URL(string: "https://www.suggestmesome.app/privacy")!
+    static let termsURL = URL(string: "https://www.suggestmesome.app/terms")!
+    static let consumerHealthNoticeURL = URL(string: "https://www.suggestmesome.app/consumer-health")!
     static let requiresOrganizationAccountBeforeRelease = false
+    static let accountBackendLaunchMode: AccountBackendLaunchMode = .localContractValidation
 
     static let adultsOnlyLegalDisclosure = "SuggestMeSome is intended for adults age 18 and older."
     static let onboardingEligibilityTitle = "Training eligibility"
     static let onboardingEligibilityDisclosure = "SuggestMeSome is designed for independent adult training use. By continuing, you confirm that you're 18 or older."
     static let wellnessDisclaimerDisclosure = "SuggestMeSome provides fitness and wellness guidance only. It is not medical advice, diagnosis, or treatment, and it should not be used for emergency or medical decisions."
+    static let doctorCheckDisclosure = "Check with a doctor before making medical decisions, changing care, or relying on recovery or readiness results after illness, injury, pain, pregnancy, or other health concerns."
     static let smartGuidanceDisclosure = "Some workouts, programs, and coaching explanations are generated from your logged training data and app logic. Review recommendations before acting on them."
     static let consumerHealthDataDisclosure = "Your workouts, readiness check-ins, recovery data, and coaching outputs can reveal health information. SuggestMeSome uses this data to provide the features you request and does not use Apple Health data for advertising."
+    static let cloudSyncStorageDisclosure = "SuggestMeSome does not store Apple Health or health-derived data in iCloud or CloudKit. Any future account sync must use a separate backend with explicit privacy controls, deletion workflows, and user consent records."
     static let freeWorkoutLoggingDisclosure = "Manual workout logging, history, editing, export, and deletion remain available without Premium Unlock."
     static let premiumUnlockDisclosure = "Premium Unlock is a one-time purchase. It unlocks coaching, analytics, smart generation, Apple Health integration, and Apple Watch features. Manual workout logging remains free."
-
     static let appleHealthDisclosure = "If you choose to connect Apple Health, SuggestMeSome may read sleep, resting heart rate, heart rate variability, active energy, step count, body mass, and workouts, and may write workout summaries you save in SuggestMeSome. Apple Health access is optional and can be changed anytime."
-
     static let dailyCoachGuidanceDisclosure = "Recovery and readiness outputs are estimates based on your logged workouts, check-ins, and optional Apple Health data. They are not diagnostic measurements or medical advice."
-
     static let deleteLocalDataDisclosure = "Delete Local Data removes SuggestMeSome data from this device. It does not delete records stored in Apple Health."
+    static let accountLaunchModeDisclosure = "Account and privacy request flows in this build run in local contract-validation mode. Connect your production backend before turning on public cloud accounts."
+    static let dataRetentionDisclosure = "Local workout and coaching data remain on this device until you delete them. Any future backend-held account and consumer health data should be retained only as long as needed to provide the service, comply with law, resolve disputes, or enforce terms."
+    static let securityDisclosure = "Any production backend for SuggestMeSome should use encryption in transit and at rest, role-limited access, auditable deletion, secrets management, and a documented incident-response plan before public release."
+    static let noAdvertisingDisclosure = "SuggestMeSome does not use Apple Health data for advertising, and the current product plan does not include ads or third-party analytics in the public launch baseline."
+
+    static let consumerHealthConsentCategories = [
+        "Workout history",
+        "Readiness check-ins",
+        "Recovery metrics",
+        "Coaching outputs",
+        "Account support records"
+    ]
+    static let consumerHealthConsentPurpose = "Future account sync and privacy-rights fulfillment for workouts, readiness, recovery, and coaching outputs."
 
     static var releaseGateChecklist: [String] {
         [
-            "Replace the placeholder seller name, support email, privacy email, and hosted legal URLs.",
-            "Confirm you are comfortable publishing with your legal personal seller name visible on the App Store.",
-            "If you distribute in the EU, complete the DSA trader-status review and be ready for Apple to display required contact information.",
-            "Publish hosted Privacy Policy, Terms of Use, and Consumer Health Data Notice pages.",
-            "Complete the App Store Connect privacy questionnaire and paid IAP metadata.",
-            "Review final legal text with counsel before release."
+            "Publish the configured support, privacy, terms, and consumer health pages at their hosted URLs before App Store submission.",
+            "Complete the App Store Connect privacy questionnaire using the real production data flows for Premium Unlock, Apple Health, and any account backend.",
+            "Sign the Paid Apps Agreement and finish the premium_unlock in-app purchase metadata and review notes.",
+            "Replace local account contract validation with a production backend before enabling public cloud accounts or off-device privacy requests.",
+            "Finalize a custom U.S. Terms/EULA in App Store Connect and review the hosted legal text with counsel before release.",
+            "Complete retention, breach-response, and vendor-contract work before any off-device account or consumer health sync goes live."
         ]
     }
 
     static let legalDocuments: [LegalDocumentVersion] = [
         LegalDocumentVersion(
             kind: .privacyPolicy,
-            version: "1.0",
+            version: "2.0",
             title: "Privacy Policy",
-            summary: "How SuggestMeSome collects, uses, and protects local workout and wellness data.",
+            summary: "How SuggestMeSome handles workout data, premium purchases, Apple Health access, and future account-backed privacy workflows in the United States.",
             bodyMarkdown: """
-            **Pre-launch placeholder**
-
-            This policy uses placeholder seller and contact details. Replace them before public release.
-
             ## Overview
 
-            \(appName) is published by **\(placeholderSellerName)**. The app is designed as a local-first fitness and wellness product. It stores your workout history, exercise library, personal records, readiness check-ins, and premium entitlement state on your device. Optional Apple Health access can add wellness and workout data to the features you request.
+            \(appName) is published by **\(sellerName)**. This app is a fitness and wellness product. It helps you log workouts, review progress, unlock premium coaching, and optionally connect Apple Health. It is not designed for diagnosis, treatment, or emergency use.
+
+            Contact:
+
+            - Support: \(supportEmail)
+            - Privacy: \(privacyEmail)
+            - Website: \(websiteURL.absoluteString)
+            - Support Center: \(supportURL.absoluteString)
 
             ## Data categories
 
             \(appName) may process:
 
-            - manual workout logs, exercise entries, sets, notes, and calories
-            - exercise library and personal records
-            - readiness check-ins and coaching outputs
-            - optional Apple Health data such as sleep, resting heart rate, heart rate variability, active energy, step count, body mass, and workouts
-            - device-side premium purchase entitlement status
+            - workout logs, exercise entries, sets, notes, and workout timing
+            - exercise library data and personal records
+            - readiness check-ins, coaching outputs, trend summaries, and recovery estimates
+            - optional Apple Health data that you authorize, including sleep, resting heart rate, heart rate variability, active energy, step count, body mass, and workouts
+            - device-side premium purchase entitlement state for Premium Unlock
+            - account profile and privacy request records if you choose to use account features in a future cloud-backed release
 
             ## How data is used
 
-            \(appName) uses this data to:
+            \(appName) uses this information to:
 
             - provide workout logging, history, export, and deletion tools
             - generate smart workout, program, and coaching guidance
-            - calculate progress, trend, recovery, and readiness summaries
-            - support optional Apple Health read and write flows you request
-            - verify Premium Unlock entitlement on this device
+            - calculate trend, readiness, recovery, and progress summaries
+            - support optional Apple Health read and write flows that you request
+            - validate Premium Unlock on your device and restore eligible purchases through Apple
+            - prepare future account, deletion, and privacy-rights workflows
 
-            ## Data sharing
+            ## Local storage and future cloud accounts
 
-            At this stage, \(appName) is built to operate without accounts, ads, analytics SDKs, or off-device AI processing. Apple Health data is not used for advertising. If remote sync, accounts, third-party analytics, or external AI processing are added later, this policy and the in-app consent flow must be updated before release.
+            The current build stores workout, coaching, Apple Health sync summaries, and purchase state on device. Account and privacy request flows in this build operate in local contract-validation mode.
+
+            \(cloudSyncStorageDisclosure)
+
+            If \(appName) later enables production cloud accounts, the production service should use a dedicated backend and documented privacy-rights workflow before public release. Any backend-held consumer health data should follow the retention, deletion, and security commitments described in this policy and the Consumer Health Data Notice.
+
+            ## Sharing and disclosures
+
+            \(noAdvertisingDisclosure)
+
+            \(appName) may share data only as needed to:
+
+            - process Apple in-app purchases and purchase restoration through Apple
+            - read from or write to Apple Health when you grant permission
+            - comply with law, respond to valid legal requests, or protect rights and safety
+            - support future vendors that you disclose in advance through an updated policy and in-app notice before those vendors receive your data
+
+            \(appName) does not sell personal information or consumer health data.
+
+            ## Retention and deletion
+
+            \(dataRetentionDisclosure)
+
+            You can export local workout data, delete local workout data, revoke Apple Health permissions, and use in-app account deletion once account features are enabled. Deleting local app data does not delete records stored in Apple Health.
+
+            ## Security
+
+            \(securityDisclosure)
 
             ## Your controls
 
@@ -139,118 +185,161 @@ enum ComplianceConfiguration {
 
             - use the free workout logger without purchasing Premium Unlock
             - choose whether to connect Apple Health
-            - export workout data from the app
+            - export local workout data from the app
             - delete local workout data from the app
-            - change Apple Health permissions in Apple Health or iOS Settings
+            - restore prior Premium Unlock purchases through Apple
+            - submit access, export, deletion, and account-deletion requests once account features are enabled
 
-            ## Contact
+            ## Consumer health data
 
-            Support: \(placeholderSupportEmail)
-
-            Privacy: \(placeholderPrivacyEmail)
-
-            Website: \(placeholderWebsiteURL.absoluteString)
+            Workouts, readiness check-ins, recovery signals, and coaching outputs can reveal health information. Review the Consumer Health Data Notice for more detail, including Washington-specific consumer health rights.
             """,
-            hostedURL: placeholderPrivacyPolicyURL,
+            hostedURL: privacyPolicyURL,
             requiresOnboardingAcceptance: true,
-            containsPlaceholders: true
+            containsPlaceholders: false
         ),
         LegalDocumentVersion(
             kind: .termsOfUse,
-            version: "1.0",
+            version: "2.0",
             title: "Terms of Use",
-            summary: "Core use terms, purchase terms, and wellness limitations for SuggestMeSome.",
+            summary: "Use terms for SuggestMeSome, including wellness limitations, Premium Unlock terms, and account/deletion expectations.",
             bodyMarkdown: """
-            **Pre-launch placeholder**
-
-            Replace the seller and contact details before public release.
-
-            ## Product scope
+            ## Eligibility
 
             \(adultsOnlyLegalDisclosure)
 
-            \(appName) provides workout logging, smart workout and program suggestions, analytics, and wellness-oriented coaching support.
+            ## Product scope
+
+            \(appName) provides workout logging, analytics, smart workout and program suggestions, optional Apple Health integration, and wellness-oriented coaching support.
 
             ## No medical use
 
             \(wellnessDisclaimerDisclosure)
 
-            ## User responsibility
+            \(doctorCheckDisclosure)
 
-            You are responsible for reviewing and deciding whether to act on any workout, program, readiness, recovery, or coaching recommendation shown in the app.
+            ## Assumption of risk and user responsibility
+
+            Physical training carries risk. You are responsible for deciding whether to perform any exercise, workout, program, recovery suggestion, or coaching recommendation shown in the app. Stop training and seek qualified medical advice if you experience pain, dizziness, illness, or other warning signs.
 
             ## Premium Unlock
 
-            Premium Unlock is a one-time in-app purchase. It unlocks premium coaching, analytics, smart generation, Apple Health integration, and Apple Watch features. Manual workout logging remains free. Restore Purchases is available in the app for eligible prior purchases.
+            Premium Unlock is a one-time in-app purchase. It unlocks premium coaching, analytics, smart generation, Apple Health integration, and Apple Watch features. Manual workout logging remains free. Eligible users may restore Premium Unlock through Apple. Refunds, billing issues, and purchase restoration are handled according to Apple's payment rules and any applicable law.
 
-            ## Availability
+            ## Accounts and privacy requests
 
-            Features may change over time as the product evolves. Pre-release placeholder legal content must be finalized before public launch.
+            If \(appName) enables cloud accounts in a future release, the app must also provide in-app account deletion and privacy-rights request tools. The current build uses local contract-validation flows for account and privacy request screens.
+
+            ## Apple Health
+
+            Apple Health access is optional. You control Apple Health permissions through Apple Health and iOS Settings. Deleting local app data does not delete records already stored in Apple Health.
+
+            ## Disclaimer of warranties
+
+            To the fullest extent permitted by law, \(appName) is provided on an "as is" and "as available" basis without warranties of accuracy, fitness for a particular purpose, or uninterrupted availability.
+
+            ## Limitation of liability
+
+            To the fullest extent permitted by law, \(sellerName) will not be liable for indirect, incidental, consequential, special, exemplary, or punitive damages arising from your use of the app. The total liability for any claim relating to \(appName) will not exceed the amount you paid for Premium Unlock during the 12 months before the claim arose, or USD $25 if you paid nothing.
+
+            ## Termination
+
+            You may stop using the app at any time. You may also delete local data from the app and, when account features are enabled, delete your account in the app. Access may be suspended or terminated if you misuse the product or violate these terms.
+
+            ## Governing law
+
+            These terms are governed by applicable United States law and any state law that cannot be disclaimed by contract. Hosted public release terms may add more specific venue, dispute-resolution, or arbitration provisions before public launch.
 
             ## Contact
 
-            \(placeholderSupportEmail)
+            - Support: \(supportEmail)
+            - Privacy: \(privacyEmail)
+            - Terms URL: \(termsURL.absoluteString)
             """,
-            hostedURL: placeholderTermsURL,
+            hostedURL: termsURL,
             requiresOnboardingAcceptance: true,
-            containsPlaceholders: true
+            containsPlaceholders: false
         ),
         LegalDocumentVersion(
             kind: .consumerHealthNotice,
-            version: "1.0",
+            version: "2.0",
             title: "Consumer Health Data Notice",
-            summary: "Notice for workout, readiness, recovery, and Apple Health-derived wellness data.",
+            summary: "Notice covering workout, readiness, recovery, coaching, and Apple Health-derived information that may reveal health status.",
             bodyMarkdown: """
-            **Pre-launch placeholder**
+            ## Scope
 
-            Replace placeholder details before public release and confirm jurisdiction-specific requirements with counsel.
+            \(appName) processes workout, readiness, recovery, and coaching information that may reveal health status. This notice is written for a U.S. release that includes Washington residents and other state consumer health privacy requirements.
 
-            ## Consumer health data categories
+            ## Categories of consumer health data
 
-            \(appName) may process consumer health data such as:
+            \(appName) may process:
 
             - workout history and exercise performance
-            - readiness check-ins and recovery summaries
-            - coaching, fatigue, and progress outputs that may reveal health-related inferences
-            - optional Apple Health data you authorize
+            - readiness check-ins and training-recovery summaries
+            - coaching, fatigue, adaptation, and progress outputs that may reveal health-related inferences
+            - optional Apple Health data that you authorize
+            - future account support records tied to privacy requests involving consumer health data
 
             ## Sources
 
             Consumer health data may come from:
 
             - data you manually enter in \(appName)
-            - workouts you log in \(appName)
+            - workouts and training history you log in \(appName)
             - optional Apple Health data you authorize the app to read
+            - future account and privacy-rights workflows you initiate
 
             ## Purposes
 
-            \(appName) uses this information to provide the fitness and wellness features you request, including coaching, recovery context, progress views, and Apple Watch continuity.
+            \(appName) uses this information to provide the workout logging, coaching, recovery, analytics, privacy-rights, and support features you request.
 
-            ## Sharing and advertising
+            ## Sharing
 
-            \(appName) does not use Apple Health data for advertising. The current product plan does not include ads, analytics SDKs, or off-device AI processing. If that changes, the app must add updated notices and consent flows before release.
+            \(noAdvertisingDisclosure)
 
-            ## Controls
+            \(cloudSyncStorageDisclosure)
 
-            You can export workout data, delete local app data, and change Apple Health permissions at any time.
+            Consumer health data may be disclosed only when necessary to comply with law, respond to valid legal process, protect rights and safety, or support vendors that are disclosed to you in advance through an updated policy and notice.
 
-            ## Contact
+            ## Your rights
 
-            Privacy contact: \(placeholderPrivacyEmail)
+            Depending on applicable U.S. law, you may have the right to:
+
+            - confirm whether \(appName) is processing your consumer health data
+            - request access to or export of consumer health data
+            - request deletion of consumer health data
+            - withdraw consent for future consumer health data collection or sharing where consent is the legal basis
+            - appeal a denied privacy request where applicable law requires it
+
+            ## How to exercise rights
+
+            Use the in-app account and privacy request screens when account features are enabled, or contact:
+
+            - Privacy: \(privacyEmail)
+            - Support: \(supportEmail)
+            - Consumer Health Notice URL: \(consumerHealthNoticeURL.absoluteString)
+
+            ## Important limits
+
+            Deleting local app data does not delete records stored in Apple Health. Apple Health permissions can be changed at any time through Apple Health or iOS Settings.
             """,
-            hostedURL: placeholderConsumerHealthNoticeURL,
+            hostedURL: consumerHealthNoticeURL,
             requiresOnboardingAcceptance: true,
-            containsPlaceholders: true
+            containsPlaceholders: false
         ),
         LegalDocumentVersion(
             kind: .automationDisclosure,
-            version: "1.0",
+            version: "2.0",
             title: "Smart Guidance Disclosure",
-            summary: "How smart generation and coaching outputs are produced and how to use them.",
+            summary: "How smart generation and coaching outputs are produced and how to use them safely.",
             bodyMarkdown: """
             \(smartGuidanceDisclosure)
 
-            \(appName) is currently designed as a local-first product. Smart guidance reflects your logged workouts, optional Apple Health data, saved program state, and deterministic app logic. It should be reviewed as a training suggestion, not treated as a guaranteed or authoritative instruction.
+            \(appName) currently uses on-device training history, saved program context, optional Apple Health summaries, and deterministic app logic to generate training guidance. Review every recommendation before acting on it.
+
+            \(dailyCoachGuidanceDisclosure)
+
+            \(doctorCheckDisclosure)
             """,
             hostedURL: nil,
             requiresOnboardingAcceptance: false,
@@ -258,13 +347,15 @@ enum ComplianceConfiguration {
         ),
         LegalDocumentVersion(
             kind: .wellnessDisclaimer,
-            version: "1.0",
+            version: "2.0",
             title: "Wellness Disclaimer",
-            summary: "Important non-medical framing for workout, readiness, and recovery outputs.",
+            summary: "Important non-medical framing for workout, readiness, recovery, and coaching outputs.",
             bodyMarkdown: """
             \(wellnessDisclaimerDisclosure)
 
-            Recovery and readiness outputs are estimates based on your logged workouts, check-ins, and optional Apple Health data. They are not diagnostic measurements or medical advice.
+            \(dailyCoachGuidanceDisclosure)
+
+            \(doctorCheckDisclosure)
             """,
             hostedURL: nil,
             requiresOnboardingAcceptance: false,
@@ -272,27 +363,32 @@ enum ComplianceConfiguration {
         ),
         LegalDocumentVersion(
             kind: .support,
-            version: "1.0",
+            version: "2.0",
             title: "Support",
-            summary: "Support and privacy contact details, plus pre-release release gates.",
+            summary: "Support contacts and the remaining manual U.S. launch checklist for a public App Store release.",
             bodyMarkdown: """
-            **Support**
+            ## Support Contacts
 
-            Seller: \(placeholderSellerName)
+            - Seller: \(sellerName)
+            - Support: \(supportEmail)
+            - Privacy: \(privacyEmail)
+            - Website: \(websiteURL.absoluteString)
+            - Support Center: \(supportURL.absoluteString)
 
-            Support: \(placeholderSupportEmail)
-
-            Privacy: \(placeholderPrivacyEmail)
-
-            Website: \(placeholderWebsiteURL.absoluteString)
-
-            ## Pre-release release gates
+            ## U.S. Launch Checklist
 
             \(releaseGateChecklist.map { "- \($0)" }.joined(separator: "\n"))
+
+            ## Product posture
+
+            - Paid model: one-time Premium Unlock
+            - Seller route: individual seller
+            - Apple Health posture: optional and user-controlled
+            - Cloud/account posture: \(accountBackendLaunchMode.title)
             """,
-            hostedURL: nil,
+            hostedURL: supportURL,
             requiresOnboardingAcceptance: false,
-            containsPlaceholders: true
+            containsPlaceholders: false
         )
     ]
 
