@@ -479,6 +479,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SuggestMeSome;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SuggestMeSome reads heart rate and active energy during workouts so the watch can show live metrics and credit your Activity rings.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SuggestMeSome saves completed workouts to Health so they count toward your Activity rings and training history.";
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.alexyao.SuggestMeSome;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
@@ -515,6 +517,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SuggestMeSome;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SuggestMeSome reads heart rate and active energy during workouts so the watch can show live metrics and credit your Activity rings.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SuggestMeSome saves completed workouts to Health so they count toward your Activity rings and training history.";
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.alexyao.SuggestMeSome;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;

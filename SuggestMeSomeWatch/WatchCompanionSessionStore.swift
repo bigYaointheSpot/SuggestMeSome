@@ -59,6 +59,8 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     @Published private(set) var sessionStatus = WatchCompanionSessionStatus.unsupported()
     @Published private(set) var queuedUserInfoEventCount = 0
 
+    let workoutSessionController = WatchWorkoutSessionController()
+
     private var session: WCSession?
     private var queuedUserInfoEvents: [WatchBridgeMessage] = []
     private var latestAppliedSentAtByKind: [WatchPayloadKind: Date] = [:]
@@ -173,6 +175,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 self.terminalWorkoutID = nil
                 self.workoutLaunch = launch
                 self.completion = nil
+                self.workoutSessionController.start(launch: launch)
                 return true
             }
         case .workoutProgress:
@@ -223,6 +226,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 self.progressSnapshot = nil
                 self.liveWorkout = nil
                 self.currentContext = nil
+                self.workoutSessionController.stop()
                 self.updateWidgetSnapshot { existing in
                     existing.clearingActiveWorkout()
                 }
