@@ -121,6 +121,54 @@ struct Feature8ValidationTests {
         #expect(day1Rows[0].restingHeartRateBPM == 54)
     }
 
+    @Test func healthKitDailySummaryUpsertTracksLatestSourceUpdateTimestamp() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let calendar = utcCalendar()
+
+        let service = HealthKitRecoverySyncService(calendar: calendar)
+
+        let day1 = calendar.date(from: DateComponents(year: 2026, month: 4, day: 8, hour: 18))!
+        _ = try service.upsertDailySummaries(
+            context: context,
+            snapshots: [
+                HealthKitDailySummarySnapshot(
+                    dayStart: day1,
+                    sleepDurationSeconds: 26_000,
+                    timeInBedSeconds: 28_000,
+                    restingHeartRateBPM: 56,
+                    heartRateVariabilityMS: nil,
+                    activeEnergyKilocalories: nil,
+                    stepCount: nil,
+                    bodyMassKilograms: nil
+                )
+            ],
+            sourceUpdatedAt: day(1)
+        )
+        _ = try service.upsertDailySummaries(
+            context: context,
+            snapshots: [
+                HealthKitDailySummarySnapshot(
+                    dayStart: day1,
+                    sleepDurationSeconds: 27_500,
+                    timeInBedSeconds: 29_000,
+                    restingHeartRateBPM: 54,
+                    heartRateVariabilityMS: nil,
+                    activeEnergyKilocalories: nil,
+                    stepCount: nil,
+                    bodyMassKilograms: nil
+                )
+            ],
+            sourceUpdatedAt: day(2)
+        )
+
+        let rows = try fetchAll(HealthKitDailySummary.self, context)
+        #expect(rows.count == 1)
+        #expect(rows[0].sourceUpdatedAt == day(2))
+        #expect(rows[0].updatedAt == day(2))
+        #expect(rows[0].createdAt == day(1))
+    }
+
     @Test func recommendationBlendFallsBackWhenNoObjectiveRecoveryInsight() {
         let checkIn = DailyCoachCheckIn(date: Date(), sleepQuality: 3, soreness: 2, energy: 3, stress: 2)
         let run = makeDetachedRun()
