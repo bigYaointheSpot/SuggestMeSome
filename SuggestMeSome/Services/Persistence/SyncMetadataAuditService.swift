@@ -23,6 +23,10 @@ struct SyncMetadataAuditReport: Equatable {
     var duplicateStableIDRepairs: Int {
         entityReports.map(\.duplicateStableIDRepairs).reduce(0, +)
     }
+
+    static func skipped(auditedAt: Date) -> SyncMetadataAuditReport {
+        SyncMetadataAuditReport(auditedAt: auditedAt, entityReports: [])
+    }
 }
 
 @MainActor
