@@ -10,7 +10,8 @@ import Foundation
 enum ProgramRunContinuityContractVersion {
     static let v1 = 1
     static let v2 = 2
-    static let current = v2
+    static let v3 = 3
+    static let current = v3
 }
 
 struct ProgramRunContinuityEnvelope<Payload: Codable>: Codable {
@@ -46,6 +47,7 @@ struct ProgramRunRecommendationSnapshot: Codable, Equatable {
     let fitScore: Int
     let fitNote: String?
     let isPrimaryRecommendation: Bool
+    let explanationBundle: AdaptiveExplanationBundle?
 
     nonisolated init(recommendation: MesocycleNextBlockRecommendation) {
         self.stableID = recommendation.stableID
@@ -62,6 +64,7 @@ struct ProgramRunRecommendationSnapshot: Codable, Equatable {
         self.fitScore = recommendation.fitScore
         self.fitNote = recommendation.fitNote
         self.isPrimaryRecommendation = recommendation.isPrimaryRecommendation
+        self.explanationBundle = recommendation.explanationBundle
     }
 }
 
@@ -71,18 +74,24 @@ struct ProgramRunRecommendationDecisionEvent: Codable, Equatable {
     let decision: MesocycleRecommendationDecision
     let decidedAt: Date
     let userEditedFields: [NextBlockPrefillField]
+    let confirmedSteeringProfile: AdaptiveSteeringProfile?
+    let editedAdjustmentSnapshot: [AdaptiveAdjustment]?
 
     init(
         recommendationStableID: String,
         decision: MesocycleRecommendationDecision,
         decidedAt: Date,
-        userEditedFields: [NextBlockPrefillField] = []
+        userEditedFields: [NextBlockPrefillField] = [],
+        confirmedSteeringProfile: AdaptiveSteeringProfile? = nil,
+        editedAdjustmentSnapshot: [AdaptiveAdjustment]? = nil
     ) {
         self.stableID = "\(recommendationStableID)::\(decision.rawValue)"
         self.recommendationStableID = recommendationStableID
         self.decision = decision
         self.decidedAt = decidedAt
         self.userEditedFields = userEditedFields.sorted { $0.rawValue < $1.rawValue }
+        self.confirmedSteeringProfile = confirmedSteeringProfile
+        self.editedAdjustmentSnapshot = editedAdjustmentSnapshot
     }
 }
 
@@ -100,6 +109,42 @@ struct ProgramBlockContinuitySnapshot: Codable, Equatable {
     let carriedForwardContext: ProgramGenerationCarryForwardContext?
     let editedPrefillSnapshot: NextBlockPrefillContext?
     let userEditedFields: [NextBlockPrefillField]
+    let latestConfirmedSteeringProfile: AdaptiveSteeringProfile?
+    let latestEditedAdjustments: [AdaptiveAdjustment]?
+
+    init(
+        sourceProgramRunStableID: String,
+        sourceTrainingProgramStableID: String?,
+        reviewStableID: String,
+        sourceProgramName: String,
+        snapshotRecordedAt: Date,
+        recommendationSnapshots: [ProgramRunRecommendationSnapshot],
+        selectedRecommendationStableID: String?,
+        selectedRecommendationSnapshot: ProgramRunRecommendationSnapshot?,
+        declinedRecommendationStableIDs: [String],
+        decisionEvents: [ProgramRunRecommendationDecisionEvent],
+        carriedForwardContext: ProgramGenerationCarryForwardContext?,
+        editedPrefillSnapshot: NextBlockPrefillContext?,
+        userEditedFields: [NextBlockPrefillField],
+        latestConfirmedSteeringProfile: AdaptiveSteeringProfile? = nil,
+        latestEditedAdjustments: [AdaptiveAdjustment]? = nil
+    ) {
+        self.sourceProgramRunStableID = sourceProgramRunStableID
+        self.sourceTrainingProgramStableID = sourceTrainingProgramStableID
+        self.reviewStableID = reviewStableID
+        self.sourceProgramName = sourceProgramName
+        self.snapshotRecordedAt = snapshotRecordedAt
+        self.recommendationSnapshots = recommendationSnapshots
+        self.selectedRecommendationStableID = selectedRecommendationStableID
+        self.selectedRecommendationSnapshot = selectedRecommendationSnapshot
+        self.declinedRecommendationStableIDs = declinedRecommendationStableIDs
+        self.decisionEvents = decisionEvents
+        self.carriedForwardContext = carriedForwardContext
+        self.editedPrefillSnapshot = editedPrefillSnapshot
+        self.userEditedFields = userEditedFields
+        self.latestConfirmedSteeringProfile = latestConfirmedSteeringProfile
+        self.latestEditedAdjustments = latestEditedAdjustments
+    }
 
     func merged(with other: ProgramBlockContinuitySnapshot) -> ProgramBlockContinuitySnapshot {
         let newest = snapshotRecordedAt >= other.snapshotRecordedAt ? self : other
@@ -151,7 +196,9 @@ struct ProgramBlockContinuitySnapshot: Codable, Equatable {
             decisionEvents: mergedDecisionEvents,
             carriedForwardContext: newest.carriedForwardContext ?? oldest.carriedForwardContext,
             editedPrefillSnapshot: newest.editedPrefillSnapshot ?? oldest.editedPrefillSnapshot,
-            userEditedFields: userEditedFields
+            userEditedFields: userEditedFields,
+            latestConfirmedSteeringProfile: newest.latestConfirmedSteeringProfile ?? oldest.latestConfirmedSteeringProfile,
+            latestEditedAdjustments: newest.latestEditedAdjustments ?? oldest.latestEditedAdjustments
         )
     }
 }

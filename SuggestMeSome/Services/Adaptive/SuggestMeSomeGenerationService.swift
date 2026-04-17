@@ -9,6 +9,7 @@ struct SuggestMeSomeGenerationService {
     private let substitutionService: SuggestMeSomeExerciseSubstitutionService
     private let timeBudgetService: SuggestMeSomeTimeBudgetService
     private let adaptiveTrainingStateEngine: AdaptiveTrainingStateEngine
+    private let adaptiveExplainabilityService = AdaptiveExplainabilityService()
 
     init(context: ModelContext) {
         let timeBudgetService = SuggestMeSomeTimeBudgetService()
@@ -36,7 +37,14 @@ struct SuggestMeSomeGenerationService {
         let constructionProfile = adaptiveTrainingStateEngine.buildSessionConstructionProfile(
             request: request,
             snapshot: stateSnapshot,
-            dailyContext: dailyProgramContext
+            dailyContext: dailyProgramContext,
+            steeringProfile: request.steeringProfile
+        )
+        let prescribedIntensity = resolvedPrescribedIntensity(
+            baseIntensity: request.intensity,
+            snapshot: stateSnapshot,
+            dailyProgramContext: dailyProgramContext,
+            constructionProfile: constructionProfile
         )
 
         switch request.generationType {
@@ -45,14 +53,16 @@ struct SuggestMeSomeGenerationService {
                 request: request,
                 stateSnapshot: stateSnapshot,
                 dailyProgramContext: dailyProgramContext,
-                constructionProfile: constructionProfile
+                constructionProfile: constructionProfile,
+                prescribedIntensity: prescribedIntensity
             )
         case .fullBody:
             return generateFullBodyWorkout(
                 request: request,
                 stateSnapshot: stateSnapshot,
                 dailyProgramContext: dailyProgramContext,
-                constructionProfile: constructionProfile
+                constructionProfile: constructionProfile,
+                prescribedIntensity: prescribedIntensity
             )
         }
     }
@@ -63,7 +73,8 @@ struct SuggestMeSomeGenerationService {
         request: SuggestMeSomeGenerationRequest,
         stateSnapshot: TrainingStateSnapshot,
         dailyProgramContext: DailyProgramContext,
-        constructionProfile: SessionConstructionProfile
+        constructionProfile: SessionConstructionProfile,
+        prescribedIntensity: Int
     ) -> GeneratedWorkout {
         let pools = exercisePoolBuilder.buildCustomPools(
             muscleGroups: request.selectedMuscleGroups,
@@ -100,7 +111,7 @@ struct SuggestMeSomeGenerationService {
         var generatedExercises: [GeneratedExercise] = selectedStrength.map { exercise in
             let prescribed = workoutPrescriptionService.prescribeStrengthExercise(
                 exercise,
-                intensity: request.intensity,
+                intensity: prescribedIntensity,
                 goal: request.goal,
                 prescriptionStyle: constructionProfile.prescriptionStyle
             )
@@ -119,6 +130,7 @@ struct SuggestMeSomeGenerationService {
         let shouldAppendCardio = !cardioPool.isEmpty &&
             (targetCardioMinutes >= 8 || (constructionProfile.allowAutomaticCardioAppend && remaining >= 8))
 
+        var appendedCardio = false
         if shouldAppendCardio, let cardioExercise = bestCardioExercise(from: cardioPool, request: request) {
             let cardioMinutes = targetCardioMinutes > 0
                 ? min(remaining, max(8.0, targetCardioMinutes))
@@ -132,15 +144,25 @@ struct SuggestMeSomeGenerationService {
                         : .cardioSteadyState
                 )
             )
+            appendedCardio = true
         }
 
         let totalTime = generatedExercises.reduce(0.0) { $0 + $1.effectiveTimeMinutes }
         return GeneratedWorkout(
             exercises: generatedExercises,
             totalEstimatedMinutes: totalTime,
-            intensity: request.intensity,
+            intensity: prescribedIntensity,
             generationType: .custom,
-            adaptationNote: adaptationNote
+            adaptationNote: adaptationNote,
+            explanationBundle: adaptiveExplainabilityService.buildDailyWorkoutExplanation(
+                request: request,
+                snapshot: stateSnapshot,
+                dailyProgramContext: dailyProgramContext,
+                constructionProfile: constructionProfile,
+                selectedExercises: generatedExercises.map(\.exercise),
+                appendedCardio: appendedCardio,
+                prescribedIntensity: prescribedIntensity
+            )
         )
     }
 
@@ -150,7 +172,8 @@ struct SuggestMeSomeGenerationService {
         request: SuggestMeSomeGenerationRequest,
         stateSnapshot: TrainingStateSnapshot,
         dailyProgramContext: DailyProgramContext,
-        constructionProfile: SessionConstructionProfile
+        constructionProfile: SessionConstructionProfile,
+        prescribedIntensity: Int
     ) -> GeneratedWorkout {
         let nonCardioGroups = exercisePoolBuilder.fetchAllNonCardioGroups()
         let cardioPool = equipmentCompatibilityService.filterExercises(
@@ -200,7 +223,7 @@ struct SuggestMeSomeGenerationService {
         let generatedExercises = selected.map {
             workoutPrescriptionService.prescribeStrengthExercise(
                 $0,
-                intensity: request.intensity,
+                intensity: prescribedIntensity,
                 goal: request.goal,
                 prescriptionStyle: constructionProfile.prescriptionStyle
             )
@@ -208,6 +231,7 @@ struct SuggestMeSomeGenerationService {
         var finalExercises = generatedExercises
         let strengthTime = generatedExercises.reduce(0.0) { $0 + $1.effectiveTimeMinutes }
         let remaining = max(0.0, request.durationMinutes - strengthTime)
+        var appendedCardio = false
         if !cardioPool.isEmpty,
            (constructionProfile.cardioTimeShare > 0.01 || (constructionProfile.allowAutomaticCardioAppend && remaining >= 8)),
            let cardioExercise = bestCardioExercise(from: cardioPool, request: request) {
@@ -221,15 +245,25 @@ struct SuggestMeSomeGenerationService {
                     prescriptionStyle: constructionProfile.cardioTimeShare > 0 ? .conditioningIntervals : .cardioSteadyState
                 )
             )
+            appendedCardio = true
         }
 
         let totalTime = finalExercises.reduce(0.0) { $0 + $1.effectiveTimeMinutes }
         return GeneratedWorkout(
             exercises: finalExercises,
             totalEstimatedMinutes: totalTime,
-            intensity: request.intensity,
+            intensity: prescribedIntensity,
             generationType: .fullBody,
-            adaptationNote: fullBodyAdaptationNote
+            adaptationNote: fullBodyAdaptationNote,
+            explanationBundle: adaptiveExplainabilityService.buildDailyWorkoutExplanation(
+                request: request,
+                snapshot: stateSnapshot,
+                dailyProgramContext: dailyProgramContext,
+                constructionProfile: constructionProfile,
+                selectedExercises: finalExercises.map(\.exercise),
+                appendedCardio: appendedCardio,
+                prescribedIntensity: prescribedIntensity
+            )
         )
     }
 
@@ -336,6 +370,7 @@ struct SuggestMeSomeGenerationService {
                 supportAnchors: supportAnchors,
                 missedMovementFamilies: missedFamilies,
                 prioritizePreferredAnchors: constructionProfile.prioritizePreferredAnchors,
+                preferUnderusedMovements: constructionProfile.preferUnderusedMovements,
                 interferencePenaltyScale: constructionProfile.interferencePenaltyScale
             ) else {
                 continue
@@ -363,6 +398,7 @@ struct SuggestMeSomeGenerationService {
                 supportAnchors: supportAnchors,
                 missedMovementFamilies: missedFamilies,
                 prioritizePreferredAnchors: constructionProfile.prioritizePreferredAnchors,
+                preferUnderusedMovements: constructionProfile.preferUnderusedMovements,
                 interferencePenaltyScale: constructionProfile.interferencePenaltyScale
             ) else {
                 continue
@@ -392,6 +428,7 @@ struct SuggestMeSomeGenerationService {
                 supportAnchors: supportAnchors,
                 missedMovementFamilies: missedFamilies,
                 prioritizePreferredAnchors: constructionProfile.prioritizePreferredAnchors,
+                preferUnderusedMovements: constructionProfile.preferUnderusedMovements,
                 interferencePenaltyScale: constructionProfile.interferencePenaltyScale
                ) {
                 let exerciseMinutes = timeBudgetService.effectiveTimeMinutes(for: supportExercise, intensity: request.intensity)
@@ -498,6 +535,7 @@ struct SuggestMeSomeGenerationService {
         supportAnchors: Set<String>,
         missedMovementFamilies: Set<String>,
         prioritizePreferredAnchors: Bool,
+        preferUnderusedMovements: Bool,
         interferencePenaltyScale: Double
     ) -> Exercise? {
         candidates
@@ -515,6 +553,7 @@ struct SuggestMeSomeGenerationService {
                     supportAnchors: supportAnchors,
                     missedMovementFamilies: missedMovementFamilies,
                     prioritizePreferredAnchors: prioritizePreferredAnchors,
+                    preferUnderusedMovements: preferUnderusedMovements,
                     interferencePenaltyScale: interferencePenaltyScale
                 )
                 let rhsScore = scoreExercise(
@@ -528,6 +567,7 @@ struct SuggestMeSomeGenerationService {
                     supportAnchors: supportAnchors,
                     missedMovementFamilies: missedMovementFamilies,
                     prioritizePreferredAnchors: prioritizePreferredAnchors,
+                    preferUnderusedMovements: preferUnderusedMovements,
                     interferencePenaltyScale: interferencePenaltyScale
                 )
                 if lhsScore == rhsScore { return lhs.name < rhs.name }
@@ -547,6 +587,7 @@ struct SuggestMeSomeGenerationService {
         supportAnchors: Set<String>,
         missedMovementFamilies: Set<String>,
         prioritizePreferredAnchors: Bool,
+        preferUnderusedMovements: Bool,
         interferencePenaltyScale: Double
     ) -> Double {
         var score = deterministicScore(for: exercise)
@@ -560,7 +601,7 @@ struct SuggestMeSomeGenerationService {
             score += prioritizePreferredAnchors ? 4.0 : 2.0
         }
         if underused.contains(lowerName) {
-            score += 0.6
+            score += preferUnderusedMovements ? 2.0 : 0.6
         }
         if patterns.subtracting(coveredPatterns).count > 0 {
             score += Double(patterns.subtracting(coveredPatterns).count) * 1.3
@@ -598,6 +639,25 @@ struct SuggestMeSomeGenerationService {
         case .isolation: return 3.0
         case .cardio: return 1.0
         }
+    }
+
+    private func resolvedPrescribedIntensity(
+        baseIntensity: Int,
+        snapshot: TrainingStateSnapshot,
+        dailyProgramContext: DailyProgramContext,
+        constructionProfile: SessionConstructionProfile
+    ) -> Int {
+        var adjusted = baseIntensity + constructionProfile.prescribedIntensityAdjustment
+        if snapshot.shouldBiasRecovery {
+            adjusted = min(adjusted, 3)
+        }
+        if dailyProgramContext.interferenceScore >= 0.80 {
+            adjusted = min(adjusted, 3)
+        }
+        if !dailyProgramContext.blockedCanonicalLifts.isEmpty {
+            adjusted = min(adjusted, 4)
+        }
+        return max(1, min(5, adjusted))
     }
 
     private func exerciseMatchesSlot(_ exercise: Exercise, slot: SuggestMeSomeSessionSlotKind) -> Bool {

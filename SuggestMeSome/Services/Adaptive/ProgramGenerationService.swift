@@ -27,6 +27,10 @@ struct ProgramGenerationInput {
     let carryForwardContext: ProgramGenerationCarryForwardContext?
     /// Optional adaptive-state override used by validation paths and deterministic tests.
     let stateSnapshotOverride: TrainingStateSnapshot?
+    /// High-level user steering for progression, recovery, and continuity.
+    let steeringProfile: AdaptiveSteeringProfile
+    /// Optional precomputed explanation bundle used by review surfaces.
+    let explanationBundle: AdaptiveExplanationBundle?
 
     init(
         focus: ProgramFocus,
@@ -35,7 +39,9 @@ struct ProgramGenerationInput {
         sessionsPerWeek: Int,
         oneRepMaxes: [String: (weight: Double, unit: String)],
         carryForwardContext: ProgramGenerationCarryForwardContext? = nil,
-        stateSnapshotOverride: TrainingStateSnapshot? = nil
+        stateSnapshotOverride: TrainingStateSnapshot? = nil,
+        steeringProfile: AdaptiveSteeringProfile = .balanced,
+        explanationBundle: AdaptiveExplanationBundle? = nil
     ) {
         self.focus = focus
         self.level = level
@@ -44,6 +50,8 @@ struct ProgramGenerationInput {
         self.oneRepMaxes = oneRepMaxes
         self.carryForwardContext = carryForwardContext
         self.stateSnapshotOverride = stateSnapshotOverride
+        self.steeringProfile = steeringProfile
+        self.explanationBundle = explanationBundle
     }
 }
 
@@ -65,6 +73,12 @@ struct ProgramGeneratedWeekSummary {
     let totalFatigueScore: Double
 }
 
+struct ProgramAdaptivePreview {
+    let trainingState: TrainingStateSnapshot
+    let doseTargetProfile: DoseTargetProfile
+    let explanationBundle: AdaptiveExplanationBundle
+}
+
 // MARK: - Service
 
 struct ProgramGenerationService {
@@ -76,6 +90,7 @@ struct ProgramGenerationService {
     private let explainabilityStamper = ProgramGenerationExplainabilityStamper()
     private let weeklySummaryReporter = ProgramGenerationWeeklySummaryReporter()
     private let loadEstimator = ProgramGenerationLoadEstimator()
+    private let adaptiveExplainabilityService = AdaptiveExplainabilityService()
 
     // MARK: - Public API
 
@@ -111,6 +126,48 @@ struct ProgramGenerationService {
         FocusTemplateLibrary.programmingProfile(for: focus)
     }
 
+    func previewAdaptiveContext(
+        input: ProgramGenerationInput,
+        context: ModelContext
+    ) -> ProgramAdaptivePreview {
+        let adaptiveEngine = AdaptiveTrainingStateEngine(context: context)
+        let trainingState = input.stateSnapshotOverride ?? adaptiveEngine.buildSnapshot(
+            focus: input.focus,
+            level: input.level,
+            sessionsPerWeek: input.sessionsPerWeek
+        )
+        let doseTargetProfile = adaptiveEngine.buildDoseTargetProfile(
+            focus: input.focus,
+            level: input.level,
+            sessionsPerWeek: input.sessionsPerWeek,
+            snapshot: trainingState,
+            steeringProfile: input.steeringProfile
+        )
+        let runIndex = TrainingReadRepository.programRunIndexSnapshot(
+            context: context,
+            activeLimit: 1,
+            completedLimit: 1
+        )
+        let continuitySourceRun = input.carryForwardContext.flatMap {
+            ProgramRunContinuityService.sourceRun(
+                matching: $0.sourceProgramRunStableID,
+                context: context
+            )
+        } ?? TrainingContextQueryService.activeProgramRuns(from: runIndex.activeRuns).first
+        let explanationBundle = adaptiveExplainabilityService.buildProgramExplanation(
+            input: input,
+            snapshot: trainingState,
+            doseTargetProfile: doseTargetProfile,
+            continuitySnapshot: continuitySourceRun?.continuitySnapshot
+        )
+
+        return ProgramAdaptivePreview(
+            trainingState: trainingState,
+            doseTargetProfile: doseTargetProfile,
+            explanationBundle: explanationBundle
+        )
+    }
+
     func progressionStrategyFamily(for focus: ProgramFocus, level: ProgramLevel) -> ProgramProgressionStrategyFamily {
         let profile = programmingProfile(for: focus)
         return progressionResolver.resolveStrategy(focusProfile: profile, level: level).family
@@ -129,18 +186,9 @@ struct ProgramGenerationService {
         context: ModelContext,
         shuffleSeed: Int
     ) -> TrainingProgram {
-        let adaptiveEngine = AdaptiveTrainingStateEngine(context: context)
-        let trainingState = input.stateSnapshotOverride ?? adaptiveEngine.buildSnapshot(
-            focus: input.focus,
-            level: input.level,
-            sessionsPerWeek: input.sessionsPerWeek
-        )
-        let doseTargetProfile = adaptiveEngine.buildDoseTargetProfile(
-            focus: input.focus,
-            level: input.level,
-            sessionsPerWeek: input.sessionsPerWeek,
-            snapshot: trainingState
-        )
+        let preview = previewAdaptiveContext(input: input, context: context)
+        let trainingState = preview.trainingState
+        let doseTargetProfile = preview.doseTargetProfile
         let focusProfile = programmingProfile(for: input.focus)
         let strategy = progressionResolver.resolveStrategy(
             focusProfile: focusProfile,

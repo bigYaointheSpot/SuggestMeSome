@@ -92,7 +92,8 @@ struct AdaptiveTrainingStateEngine {
         focus: ProgramFocus,
         level: ProgramLevel,
         sessionsPerWeek: Int,
-        snapshot: TrainingStateSnapshot
+        snapshot: TrainingStateSnapshot,
+        steeringProfile: AdaptiveSteeringProfile = .balanced
     ) -> DoseTargetProfile {
         guard !snapshot.hasSparseHistory else {
             return DoseTargetProfile(
@@ -179,6 +180,41 @@ struct AdaptiveTrainingStateEngine {
             cardioDurationScale = min(1.12, max(0.82, cardioDurationScale))
         }
 
+        switch steeringProfile.progressionBias {
+        case .conservative:
+            weeklyVolumeScale -= 0.05
+            intensityScale -= 0.02
+            sessionStressScale -= 0.05
+            rirOffset += 0.5
+        case .balanced:
+            break
+        case .push:
+            weeklyVolumeScale += snapshot.shouldBiasRecovery ? 0.0 : 0.05
+            intensityScale += snapshot.shouldBiasRecovery ? 0.0 : 0.02
+            sessionStressScale += snapshot.shouldBiasRecovery ? 0.0 : 0.04
+            accessoryAdjustment += snapshot.shouldBiasRecovery ? 0 : 1
+        }
+        switch steeringProfile.recoveryBias {
+        case .protectRecovery:
+            weeklyVolumeScale -= 0.04
+            sessionStressScale -= 0.06
+            rirOffset += 0.5
+        case .balanced:
+            break
+        case .trainThrough:
+            weeklyVolumeScale += snapshot.shouldBiasRecovery ? 0.0 : 0.02
+            sessionStressScale += snapshot.shouldBiasRecovery ? 0.0 : 0.03
+            intensityScale += snapshot.shouldBiasRecovery ? 0.0 : 0.01
+        }
+        switch steeringProfile.continuityBias {
+        case .preserveAnchors:
+            break
+        case .balanced:
+            break
+        case .rotateMore:
+            accessoryAdjustment += 1
+        }
+
         return DoseTargetProfile(
             weeklyVolumeScale: clamped(weeklyVolumeScale, min: 0.80, max: 1.15),
             fatigueBudgetScale: clamped(fatigueBudgetScale, min: 0.82, max: 1.10),
@@ -188,7 +224,14 @@ struct AdaptiveTrainingStateEngine {
             deloadIntervalOverride: deloadIntervalOverride,
             accessoryCountAdjustment: max(-1, min(1, accessoryAdjustment)),
             cardioDurationScale: clamped(cardioDurationScale, min: 0.80, max: 1.12),
-            preserveAnchorBias: clamped(0.50 + snapshot.continuityBias * 0.35, min: 0.40, max: 0.90),
+            preserveAnchorBias: clamped(
+                0.50 +
+                snapshot.continuityBias * 0.35 +
+                (steeringProfile.continuityBias == .preserveAnchors ? 0.20 : 0.0) -
+                (steeringProfile.continuityBias == .rotateMore ? 0.20 : 0.0),
+                min: 0.25,
+                max: 0.90
+            ),
             interferencePenaltyScale: clamped(1.0 + snapshot.activeProgramInterferenceRisk * 0.45, min: 1.0, max: 1.35)
         )
     }
@@ -196,13 +239,20 @@ struct AdaptiveTrainingStateEngine {
     func buildSessionConstructionProfile(
         request: SuggestMeSomeGenerationRequest,
         snapshot: TrainingStateSnapshot,
-        dailyContext: DailyProgramContext?
+        dailyContext: DailyProgramContext?,
+        steeringProfile: AdaptiveSteeringProfile = .balanced
     ) -> SessionConstructionProfile {
         let mode = request.sessionMode ?? inferredMode(for: request)
         let goal = request.goal ?? inferredGoal(for: request)
-        let prioritizeAnchors = !snapshot.preferredAnchorExerciseNames.isEmpty &&
-            snapshot.equipmentReliabilityScore >= 0.55
+        let prioritizeAnchors = steeringProfile.continuityBias == .rotateMore
+            ? false
+            : !snapshot.preferredAnchorExerciseNames.isEmpty &&
+                snapshot.equipmentReliabilityScore >= 0.55
         let interferencePenalty = dailyContext?.interferenceScore ?? snapshot.activeProgramInterferenceRisk
+        let preferUnderused = steeringProfile.continuityBias == .rotateMore
+        let intensityAdjustment =
+            (steeringProfile.progressionBias == .push ? 1 : steeringProfile.progressionBias == .conservative ? -1 : 0) +
+            (steeringProfile.recoveryBias == .trainThrough ? 1 : steeringProfile.recoveryBias == .protectRecovery ? -1 : 0)
 
         switch (mode, goal) {
         case (.recovery, _), (_, .recovery):
@@ -212,9 +262,11 @@ struct AdaptiveTrainingStateEngine {
                 strengthTimeShare: 0.45,
                 cardioTimeShare: 0.55,
                 prioritizePreferredAnchors: false,
+                preferUnderusedMovements: false,
                 allowAutomaticCardioAppend: true,
                 interferencePenaltyScale: 1.0 + interferencePenalty,
-                prescriptionStyle: .recoveryTechnique
+                prescriptionStyle: .recoveryTechnique,
+                prescribedIntensityAdjustment: -1
             )
         case (.conditioning, _), (_, .conditioning):
             return SessionConstructionProfile(
@@ -223,9 +275,11 @@ struct AdaptiveTrainingStateEngine {
                 strengthTimeShare: 0.30,
                 cardioTimeShare: 0.70,
                 prioritizePreferredAnchors: false,
+                preferUnderusedMovements: preferUnderused,
                 allowAutomaticCardioAppend: true,
                 interferencePenaltyScale: 1.0 + interferencePenalty,
-                prescriptionStyle: .conditioningIntervals
+                prescriptionStyle: .conditioningIntervals,
+                prescribedIntensityAdjustment: clampedIntensityAdjustment(intensityAdjustment)
             )
         case (_, .strength):
             let required = requiredSlotsForStrength(mode: mode)
@@ -235,9 +289,11 @@ struct AdaptiveTrainingStateEngine {
                 strengthTimeShare: 1.0,
                 cardioTimeShare: 0.0,
                 prioritizePreferredAnchors: prioritizeAnchors,
+                preferUnderusedMovements: preferUnderused,
                 allowAutomaticCardioAppend: false,
                 interferencePenaltyScale: 1.0 + interferencePenalty,
-                prescriptionStyle: required.contains(.anchorCompound) ? .strengthTopSetBackoff : .strengthStraightSets
+                prescriptionStyle: required.contains(.anchorCompound) ? .strengthTopSetBackoff : .strengthStraightSets,
+                prescribedIntensityAdjustment: clampedIntensityAdjustment(intensityAdjustment)
             )
         case (_, .hypertrophy):
             return SessionConstructionProfile(
@@ -246,9 +302,11 @@ struct AdaptiveTrainingStateEngine {
                 strengthTimeShare: 1.0,
                 cardioTimeShare: 0.0,
                 prioritizePreferredAnchors: prioritizeAnchors,
+                preferUnderusedMovements: preferUnderused,
                 allowAutomaticCardioAppend: false,
                 interferencePenaltyScale: 1.0 + interferencePenalty,
-                prescriptionStyle: .hypertrophyDoubleProgression
+                prescriptionStyle: .hypertrophyDoubleProgression,
+                prescribedIntensityAdjustment: clampedIntensityAdjustment(intensityAdjustment)
             )
         default:
             return SessionConstructionProfile(
@@ -257,9 +315,11 @@ struct AdaptiveTrainingStateEngine {
                 strengthTimeShare: mode == .fullBody ? 0.85 : 1.0,
                 cardioTimeShare: mode == .fullBody ? 0.15 : 0.0,
                 prioritizePreferredAnchors: prioritizeAnchors,
+                preferUnderusedMovements: preferUnderused,
                 allowAutomaticCardioAppend: mode == .fullBody && !snapshot.shouldBiasRecovery,
                 interferencePenaltyScale: 1.0 + interferencePenalty,
-                prescriptionStyle: .hypertrophyDoubleProgression
+                prescriptionStyle: .hypertrophyDoubleProgression,
+                prescribedIntensityAdjustment: clampedIntensityAdjustment(intensityAdjustment)
             )
         }
     }
@@ -505,7 +565,16 @@ struct AdaptiveTrainingStateEngine {
         if !snapshot.userEditedFields.isEmpty {
             bias += 0.10
         }
+        if snapshot.latestConfirmedSteeringProfile?.continuityBias == .preserveAnchors {
+            bias += 0.08
+        } else if snapshot.latestConfirmedSteeringProfile?.continuityBias == .rotateMore {
+            bias -= 0.05
+        }
         return clamped(bias, min: 0.0, max: 1.0)
+    }
+
+    private func clampedIntensityAdjustment(_ value: Int) -> Int {
+        max(-1, min(1, value))
     }
 
     private func defaultDeloadInterval(for focus: ProgramFocus, level: ProgramLevel) -> Int {

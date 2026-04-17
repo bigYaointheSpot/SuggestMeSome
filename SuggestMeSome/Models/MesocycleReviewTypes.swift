@@ -163,6 +163,7 @@ enum NextBlockPrefillField: String, Codable {
     case durationWeeks
     case sessionsPerWeek
     case level
+    case steering
     case trainingMaxes
     case notableExercises
     case rationale
@@ -189,6 +190,27 @@ struct ProgramGenerationCarryForwardContext: Codable, Equatable {
     let rationaleText: String
     let valueSources: [NextBlockPrefillValueSource]
     let intensityContext: NextBlockIntensityContext?
+    let steeringProfile: AdaptiveSteeringProfile?
+
+    init(
+        sourceProgramRunStableID: String,
+        recommendationStableID: String? = nil,
+        suggestedStyle: ProgramProgressionModel? = nil,
+        preservedExerciseNames: [String] = [],
+        rationaleText: String,
+        valueSources: [NextBlockPrefillValueSource] = [],
+        intensityContext: NextBlockIntensityContext? = nil,
+        steeringProfile: AdaptiveSteeringProfile? = nil
+    ) {
+        self.sourceProgramRunStableID = sourceProgramRunStableID
+        self.recommendationStableID = recommendationStableID
+        self.suggestedStyle = suggestedStyle
+        self.preservedExerciseNames = preservedExerciseNames
+        self.rationaleText = rationaleText
+        self.valueSources = valueSources
+        self.intensityContext = intensityContext
+        self.steeringProfile = steeringProfile
+    }
 }
 
 struct NextBlockPrefillContext: Codable, Equatable {
@@ -205,6 +227,8 @@ struct NextBlockPrefillContext: Codable, Equatable {
     let valueSources: [NextBlockPrefillValueSource]
     let intensityContext: NextBlockIntensityContext?
     let notes: [String]
+    let steeringProfile: AdaptiveSteeringProfile?
+    let explanationBundle: AdaptiveExplanationBundle?
 
     init(
         sourceProgramRunStableID: String,
@@ -219,7 +243,9 @@ struct NextBlockPrefillContext: Codable, Equatable {
         rationaleText: String? = nil,
         valueSources: [NextBlockPrefillValueSource] = [],
         intensityContext: NextBlockIntensityContext? = nil,
-        notes: [String] = []
+        notes: [String] = [],
+        steeringProfile: AdaptiveSteeringProfile? = nil,
+        explanationBundle: AdaptiveExplanationBundle? = nil
     ) {
         let resolvedRationale = rationaleText ??
             notes.first ??
@@ -239,6 +265,12 @@ struct NextBlockPrefillContext: Codable, Equatable {
         self.valueSources = valueSources
         self.intensityContext = intensityContext
         self.notes = resolvedNotes
+        self.steeringProfile = steeringProfile
+        self.explanationBundle = explanationBundle
+    }
+
+    var resolvedSteeringProfile: AdaptiveSteeringProfile {
+        steeringProfile ?? .balanced
     }
 
     var carryForwardContext: ProgramGenerationCarryForwardContext {
@@ -249,7 +281,8 @@ struct NextBlockPrefillContext: Codable, Equatable {
             preservedExerciseNames: preservedExerciseNames,
             rationaleText: rationaleText,
             valueSources: valueSources,
-            intensityContext: intensityContext
+            intensityContext: intensityContext,
+            steeringProfile: steeringProfile
         )
     }
 
@@ -266,7 +299,9 @@ struct NextBlockPrefillContext: Codable, Equatable {
             durationWeeks: durationWeeks,
             sessionsPerWeek: sessionsPerWeek,
             oneRepMaxes: oneRepMaxes,
-            carryForwardContext: carryForwardContext
+            carryForwardContext: carryForwardContext,
+            steeringProfile: resolvedSteeringProfile,
+            explanationBundle: explanationBundle
         )
     }
 }
@@ -291,6 +326,7 @@ struct MesocycleNextBlockRecommendation: Codable, Equatable {
     let fitScore: Int
     let fitNote: String?
     let requiresExplicitAcceptance: Bool
+    let explanationBundle: AdaptiveExplanationBundle?
 
     init(
         stableID: String,
@@ -309,7 +345,8 @@ struct MesocycleNextBlockRecommendation: Codable, Equatable {
         isPrimaryRecommendation: Bool = false,
         fitScore: Int = 50,
         fitNote: String? = nil,
-        requiresExplicitAcceptance: Bool = true
+        requiresExplicitAcceptance: Bool = true,
+        explanationBundle: AdaptiveExplanationBundle? = nil
     ) {
         self.stableID = stableID
         self.rank = rank
@@ -328,6 +365,7 @@ struct MesocycleNextBlockRecommendation: Codable, Equatable {
         self.fitScore = fitScore
         self.fitNote = fitNote
         self.requiresExplicitAcceptance = requiresExplicitAcceptance
+        self.explanationBundle = explanationBundle
     }
 }
 

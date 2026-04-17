@@ -91,9 +91,11 @@ struct SessionConstructionProfile: Codable, Equatable {
     let strengthTimeShare: Double
     let cardioTimeShare: Double
     let prioritizePreferredAnchors: Bool
+    let preferUnderusedMovements: Bool
     let allowAutomaticCardioAppend: Bool
     let interferencePenaltyScale: Double
     let prescriptionStyle: SuggestMeSomePrescriptionStyle
+    let prescribedIntensityAdjustment: Int
 }
 
 struct DailyProgramContext: Codable, Equatable {

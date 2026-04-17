@@ -139,7 +139,8 @@ enum MesocycleReviewService {
             currentSessionsPerWeek: run.program?.sessionsPerWeek ?? 3,
             completionEndDate: endDate,
             personalRecords: personalRecords,
-            workoutsInWindow: sortedProgramWorkouts + sortedStandaloneWorkouts
+            workoutsInWindow: sortedProgramWorkouts + sortedStandaloneWorkouts,
+            continuitySnapshot: run.continuitySnapshot
         )
 
         let defaultPrefill = recommendations.first(where: \.isPrimaryRecommendation)?.prefill ?? recommendations.first?.prefill ?? NextBlockRecommendationEngine.fallbackPrefill(
@@ -153,7 +154,8 @@ enum MesocycleReviewService {
             personalRecords: personalRecords,
             workoutsInWindow: sortedProgramWorkouts + sortedStandaloneWorkouts,
             note: "Fallback prefill built from the completed block snapshot.",
-            input: recommendationInput
+            input: recommendationInput,
+            steeringProfile: run.continuitySnapshot?.latestConfirmedSteeringProfile
         )
 
         return MesocycleReviewSnapshot(

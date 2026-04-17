@@ -10,6 +10,7 @@ import Foundation
 
 enum NextBlockRecommendationEngine {
     private static let generationService = ProgramGenerationService()
+    private static let explainabilityService = AdaptiveExplainabilityService()
 
     private struct SignalSummary {
         let currentFocus: ProgramFocus?
@@ -130,7 +131,8 @@ enum NextBlockRecommendationEngine {
         currentSessionsPerWeek: Int,
         completionEndDate: Date,
         personalRecords: [PersonalRecord],
-        workoutsInWindow: [Workout]
+        workoutsInWindow: [Workout],
+        continuitySnapshot: ProgramBlockContinuitySnapshot? = nil
     ) -> [MesocycleNextBlockRecommendation] {
         let signals = SignalSummary(
             input: input,
@@ -151,10 +153,12 @@ enum NextBlockRecommendationEngine {
         let deduped = deduplicateByFocus(candidates)
         let finalCandidates = ensureCandidateCount(deduped, input: input, signals: signals)
             .sorted { lhs, rhs in
-                if lhs.fitScore == rhs.fitScore {
+                let lhsScore = lhs.fitScore + continuityFitAdjustment(for: lhs.focus, continuitySnapshot: continuitySnapshot)
+                let rhsScore = rhs.fitScore + continuityFitAdjustment(for: rhs.focus, continuitySnapshot: continuitySnapshot)
+                if lhsScore == rhsScore {
                     return lhs.priority < rhs.priority
                 }
-                return lhs.fitScore > rhs.fitScore
+                return lhsScore > rhsScore
             }
             .prefix(3)
 
@@ -166,7 +170,8 @@ enum NextBlockRecommendationEngine {
                 input: input,
                 completionEndDate: completionEndDate,
                 personalRecords: personalRecords,
-                workoutsInWindow: workoutsInWindow
+                workoutsInWindow: workoutsInWindow,
+                continuitySnapshot: continuitySnapshot
             )
         }
     }
@@ -182,7 +187,9 @@ enum NextBlockRecommendationEngine {
         personalRecords: [PersonalRecord],
         workoutsInWindow: [Workout],
         note: String,
-        input: MesocycleRecommendationInputPayload? = nil
+        input: MesocycleRecommendationInputPayload? = nil,
+        steeringProfile: AdaptiveSteeringProfile? = nil,
+        explanationBundle: AdaptiveExplanationBundle? = nil
     ) -> NextBlockPrefillContext {
         let targetStyle = generationService.progressionModel(for: focus, level: level)
         let oneRepMaxSuggestions = buildOneRepMaxSuggestions(
@@ -238,7 +245,9 @@ enum NextBlockRecommendationEngine {
             rationaleText: note,
             valueSources: valueSources,
             intensityContext: intensityContext,
-            notes: orderedUnique([note] + oneRepMaxSuggestions.map(\.sourceSummary))
+            notes: orderedUnique([note] + oneRepMaxSuggestions.map(\.sourceSummary)),
+            steeringProfile: steeringProfile,
+            explanationBundle: explanationBundle
         )
     }
 
@@ -477,9 +486,11 @@ enum NextBlockRecommendationEngine {
         input: MesocycleRecommendationInputPayload,
         completionEndDate: Date,
         personalRecords: [PersonalRecord],
-        workoutsInWindow: [Workout]
+        workoutsInWindow: [Workout],
+        continuitySnapshot: ProgramBlockContinuitySnapshot?
     ) -> MesocycleNextBlockRecommendation {
         let stableID = "\(input.programRunStableID)::recommendation::\(rank)::\(candidate.focus.rawValue)"
+        let steeringProfile = continuitySnapshot?.latestConfirmedSteeringProfile
         let prefill = fallbackPrefill(
             runStableID: input.programRunStableID,
             recommendationStableID: stableID,
@@ -491,10 +502,11 @@ enum NextBlockRecommendationEngine {
             personalRecords: personalRecords,
             workoutsInWindow: workoutsInWindow,
             note: candidate.summary,
-            input: input
+            input: input,
+            steeringProfile: steeringProfile
         )
 
-        return MesocycleNextBlockRecommendation(
+        let provisional = MesocycleNextBlockRecommendation(
             stableID: stableID,
             rank: rank,
             kind: candidate.kind,
@@ -513,6 +525,81 @@ enum NextBlockRecommendationEngine {
             fitNote: candidate.fitNote,
             requiresExplicitAcceptance: true
         )
+        let explanationBundle = explainabilityService.buildNextBlockExplanation(
+            recommendation: provisional,
+            input: input,
+            continuitySnapshot: continuitySnapshot,
+            steeringProfile: prefill.resolvedSteeringProfile
+        )
+        let explainedPrefill = NextBlockPrefillContext(
+            sourceProgramRunStableID: prefill.sourceProgramRunStableID,
+            recommendationStableID: prefill.recommendationStableID,
+            focus: prefill.focus,
+            style: prefill.style,
+            level: prefill.level,
+            durationWeeks: prefill.durationWeeks,
+            sessionsPerWeek: prefill.sessionsPerWeek,
+            oneRepMaxSuggestions: prefill.oneRepMaxSuggestions,
+            preservedExerciseNames: prefill.preservedExerciseNames,
+            rationaleText: prefill.rationaleText,
+            valueSources: prefill.valueSources,
+            intensityContext: prefill.intensityContext,
+            notes: prefill.notes,
+            steeringProfile: prefill.steeringProfile,
+            explanationBundle: explanationBundle
+        )
+
+        return MesocycleNextBlockRecommendation(
+            stableID: stableID,
+            rank: rank,
+            kind: candidate.kind,
+            title: candidate.title,
+            summary: candidate.summary,
+            rationale: candidate.rationale,
+            targetFocus: candidate.focus,
+            targetFocusDisplayName: FocusTemplateLibrary.template(for: candidate.focus).displayName,
+            suggestedLevel: candidate.level,
+            suggestedDurationWeeks: candidate.durationWeeks,
+            suggestedSessionsPerWeek: candidate.sessionsPerWeek,
+            decision: .pending,
+            prefill: explainedPrefill,
+            isPrimaryRecommendation: isPrimary,
+            fitScore: candidate.fitScore,
+            fitNote: candidate.fitNote,
+            requiresExplicitAcceptance: true,
+            explanationBundle: explanationBundle
+        )
+    }
+
+    private static func continuityFitAdjustment(
+        for focus: ProgramFocus,
+        continuitySnapshot: ProgramBlockContinuitySnapshot?
+    ) -> Int {
+        guard let continuitySnapshot else { return 0 }
+
+        var adjustment = 0
+        if continuitySnapshot.selectedRecommendationSnapshot?.targetFocus == focus {
+            adjustment += 6
+        }
+        let declinedFocuses = Set(
+            continuitySnapshot.recommendationSnapshots
+                .filter { continuitySnapshot.declinedRecommendationStableIDs.contains($0.stableID) }
+                .map(\.targetFocus)
+        )
+        if declinedFocuses.contains(focus) {
+            adjustment -= 8
+        }
+        if continuitySnapshot.latestConfirmedSteeringProfile?.continuityBias == .preserveAnchors {
+            let requiredLifts = Set(FocusTemplateLibrary.template(for: focus).requiredLifts.map { $0.lowercased() })
+            let preserved = Set(
+                continuitySnapshot.carriedForwardContext?.preservedExerciseNames.map { $0.lowercased() } ?? []
+            )
+            if !requiredLifts.isDisjoint(with: preserved) {
+                adjustment += 4
+            }
+        }
+
+        return adjustment
     }
 
     private static func deduplicateByFocus(

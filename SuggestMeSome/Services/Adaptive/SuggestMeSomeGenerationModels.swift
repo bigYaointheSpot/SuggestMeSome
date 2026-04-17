@@ -16,6 +16,8 @@ struct SuggestMeSomeGenerationRequest {
     let activeProgramContext: DailyProgramContext?
     /// Optional adaptive-state override used by deterministic tests and validation paths.
     let stateSnapshotOverride: TrainingStateSnapshot?
+    /// Session-local steering that shapes generation without changing persistent user settings.
+    let steeringProfile: AdaptiveSteeringProfile
 
     init(
         generationType: WorkoutGenerationType,
@@ -27,7 +29,8 @@ struct SuggestMeSomeGenerationRequest {
         equipmentProfile: SuggestMeSomeEquipmentProfile? = nil,
         sessionMode: SuggestMeSomeSessionMode? = nil,
         activeProgramContext: DailyProgramContext? = nil,
-        stateSnapshotOverride: TrainingStateSnapshot? = nil
+        stateSnapshotOverride: TrainingStateSnapshot? = nil,
+        steeringProfile: AdaptiveSteeringProfile = .balanced
     ) {
         self.generationType = generationType
         self.durationMinutes = durationMinutes
@@ -39,6 +42,7 @@ struct SuggestMeSomeGenerationRequest {
         self.sessionMode = sessionMode
         self.activeProgramContext = activeProgramContext
         self.stateSnapshotOverride = stateSnapshotOverride
+        self.steeringProfile = steeringProfile
     }
 }
 
@@ -159,6 +163,7 @@ struct SuggestMeSomeSessionRecommendation {
     let candidateAnchorLifts: [String]
     let isBuildableIntoWorkout: Bool
     let request: SuggestMeSomeGenerationRequest?
+    let explanationBundle: AdaptiveExplanationBundle?
 }
 
 // MARK: - Coach Context Types

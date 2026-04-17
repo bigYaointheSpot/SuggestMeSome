@@ -119,6 +119,18 @@ struct SuggestMeSomeRecommendationStepView: View {
             VStack(alignment: .leading, spacing: 18) {
                 if let recommendation = viewModel.recommendation {
                     recommendationCard(recommendation)
+                    AdaptiveSteeringControlsCard(
+                        profile: viewModel.steeringProfile,
+                        title: "Session Steering",
+                        subtitle: "This only nudges progression, recovery, and continuity. Program-protection guardrails still win."
+                    ) { viewModel.updateSteering($0) }
+                    if let bundle = recommendation.explanationBundle {
+                        AdaptiveExplanationCard(
+                            bundle: bundle,
+                            title: "Adaptive Coach Loop",
+                            compact: true
+                        )
+                    }
                     buildArea(recommendation)
                 } else {
                     ContentUnavailableView(

@@ -34,6 +34,7 @@ struct AIProgramGeneratorView: View {
     @State private var selectedLevel: ProgramLevel?
     @State private var selectedDuration = 0
     @State private var selectedFrequency = 0
+    @State private var steeringProfile: AdaptiveSteeringProfile
 
     // MARK: Screen 2 State
 
@@ -54,6 +55,7 @@ struct AIProgramGeneratorView: View {
         _selectedLevel = State(initialValue: prefill?.level)
         _selectedDuration = State(initialValue: prefill?.durationWeeks ?? 0)
         _selectedFrequency = State(initialValue: prefill?.sessionsPerWeek ?? 0)
+        _steeringProfile = State(initialValue: prefill?.resolvedSteeringProfile ?? .balanced)
         _oneRMValues = State(initialValue: Dictionary(
             uniqueKeysWithValues: (prefill?.oneRepMaxSuggestions ?? []).map { suggestion in
                 let value: String
@@ -100,6 +102,31 @@ struct AIProgramGeneratorView: View {
             guard let val = oneRMValues[lift], !val.isEmpty else { return false }
             return Double(val) != nil
         }
+    }
+
+    private var adaptivePreviewBundle: AdaptiveExplanationBundle? {
+        guard
+            step1Valid,
+            let focus = selectedFocus,
+            let level = selectedLevel
+        else {
+            return initialPrefill?.explanationBundle
+        }
+
+        let previewInput = ProgramGenerationInput(
+            focus: focus,
+            level: level,
+            durationWeeks: selectedDuration,
+            sessionsPerWeek: selectedFrequency,
+            oneRepMaxes: [:],
+            carryForwardContext: initialPrefill?.carryForwardContext,
+            steeringProfile: steeringProfile
+        )
+
+        return service.previewAdaptiveContext(
+            input: previewInput,
+            context: modelContext
+        ).explanationBundle
     }
 
     // MARK: Body
@@ -191,6 +218,18 @@ struct AIProgramGeneratorView: View {
                 levelSection
                 durationSection
                 frequencySection
+                AdaptiveSteeringControlsCard(
+                    profile: steeringProfile,
+                    title: "Coach Steering",
+                    subtitle: "High-level controls only. Big block-shape changes still stay review-driven."
+                ) { steeringProfile = $0 }
+                if let adaptivePreviewBundle {
+                    AdaptiveExplanationCard(
+                        bundle: adaptivePreviewBundle,
+                        title: "Adaptive Preview",
+                        compact: true
+                    )
+                }
 
                 Button(action: handleNextTapped) {
                     Text(isCardioFocus ? "Generate Program" : "Next")
@@ -511,13 +550,29 @@ struct AIProgramGeneratorView: View {
             }
         }
 
-        let input = ProgramGenerationInput(
+        var input = ProgramGenerationInput(
             focus: focus,
             level: level,
             durationWeeks: selectedDuration,
             sessionsPerWeek: selectedFrequency,
             oneRepMaxes: oneRMs,
-            carryForwardContext: initialPrefill?.carryForwardContext
+            carryForwardContext: initialPrefill?.carryForwardContext,
+            steeringProfile: steeringProfile
+        )
+        let adaptivePreview = service.previewAdaptiveContext(
+            input: input,
+            context: modelContext
+        )
+        input = ProgramGenerationInput(
+            focus: input.focus,
+            level: input.level,
+            durationWeeks: input.durationWeeks,
+            sessionsPerWeek: input.sessionsPerWeek,
+            oneRepMaxes: input.oneRepMaxes,
+            carryForwardContext: input.carryForwardContext,
+            stateSnapshotOverride: input.stateSnapshotOverride,
+            steeringProfile: input.steeringProfile,
+            explanationBundle: adaptivePreview.explanationBundle
         )
 
         lastInput = input

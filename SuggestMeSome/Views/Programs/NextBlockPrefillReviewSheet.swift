@@ -22,11 +22,13 @@ struct NextBlockPrefillReviewSheet: View {
     @State private var level: ProgramLevel
     @State private var durationWeeks: Int
     @State private var sessionsPerWeek: Int
+    @State private var steeringProfile: AdaptiveSteeringProfile
     @State private var oneRMValues: [String: String]
     @State private var oneRMUnits: [String: WeightUnit]
 
     private let original: MesocycleNextBlockPrefill
     private let orderedLiftNames: [String]
+    private let explainabilityService = AdaptiveExplainabilityService()
 
     init(
         recommendation: MesocycleNextBlockRecommendation,
@@ -45,6 +47,7 @@ struct NextBlockPrefillReviewSheet: View {
         _level = State(initialValue: prefill.level)
         _durationWeeks = State(initialValue: prefill.durationWeeks)
         _sessionsPerWeek = State(initialValue: prefill.sessionsPerWeek)
+        _steeringProfile = State(initialValue: prefill.resolvedSteeringProfile)
         _oneRMValues = State(initialValue: Dictionary(
             uniqueKeysWithValues: prefill.oneRepMaxSuggestions.map {
                 ($0.exerciseName, Self.formatWeight($0.weight, unit: $0.unit))
@@ -64,6 +67,16 @@ struct NextBlockPrefillReviewSheet: View {
                     whySection
                     carriedForwardSection
                     planShapeSection
+                    AdaptiveSteeringControlsCard(
+                        profile: steeringProfile,
+                        title: "Coach Steering",
+                        subtitle: "High-level guidance only. Focus, frequency, and major block-shape changes still stay review-gated."
+                    ) { steeringProfile = $0 }
+                    AdaptiveExplanationCard(
+                        bundle: liveExplanationBundle,
+                        title: "Adaptive Coach Loop",
+                        compact: false
+                    )
                     if !orderedLiftNames.isEmpty {
                         oneRMSection
                     }
@@ -352,6 +365,44 @@ struct NextBlockPrefillReviewSheet: View {
     }
 
     private func confirm() {
+        onConfirm(liveEditedPrefill)
+    }
+
+    private var liveExplanationBundle: AdaptiveExplanationBundle {
+        let provisionalPrefill = buildEditedPrefill(explanationBundle: nil)
+        let provisionalRecommendation = MesocycleNextBlockRecommendation(
+            stableID: recommendation.stableID,
+            rank: recommendation.rank,
+            kind: recommendation.kind,
+            title: recommendation.title,
+            summary: recommendation.summary,
+            rationale: recommendation.rationale,
+            targetFocus: focus,
+            targetFocusDisplayName: FocusTemplateLibrary.template(for: focus).displayName,
+            suggestedLevel: level,
+            suggestedDurationWeeks: durationWeeks,
+            suggestedSessionsPerWeek: sessionsPerWeek,
+            decision: recommendation.decision,
+            prefill: provisionalPrefill,
+            isPrimaryRecommendation: recommendation.isPrimaryRecommendation,
+            fitScore: recommendation.fitScore,
+            fitNote: recommendation.fitNote,
+            requiresExplicitAcceptance: recommendation.requiresExplicitAcceptance
+        )
+
+        return explainabilityService.buildNextBlockExplanation(
+            recommendation: provisionalRecommendation,
+            steeringProfile: steeringProfile
+        )
+    }
+
+    private var liveEditedPrefill: NextBlockPrefillContext {
+        buildEditedPrefill(explanationBundle: liveExplanationBundle)
+    }
+
+    private func buildEditedPrefill(
+        explanationBundle: AdaptiveExplanationBundle?
+    ) -> NextBlockPrefillContext {
         let editedSuggestions: [MesocycleOneRepMaxPrefill] = orderedLiftNames.compactMap { name in
             let originalSuggestion = original.oneRepMaxSuggestions.first(where: { $0.exerciseName == name })
             let unit = oneRMUnits[name] ?? originalSuggestion?.unit ?? .lbs
@@ -380,11 +431,11 @@ struct NextBlockPrefillReviewSheet: View {
             rationaleText: original.rationaleText,
             valueSources: original.valueSources,
             intensityContext: original.intensityContext,
-            notes: original.notes
+            notes: original.notes,
+            steeringProfile: steeringProfile,
+            explanationBundle: explanationBundle
         )
-
-        // TODO: persist MesocycleRecommendationDecision.accepted via review store in a later prompt.
-        onConfirm(edited)
+        return edited
     }
 
     // MARK: Helpers

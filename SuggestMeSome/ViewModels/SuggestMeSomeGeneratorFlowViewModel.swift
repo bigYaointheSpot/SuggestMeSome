@@ -21,9 +21,12 @@ final class SuggestMeSomeGeneratorFlowViewModel {
     private let recommendationService: SuggestMeSomeRecommendationService
     private let generationService: SuggestMeSomeGenerationService
     private let coachContextLoader: SuggestMeSomeCoachContextLoader
+    private var lastAllMuscleGroups: [MuscleGroup] = []
+    private var lastCoachContext: SuggestMeSomeCoachContext?
 
     var step: Step = .configure
     var configuration: SuggestMeSomeSessionConfiguration
+    var steeringProfile: AdaptiveSteeringProfile = .balanced
     var recommendation: SuggestMeSomeSessionRecommendation?
     var generatedWorkout: GeneratedWorkout?
 
@@ -60,10 +63,13 @@ final class SuggestMeSomeGeneratorFlowViewModel {
             todayCheckIn: todayCheckIn,
             objectiveRecoveryInsight: objectiveRecoveryInsight
         )
+        lastAllMuscleGroups = allMuscleGroups
+        lastCoachContext = coachContext
         recommendation = recommendationService.recommendSession(
             configuration: configuration,
             allMuscleGroups: allMuscleGroups,
-            coachContext: coachContext
+            coachContext: coachContext,
+            steeringProfile: steeringProfile
         )
         generatedWorkout = nil
         step = .recommendation
@@ -78,6 +84,11 @@ final class SuggestMeSomeGeneratorFlowViewModel {
     func reshuffleWorkout() {
         guard let request = recommendation?.request else { return }
         generatedWorkout = generationService.generateWorkout(request: request)
+    }
+
+    func updateSteering(_ steeringProfile: AdaptiveSteeringProfile) {
+        self.steeringProfile = steeringProfile
+        rebuildForCurrentSteering()
     }
 
     func moveBack() {
@@ -125,5 +136,20 @@ final class SuggestMeSomeGeneratorFlowViewModel {
             durationMinutes: duration > 0 ? duration : 60,
             intensity: (1...5).contains(intensity) ? intensity : 3
         )
+    }
+
+    private func rebuildForCurrentSteering() {
+        guard !lastAllMuscleGroups.isEmpty else { return }
+
+        recommendation = recommendationService.recommendSession(
+            configuration: configuration,
+            allMuscleGroups: lastAllMuscleGroups,
+            coachContext: lastCoachContext,
+            steeringProfile: steeringProfile
+        )
+
+        if step == .build, let request = recommendation?.request {
+            generatedWorkout = generationService.generateWorkout(request: request)
+        }
     }
 }

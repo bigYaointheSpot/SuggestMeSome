@@ -25,6 +25,7 @@ enum ProgramRunContinuityService {
         recommendation: MesocycleNextBlockRecommendation,
         decision: MesocycleRecommendationDecision,
         editedPrefill: NextBlockPrefillContext? = nil,
+        steeringProfile: AdaptiveSteeringProfile? = nil,
         decidedAt: Date = Date()
     ) {
         let existing = sourceRun.recommendationDecisionHistorySnapshot
@@ -40,7 +41,13 @@ enum ProgramRunContinuityService {
             recommendationStableID: recommendation.stableID,
             decision: decision,
             decidedAt: decidedAt,
-            userEditedFields: userEditedFields
+            userEditedFields: userEditedFields,
+            confirmedSteeringProfile: decision == .accepted
+                ? (steeringProfile ?? editedPrefill?.steeringProfile ?? recommendation.prefill.steeringProfile)
+                : nil,
+            editedAdjustmentSnapshot: decision == .accepted
+                ? (editedPrefill?.explanationBundle?.adjustments ?? recommendation.prefill.explanationBundle?.adjustments)
+                : nil
         )
 
         let selectedRecommendationStableID = decision == .accepted
@@ -73,7 +80,13 @@ enum ProgramRunContinuityService {
                 : existing?.editedPrefillSnapshot,
             userEditedFields: decision == .accepted
                 ? userEditedFields
-                : (existing?.userEditedFields ?? [])
+                : (existing?.userEditedFields ?? []),
+            latestConfirmedSteeringProfile: decision == .accepted
+                ? (steeringProfile ?? editedPrefill?.steeringProfile ?? recommendation.prefill.steeringProfile)
+                : existing?.latestConfirmedSteeringProfile,
+            latestEditedAdjustments: decision == .accepted
+                ? (editedPrefill?.explanationBundle?.adjustments ?? recommendation.prefill.explanationBundle?.adjustments)
+                : existing?.latestEditedAdjustments
         )
 
         sourceRun.recommendationDecisionHistorySnapshot = existing?.merged(with: snapshot) ?? snapshot
@@ -113,7 +126,9 @@ enum ProgramRunContinuityService {
             decisionEvents: sourceSnapshot?.decisionEvents ?? [],
             carriedForwardContext: carryForwardContext,
             editedPrefillSnapshot: sourceSnapshot?.editedPrefillSnapshot,
-            userEditedFields: sourceSnapshot?.userEditedFields ?? []
+            userEditedFields: sourceSnapshot?.userEditedFields ?? [],
+            latestConfirmedSteeringProfile: sourceSnapshot?.latestConfirmedSteeringProfile,
+            latestEditedAdjustments: sourceSnapshot?.latestEditedAdjustments
         )
     }
 
@@ -137,6 +152,9 @@ enum ProgramRunContinuityService {
         }
         if original.level != edited.level {
             fields.append(.level)
+        }
+        if original.resolvedSteeringProfile != edited.resolvedSteeringProfile {
+            fields.append(.steering)
         }
         if original.preservedExerciseNames != edited.preservedExerciseNames {
             fields.append(.notableExercises)

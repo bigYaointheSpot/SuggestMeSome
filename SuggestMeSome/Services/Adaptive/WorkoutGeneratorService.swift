@@ -44,19 +44,22 @@ struct GeneratedWorkout {
     let generationType: WorkoutGenerationType
     /// Present when the session shape was adapted due to equipment constraints.
     let adaptationNote: String?
+    let explanationBundle: AdaptiveExplanationBundle?
 
     init(
         exercises: [GeneratedExercise],
         totalEstimatedMinutes: Double,
         intensity: Int,
         generationType: WorkoutGenerationType,
-        adaptationNote: String? = nil
+        adaptationNote: String? = nil,
+        explanationBundle: AdaptiveExplanationBundle? = nil
     ) {
         self.exercises = exercises
         self.totalEstimatedMinutes = totalEstimatedMinutes
         self.intensity = intensity
         self.generationType = generationType
         self.adaptationNote = adaptationNote
+        self.explanationBundle = explanationBundle
     }
 }
 

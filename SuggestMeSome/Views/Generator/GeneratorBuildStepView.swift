@@ -8,10 +8,22 @@ struct SuggestMeSomeBuildStepView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 sessionIdentityHeader
+                AdaptiveSteeringControlsCard(
+                    profile: viewModel.steeringProfile,
+                    title: "Session Steering",
+                    subtitle: "Changing these controls rebuilds the preview inside the same guardrails."
+                ) { viewModel.updateSteering($0) }
 
                 if let workout = viewModel.generatedWorkout {
                     if let note = workout.adaptationNote {
                         adaptationBanner(note)
+                    }
+                    if let bundle = workout.explanationBundle {
+                        AdaptiveExplanationCard(
+                            bundle: bundle,
+                            title: "Adaptive Coach Loop",
+                            compact: true
+                        )
                     }
 
                     if workout.exercises.isEmpty {

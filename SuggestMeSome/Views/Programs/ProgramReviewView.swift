@@ -350,6 +350,13 @@ struct ProgramReviewView: View {
         }
     }
 
+    private var adaptiveExplanationBundle: AdaptiveExplanationBundle? {
+        input.explanationBundle ?? generationService.previewAdaptiveContext(
+            input: input,
+            context: modelContext
+        ).explanationBundle
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -427,6 +434,14 @@ struct ProgramReviewView: View {
 
             if showAdditionalInfo {
                 programLogicSection
+            }
+
+            if let adaptiveExplanationBundle {
+                AdaptiveExplanationCard(
+                    bundle: adaptiveExplanationBundle,
+                    title: "Adaptive Coach Loop",
+                    compact: false
+                )
             }
 
             // Periodization description

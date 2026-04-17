@@ -8,6 +8,7 @@ import SwiftData
 /// periodization, or long-horizon planning.
 struct SuggestMeSomeRecommendationService {
     private let context: ModelContext
+    private let adaptiveExplainabilityService = AdaptiveExplainabilityService()
 
     init(context: ModelContext) {
         self.context = context
@@ -16,7 +17,8 @@ struct SuggestMeSomeRecommendationService {
     func recommendSession(
         configuration: SuggestMeSomeSessionConfiguration,
         allMuscleGroups: [MuscleGroup],
-        coachContext: SuggestMeSomeCoachContext? = nil
+        coachContext: SuggestMeSomeCoachContext? = nil,
+        steeringProfile: AdaptiveSteeringProfile = .balanced
     ) -> SuggestMeSomeSessionRecommendation {
         let snapshot = TrainingReadRepository.recommendationContextSnapshot(
             context: context,
@@ -126,7 +128,8 @@ struct SuggestMeSomeRecommendationService {
             equipmentProfile: configuration.equipmentProfile,
             sessionMode: finalMode,
             activeProgramContext: dailyProgramContext,
-            stateSnapshotOverride: trainingState
+            stateSnapshotOverride: trainingState,
+            steeringProfile: steeringProfile
         ) : nil
 
         let chips = buildReasonChips(
@@ -159,6 +162,18 @@ struct SuggestMeSomeRecommendationService {
             activeRun: activeRun,
             coachContext: coachContext
         )
+        let explanationBundle = adaptiveExplainabilityService.buildDailyRecommendationExplanation(
+            configuration: configuration,
+            finalMode: finalMode,
+            adjustedIntensity: adjustedIntensity,
+            snapshot: trainingState,
+            dailyProgramContext: dailyProgramContext,
+            coachContext: coachContext,
+            steeringProfile: steeringProfile,
+            blockedLifts: blockedLifts,
+            overlapCount: overlapCount,
+            hasProgramConflict: programConflict.hasConflict
+        )
 
         return SuggestMeSomeSessionRecommendation(
             title: recommendationTitle(mode: finalMode, goal: finalGoal),
@@ -184,7 +199,7 @@ struct SuggestMeSomeRecommendationService {
                 coachContext: coachContext,
                 dailyProgramContext: dailyProgramContext
             ),
-            reasonChips: chips,
+            reasonChips: orderedUniqueStrings(chips + explanationBundle.topReasonLabels),
             wasRedirected: finalMode != configuration.mode,
             mode: finalMode,
             goal: finalGoal,
@@ -194,7 +209,8 @@ struct SuggestMeSomeRecommendationService {
             candidateExerciseFamilies: candidateFamilies,
             candidateAnchorLifts: anchorLifts,
             isBuildableIntoWorkout: buildable,
-            request: request
+            request: request,
+            explanationBundle: explanationBundle
         )
     }
     // MARK: - Coach context integration helpers
