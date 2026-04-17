@@ -154,6 +154,40 @@ struct WorkoutSaveHealthKitWritebackCoordinator {
         self.writer = writer ?? HealthKitWorkoutWriteService()
     }
 
+    func scheduleNonFatalWritebackIfEligible(
+        for workout: Workout,
+        healthKitEnabled: Bool,
+        writebackEnabled: Bool,
+        persistChanges: @escaping @MainActor () throws -> Void,
+        onFailure: @escaping @MainActor (WorkoutSaveSideEffectReport) -> Void
+    ) -> WorkoutSaveSideEffectReport {
+        guard writer.shouldAttemptWriteback(
+            for: workout,
+            healthKitEnabled: healthKitEnabled,
+            writebackEnabled: writebackEnabled
+        ) else {
+            return .skipped(.healthKitWriteback, "HealthKit writeback is not eligible for this workout.")
+        }
+
+        Task { @MainActor in
+            do {
+                let result = try await writer.writeWorkoutSummary(workout)
+                workout.healthKitWritebackIdentifier = result.writebackIdentifier
+                workout.healthKitExportedAt = result.exportedAt
+                try persistChanges()
+            } catch {
+                onFailure(
+                    .failed(
+                        .healthKitWriteback,
+                        error.localizedDescription
+                    )
+                )
+            }
+        }
+
+        return .scheduled(.healthKitWriteback, "Queued HealthKit writeback.")
+    }
+
     func performNonFatalWritebackIfEligible(
         for workout: Workout,
         healthKitEnabled: Bool,
@@ -172,9 +206,9 @@ struct WorkoutSaveHealthKitWritebackCoordinator {
             let result = try await writer.writeWorkoutSummary(workout)
             workout.healthKitWritebackIdentifier = result.writebackIdentifier
             workout.healthKitExportedAt = result.exportedAt
-            try? persistChanges()
+            try persistChanges()
         } catch {
-            print("[F8] HealthKitWorkoutWriteService failed for workout \(workout.id): \(error)")
+            return
         }
     }
 }

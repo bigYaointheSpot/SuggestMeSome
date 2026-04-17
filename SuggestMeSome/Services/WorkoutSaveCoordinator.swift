@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import OSLog
 import SwiftData
 
 struct WorkoutSaveProgramContext {
@@ -25,18 +26,110 @@ struct WorkoutSaveRequest {
     let healthKitWritebackEnabled: Bool
 }
 
+enum WorkoutSaveTransactionStatus: Equatable {
+    case persisted
+    case failed(String)
+}
+
+enum WorkoutSaveSideEffectKind: String, Equatable {
+    case healthKitWriteback
+    case outcomePersistence
+    case weeklyAnalysis
+    case programCompletion
+}
+
+enum WorkoutSaveSideEffectStatus: Equatable {
+    case scheduled
+    case succeeded
+    case skipped
+    case failed
+}
+
+struct WorkoutSaveSideEffectReport: Equatable {
+    let kind: WorkoutSaveSideEffectKind
+    let status: WorkoutSaveSideEffectStatus
+    let message: String
+
+    var isFailure: Bool {
+        status == .failed
+    }
+
+    static func scheduled(_ kind: WorkoutSaveSideEffectKind, _ message: String) -> WorkoutSaveSideEffectReport {
+        WorkoutSaveSideEffectReport(kind: kind, status: .scheduled, message: message)
+    }
+
+    static func succeeded(_ kind: WorkoutSaveSideEffectKind, _ message: String) -> WorkoutSaveSideEffectReport {
+        WorkoutSaveSideEffectReport(kind: kind, status: .succeeded, message: message)
+    }
+
+    static func skipped(_ kind: WorkoutSaveSideEffectKind, _ message: String) -> WorkoutSaveSideEffectReport {
+        WorkoutSaveSideEffectReport(kind: kind, status: .skipped, message: message)
+    }
+
+    static func failed(_ kind: WorkoutSaveSideEffectKind, _ message: String) -> WorkoutSaveSideEffectReport {
+        WorkoutSaveSideEffectReport(kind: kind, status: .failed, message: message)
+    }
+}
+
+struct WorkoutSaveResult {
+    let workout: Workout
+    let transactionStatus: WorkoutSaveTransactionStatus
+    let sideEffectReports: [WorkoutSaveSideEffectReport]
+
+    var didPersistWorkout: Bool {
+        if case .persisted = transactionStatus {
+            return true
+        }
+        return false
+    }
+
+    var nonFatalFailures: [WorkoutSaveSideEffectReport] {
+        sideEffectReports.filter(\.isFailure)
+    }
+
+    var didMarkProgramComplete: Bool {
+        sideEffectReports.contains {
+            $0.kind == .programCompletion && $0.status == .succeeded
+        }
+    }
+}
+
+protocol WorkoutSaveIssueLogging {
+    func record(report: WorkoutSaveSideEffectReport)
+    func record(transactionStatus: WorkoutSaveTransactionStatus)
+}
+
+struct WorkoutSaveIssueLogger: WorkoutSaveIssueLogging {
+    private let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "SuggestMeSome",
+        category: "WorkoutSave"
+    )
+
+    func record(report: WorkoutSaveSideEffectReport) {
+        guard report.isFailure else { return }
+        logger.error("\(report.kind.rawValue, privacy: .public) failed: \(report.message, privacy: .public)")
+    }
+
+    func record(transactionStatus: WorkoutSaveTransactionStatus) {
+        guard case let .failed(message) = transactionStatus else { return }
+        logger.error("primary persistence failed: \(message, privacy: .public)")
+    }
+}
+
 @MainActor
 final class WorkoutSaveCoordinator {
     private let modelContext: ModelContext
     private let writebackCoordinator: WorkoutSaveHealthKitWritebackCoordinator
     private let outcomePersistor: (Workout, ModelContext) throws -> Void
     private let weeklyAnalyzer: (Workout, ModelContext) throws -> Void
+    private let issueLogger: any WorkoutSaveIssueLogging
 
     init(
         modelContext: ModelContext,
         writebackCoordinator: WorkoutSaveHealthKitWritebackCoordinator? = nil,
         outcomePersistor: ((Workout, ModelContext) throws -> Void)? = nil,
-        weeklyAnalyzer: ((Workout, ModelContext) throws -> Void)? = nil
+        weeklyAnalyzer: ((Workout, ModelContext) throws -> Void)? = nil,
+        issueLogger: (any WorkoutSaveIssueLogging)? = nil
     ) {
         self.modelContext = modelContext
         self.writebackCoordinator = writebackCoordinator ?? WorkoutSaveHealthKitWritebackCoordinator()
@@ -46,39 +139,38 @@ final class WorkoutSaveCoordinator {
         self.weeklyAnalyzer = weeklyAnalyzer ?? { workout, context in
             WeeklyTrainingAnalysisService.analyzeCompletedWeeks(triggeredBy: workout, context: context)
         }
+        self.issueLogger = issueLogger ?? WorkoutSaveIssueLogger()
     }
 
     @discardableResult
     func saveWorkout(using request: WorkoutSaveRequest) -> Workout {
+        saveWorkoutResult(using: request).workout
+    }
+
+    @discardableResult
+    func saveWorkoutResult(using request: WorkoutSaveRequest) -> WorkoutSaveResult {
         let workout = buildWorkout(using: request)
         modelContext.insert(workout)
 
-        var personalRecords = TrainingContextQueryService.fetchPersonalRecords(context: modelContext)
+        var personalRecords = TrainingReadRepository.historySnapshot(context: modelContext).personalRecords
         persistExerciseEntries(request.exerciseEntries, for: workout, at: request.endTime, personalRecords: &personalRecords)
 
-        // Durably write the workout before any Feature 6 or Feature 8 service calls.
-        try? modelContext.save()
-
-        triggerHealthKitWritebackIfNeeded(for: workout, request: request)
-
-        do {
-            try outcomePersistor(workout, modelContext)
-        } catch {
-            // Keep workout save durable even when adaptive side effects fail.
-        }
-        do {
-            try weeklyAnalyzer(workout, modelContext)
-        } catch {
-            // Keep workout save durable even when adaptive side effects fail.
+        let transactionStatus = persistPrimaryTransaction()
+        issueLogger.record(transactionStatus: transactionStatus)
+        guard case .persisted = transactionStatus else {
+            return WorkoutSaveResult(
+                workout: workout,
+                transactionStatus: transactionStatus,
+                sideEffectReports: []
+            )
         }
 
-        try? modelContext.save()
-
-        if let run = request.programContext?.run {
-            checkProgramCompletion(run: run)
-        }
-
-        return workout
+        let sideEffectReports = runPostSavePipeline(for: workout, request: request)
+        return WorkoutSaveResult(
+            workout: workout,
+            transactionStatus: transactionStatus,
+            sideEffectReports: sideEffectReports
+        )
     }
 
     private func buildWorkout(using request: WorkoutSaveRequest) -> Workout {
@@ -146,30 +238,119 @@ final class WorkoutSaveCoordinator {
         }
     }
 
-    private func triggerHealthKitWritebackIfNeeded(for workout: Workout, request: WorkoutSaveRequest) {
-        Task { @MainActor in
-            await writebackCoordinator.performNonFatalWritebackIfEligible(
-                for: workout,
-                healthKitEnabled: request.healthKitEnabled,
-                writebackEnabled: request.healthKitWritebackEnabled
-            ) {
-                try modelContext.save()
-            }
+    private func persistPrimaryTransaction() -> WorkoutSaveTransactionStatus {
+        do {
+            try modelContext.save()
+            return .persisted
+        } catch {
+            return .failed(error.localizedDescription)
         }
     }
 
-    private func checkProgramCompletion(run: ProgramRun) {
-        guard let program = run.program else { return }
-        let expected = program.lengthInWeeks * program.sessionsPerWeek
-        guard let completed = try? TrainingContextQueryService.completedWorkoutCount(for: run, context: modelContext) else {
-            return
-        }
-        guard completed >= expected else { return }
+    private func runPostSavePipeline(
+        for workout: Workout,
+        request: WorkoutSaveRequest
+    ) -> [WorkoutSaveSideEffectReport] {
+        var reports: [WorkoutSaveSideEffectReport] = []
+        reports.append(scheduleHealthKitWritebackIfNeeded(for: workout, request: request))
+        reports.append(runSynchronousSideEffect(kind: .outcomePersistence) {
+            try outcomePersistor(workout, modelContext)
+            try modelContext.save()
+        })
+        reports.append(runSynchronousSideEffect(kind: .weeklyAnalysis) {
+            try weeklyAnalyzer(workout, modelContext)
+            try modelContext.save()
+        })
 
+        if let run = request.programContext?.run {
+            reports.append(checkProgramCompletion(run: run))
+        }
+
+        return reports
+    }
+
+    private func scheduleHealthKitWritebackIfNeeded(
+        for workout: Workout,
+        request: WorkoutSaveRequest
+    ) -> WorkoutSaveSideEffectReport {
+        writebackCoordinator.scheduleNonFatalWritebackIfEligible(
+            for: workout,
+            healthKitEnabled: request.healthKitEnabled,
+            writebackEnabled: request.healthKitWritebackEnabled,
+            persistChanges: { [self] in
+                try self.modelContext.save()
+            },
+            onFailure: { [self] report in
+                self.issueLogger.record(report: report)
+            }
+        )
+    }
+
+    private func runSynchronousSideEffect(
+        kind: WorkoutSaveSideEffectKind,
+        action: () throws -> Void
+    ) -> WorkoutSaveSideEffectReport {
+        do {
+            try action()
+            return .succeeded(kind, successMessage(for: kind))
+        } catch {
+            let report = WorkoutSaveSideEffectReport.failed(
+                kind,
+                error.localizedDescription
+            )
+            issueLogger.record(report: report)
+            return report
+        }
+    }
+
+    private func checkProgramCompletion(run: ProgramRun) -> WorkoutSaveSideEffectReport {
+        guard let program = run.program else {
+            return .skipped(.programCompletion, "No training program is attached to this run.")
+        }
+        let expected = program.lengthInWeeks * program.sessionsPerWeek
+        let completed = TrainingReadRepository.programRunProgressSnapshot(
+            for: run,
+            context: modelContext
+        ).completedWorkoutCount
+        guard completed >= expected else {
+            return .skipped(
+                .programCompletion,
+                "Program run progress is \(completed)/\(expected); completion not reached."
+            )
+        }
+        guard !run.isCompleted else {
+            return .skipped(.programCompletion, "Program run was already marked complete.")
+        }
+
+        let completedAt = Date.now
         run.isCompleted = true
-        run.endDate = Date.now
-        run.markSyncUpdated(at: Date.now)
-        try? modelContext.save()
+        run.endDate = completedAt
+        run.markSyncUpdated(at: completedAt)
+
+        do {
+            try modelContext.save()
+            return .succeeded(.programCompletion, "Marked program run complete.")
+        } catch {
+            let report = WorkoutSaveSideEffectReport.failed(
+                .programCompletion,
+                error.localizedDescription
+            )
+            issueLogger.record(report: report)
+            return report
+        }
+    }
+
+    private func successMessage(for kind: WorkoutSaveSideEffectKind) -> String {
+        switch kind {
+        case .healthKitWriteback:
+            return "Scheduled HealthKit writeback."
+        case .outcomePersistence:
+            return "Persisted inferred session outcomes."
+        case .weeklyAnalysis:
+            return "Updated weekly training analysis."
+        case .programCompletion:
+            return "Marked program run complete."
+        }
     }
 
     /// Checks whether `setEntry` is a new personal record and updates the store accordingly.

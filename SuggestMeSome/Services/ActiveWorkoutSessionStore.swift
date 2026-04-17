@@ -51,8 +51,7 @@ struct ActiveWorkoutSession: Identifiable, Codable, Equatable {
 @MainActor
 @Observable
 final class ActiveWorkoutSessionStore {
-    private let userDefaults: UserDefaults
-    private let persistenceKey: String
+    private let persistenceStore: ActiveWorkoutSessionPersistenceStore
     private var appliedWatchActionIDs: Set<UUID> = []
 
     var session: ActiveWorkoutSession? {
@@ -69,15 +68,11 @@ final class ActiveWorkoutSessionStore {
         userDefaults: UserDefaults = .standard,
         persistenceKey: String = "activeWorkoutSession.v1"
     ) {
-        self.userDefaults = userDefaults
-        self.persistenceKey = persistenceKey
-
-        if let data = userDefaults.data(forKey: persistenceKey),
-           let restored = try? JSONDecoder().decode(ActiveWorkoutSession.self, from: data) {
-            self.session = restored
-        } else {
-            self.session = nil
-        }
+        self.persistenceStore = ActiveWorkoutSessionPersistenceStore(
+            userDefaults: userDefaults,
+            persistenceKey: persistenceKey
+        )
+        self.session = persistenceStore.load()
     }
 
     func startSession(
@@ -166,67 +161,18 @@ final class ActiveWorkoutSessionStore {
 
     @discardableResult
     func applyWatchExecutionAction(_ action: WatchWorkoutExecutionActionDTO) -> WatchWorkoutExecutionActionApplyResult {
-        guard var current = session else {
-            return WatchWorkoutExecutionActionApplyResult(status: .ignoredEmptyDraft, updatedEntries: [])
-        }
-
-        guard action.workoutID == current.id else {
-            return WatchWorkoutExecutionActionApplyResult(
-                status: .ignoredStaleCursor,
-                updatedEntries: current.exerciseEntries
-            )
-        }
-
-        if let actionVersion = action.sessionVersionStableID,
-           let sessionVersion = current.sessionVersionStableID,
-           actionVersion != sessionVersion {
-            return WatchWorkoutExecutionActionApplyResult(
-                status: .ignoredStaleCursor,
-                updatedEntries: current.exerciseEntries
-            )
-        }
-
-        guard !appliedWatchActionIDs.contains(action.actionID) else {
-            return WatchWorkoutExecutionActionApplyResult(
-                status: .ignoredStaleCursor,
-                updatedEntries: current.exerciseEntries
-            )
-        }
-
-        switch action.actionKind {
-        case .applyCrownTicksToCurrentSetWeight, .applyCrownTicksToCurrentSetReps:
-            // Feature 12 final hardening keeps crown editing watch-local until
-            // the user commits the set. Ignoring incremental ticks here also
-            // protects the phone draft from delayed queued actions sent by an
-            // older or stale watch binary.
-            return WatchWorkoutExecutionActionApplyResult(
-                status: .ignoredIncompatibleAction,
-                updatedEntries: current.exerciseEntries
-            )
-        case .completeCurrentSet, .completeCardioBlock:
-            break
-        }
-
-        let result = WatchPayloadMapper.applyExecutionAction(
-            action,
-            to: current.exerciseEntries
+        let reduction = ActiveWorkoutSessionWatchActionReducer.reduce(
+            action: action,
+            session: session,
+            appliedActionIDs: appliedWatchActionIDs
         )
-        guard result.didApply else { return result }
-
-        current.exerciseEntries = result.updatedEntries
-        session = current
-        appliedWatchActionIDs.insert(action.actionID)
-        return result
+        session = reduction.session
+        appliedWatchActionIDs = reduction.appliedActionIDs
+        return reduction.result
     }
 
     private func persistSession() {
-        guard let session else {
-            userDefaults.removeObject(forKey: persistenceKey)
-            return
-        }
-
-        guard let data = try? JSONEncoder().encode(session) else { return }
-        userDefaults.set(data, forKey: persistenceKey)
+        persistenceStore.save(session)
     }
 
     private func resolvedWatchMetadata(
