@@ -2989,6 +2989,23 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 13 [Paid App Compliance and Monetization Hardening] — 2026-04-17
+
+- Added a paid-app compliance and monetization foundation:
+  - introduced a dedicated `Compliance` module with centralized placeholder-backed legal configuration, versioned in-app documents, onboarding acceptance tracking, and a reusable legal/privacy center
+  - added StoreKit 2 support for a one-time `Premium Unlock` purchase with cached entitlement reads, restore purchases, and a single feature-access policy used across premium routes
+- Hardened premium gating without breaking the free logger:
+  - gated Daily Coach, Dashboard analytics, smart generation, training programs, Apple Health, and Apple Watch continuity behind polished paywall shells instead of dead-end screens
+  - preserved free access to manual workout logging, editing, history, export, delete-local-data flows, legal/privacy surfaces, support, and Restore Purchases
+  - added Apple Health pre-permission disclosure, an “About This Guidance” surface, premium-aware watch messaging, and user-facing copy updates that replace unsupported AI wording with smart/adaptive guidance language
+- Added focused compliance validation:
+  - covered entitlement resolution, onboarding completion requirements, persisted legal-document acceptance, cached Premium Unlock restoration, and Apple Health disclosure/copy expectations
+  - re-ran the Feature 14 monetization suite plus targeted Feature 8/11/12/13 regression coverage, followed by a full iOS build with the embedded watch target
+
+**Commits:** `feat: add paid compliance and premium gating`, `fix: harden paid compliance messaging and validation`
+
+---
+
 
 ## Project Setup
 
