@@ -303,19 +303,30 @@ struct WatchConnectionDot: View {
         return .secondary
     }
 
+    /// Only surface the dot when it's actionable — disconnected, unsupported,
+    /// or content pending. When the iPhone is reachable and idle, stay silent
+    /// so vertical space goes to the primary execution surface.
+    private var shouldSurface: Bool {
+        if !status.isSupported || !status.isCompanionAppInstalled { return true }
+        if status.isReachable && !status.hasContentPending { return false }
+        return true
+    }
+
     var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 6, height: 6)
-            Text(status.message)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+        if shouldSurface {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 6, height: 6)
+                Text(status.message)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("iPhone connection")
+            .accessibilityValue(status.message)
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("iPhone connection")
-        .accessibilityValue(status.message)
     }
 }
 

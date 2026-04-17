@@ -2,14 +2,15 @@
 //  WatchActiveWorkoutView.swift
 //  SuggestMeSomeWatch
 //
-//  Feature 12 Prompt 5 — Premium live-workout execution surface.
+//  Premium live-workout execution surface.
 //
 //  Consumes iPhone-produced `WatchLiveWorkoutSnapshot` and
-//  `WatchCurrentSessionContext` verbatim. Crown-first logging uses two
-//  stacked focused controls — reps on top, weight below — matching the
-//  locked-in Feature 12 direction. A watch-local rest timer takes over
-//  the current-exercise card after each completed set and emits haptic
-//  cues for the next-set transition.
+//  `WatchCurrentSessionContext` verbatim. Layout is a horizontally paged
+//  TabView (Summary / Current Set / Rest) so each screen hosts a single
+//  focused surface — mirroring native Workout app direction. Elapsed time
+//  ticks locally between iPhone snapshots via `TimelineView` so the wrist
+//  never shows a frozen clock. Rest is its own page with a phase-tinted
+//  background and the watch-local rest timer; auto-navigates on start/stop.
 //
 
 import SwiftUI
@@ -28,19 +29,32 @@ struct WatchActiveWorkoutView: View {
     @State private var displayedContext: WatchCurrentSessionContext?
     @State private var awaitingPhoneCommitContext: WatchCurrentSessionContext?
     @State private var awaitingPhoneAdvance: AwaitingPhoneAdvance?
+    @State private var selectedTab: PageTab = .currentSet
+
+    private enum PageTab: Hashable {
+        case summary
+        case currentSet
+        case rest
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                sessionHeader
-                elapsedAndProgress
-                currentBlock
-                WatchConnectionDot(status: sessionStatus)
-                    .padding(.top, 2)
+        Group {
+            if let activeContext {
+                pagedView(activeContext)
+            } else if awaitingPhoneAdvance != nil {
+                fullScreenPanel {
+                    WatchEmptyStatePanel(
+                        systemImage: "arrow.triangle.2.circlepath",
+                        title: "Syncing with iPhone",
+                        message: "Finishing the last set. The next block appears when iPhone confirms it.",
+                        subMessage: sessionStatus.message
+                    )
+                }
+            } else if hasPendingActiveWorkout {
+                fullScreenPanel { pendingContextCard }
+            } else {
+                fullScreenPanel { awaitingFirstSyncCard }
             }
-            .padding(.horizontal, 2)
-            .padding(.top, 2)
-            .padding(.bottom, 8)
         }
         .onAppear {
             synchronizeDisplayedContext()
@@ -58,6 +72,154 @@ struct WatchActiveWorkoutView: View {
                 restTimer.stop()
             }
         }
+        .onChange(of: restTimer.isRunning) { _, running in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                if running {
+                    selectedTab = .rest
+                } else if selectedTab == .rest {
+                    selectedTab = .currentSet
+                }
+            }
+        }
+    }
+
+    // MARK: - Paged View
+
+    private func pagedView(_ context: WatchCurrentSessionContext) -> some View {
+        TabView(selection: $selectedTab) {
+            summaryPage
+                .tag(PageTab.summary)
+            currentSetPage(context)
+                .tag(PageTab.currentSet)
+            restPage(context)
+                .tag(PageTab.rest)
+        }
+        .tabViewStyle(.page)
+    }
+
+    private func fullScreenPanel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                sessionHeader
+                content()
+                WatchConnectionDot(status: sessionStatus)
+                    .padding(.top, 2)
+            }
+            .padding(.horizontal, 2)
+            .padding(.top, 2)
+            .padding(.bottom, 8)
+        }
+    }
+
+    // MARK: - Summary Page
+
+    private var summaryPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                sessionHeader
+                elapsedAndProgress
+                WatchConnectionDot(status: sessionStatus)
+                    .padding(.top, 2)
+            }
+            .padding(.horizontal, 2)
+            .padding(.top, 2)
+            .padding(.bottom, 8)
+        }
+    }
+
+    // MARK: - Current Set Page
+
+    private func currentSetPage(_ context: WatchCurrentSessionContext) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(context.exerciseName)
+                        .font(.headline)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                    Text(setProgressSummary(for: context))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .accessibilityLabel(setAccessibilityLabel(for: context))
+                }
+                .padding(.horizontal, 2)
+
+                if isAwaitingPhoneCommitForCurrentSet {
+                    syncingCurrentSetPanel(context)
+                } else if context.isCardio {
+                    cardioTarget(context)
+                } else {
+                    WatchCrownSetLoggingControls(
+                        context: context,
+                        onExecutionAction: handleCrownAction
+                    )
+                    .id(currentSetSignature)
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.top, 2)
+            .padding(.bottom, 8)
+        }
+    }
+
+    // MARK: - Rest Page
+
+    private func restPage(_ context: WatchCurrentSessionContext) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                if restTimer.isRunning {
+                    WatchRestTimerPanel(
+                        timer: restTimer,
+                        nextSetHint: nextSetHint(for: context),
+                        onSkip: { restTimer.skip() }
+                    )
+                    .watchCard(emphasized: true, tint: WatchPalette.positive)
+                } else {
+                    restIdleCard(context)
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.top, 2)
+            .padding(.bottom, 8)
+        }
+        .background(restBackgroundGradient)
+    }
+
+    private var restBackgroundGradient: some View {
+        LinearGradient(
+            colors: restTimer.isRunning
+                ? [WatchPalette.positive.opacity(0.24), .clear]
+                : [.clear, .clear],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .animation(.easeInOut(duration: 0.3), value: restTimer.isRunning)
+        .ignoresSafeArea()
+    }
+
+    private func restIdleCard(_ context: WatchCurrentSessionContext) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "figure.strengthtraining.traditional")
+                    .font(.caption.weight(.semibold))
+                Text("Next up")
+                    .font(.caption2.weight(.semibold))
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+            }
+            .foregroundStyle(WatchPalette.primary)
+            Text(nextSetHint(for: context))
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+            if let summary = context.currentSetTargetSummary, !summary.isEmpty {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .watchCard(emphasized: true)
     }
 
     // MARK: - Session Header
@@ -83,23 +245,28 @@ struct WatchActiveWorkoutView: View {
         .padding(.horizontal, 2)
     }
 
-    // MARK: - Progress
+    // MARK: - Progress (live-ticking)
 
     private var elapsedAndProgress: some View {
         let completed = liveWorkout?.completedExercises ?? progressSnapshot?.completedExercises ?? 0
         let total = max(liveWorkout?.totalExercises ?? progressSnapshot?.totalExercises ?? 0, 1)
-        let elapsed = liveWorkout?.elapsedSeconds ?? progressSnapshot?.elapsedSeconds ?? 0
+        let baseElapsed = liveWorkout?.elapsedSeconds ?? progressSnapshot?.elapsedSeconds ?? 0
+        let capturedAt = liveWorkout?.capturedAt
         let currentExerciseIndex = (currentContext?.exerciseIndex).map { min($0 + 1, total) } ?? min(completed + 1, total)
 
         return VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(WatchDurationFormatter.format(elapsed))
-                    .font(.title3.monospacedDigit().weight(.bold))
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 4)
-                Text("Ex \(currentExerciseIndex)/\(total)")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
+            TimelineView(.periodic(from: .now, by: 1)) { timelineContext in
+                let ticked = liveTickedElapsed(base: baseElapsed, capturedAt: capturedAt, now: timelineContext.date)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(WatchDurationFormatter.format(ticked))
+                        .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.primary)
+                        .minimumScaleFactor(0.7)
+                    Spacer(minLength: 4)
+                    Text("Ex \(currentExerciseIndex)/\(total)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
             }
             ProgressView(value: Double(completed), total: Double(total))
                 .progressViewStyle(.linear)
@@ -113,20 +280,13 @@ struct WatchActiveWorkoutView: View {
         .watchCard(emphasized: true)
     }
 
-    // MARK: - Current Block (exercise card / empty state)
-
-    @ViewBuilder
-    private var currentBlock: some View {
-        if let activeContext {
-            currentExerciseCard(activeContext)
-        } else if awaitingPhoneAdvance != nil {
-            syncingCommitCard
-        } else if hasPendingActiveWorkout {
-            pendingContextCard
-        } else {
-            awaitingFirstSyncCard
-        }
+    private func liveTickedElapsed(base: Int, capturedAt: Date?, now: Date) -> Int {
+        guard let capturedAt else { return base }
+        let drift = max(0, now.timeIntervalSince(capturedAt))
+        return base + Int(drift.rounded())
     }
+
+    // MARK: - Fallback cards (used by fullScreenPanel)
 
     private var pendingContextCard: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -155,49 +315,6 @@ struct WatchActiveWorkoutView: View {
             systemImage: "applewatch.radiowaves.left.and.right",
             title: "Waiting on iPhone",
             message: "Start or resume a workout on iPhone to see live reps and weight here.",
-            subMessage: sessionStatus.message
-        )
-    }
-
-    private func currentExerciseCard(_ context: WatchCurrentSessionContext) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(context.exerciseName)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
-                Text(setProgressSummary(for: context))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .accessibilityLabel(setAccessibilityLabel(for: context))
-            }
-
-            if restTimer.isRunning {
-                WatchRestTimerPanel(
-                    timer: restTimer,
-                    nextSetHint: nextSetHint(for: context),
-                    onSkip: { restTimer.skip() }
-                )
-            } else if isAwaitingPhoneCommitForCurrentSet {
-                syncingCurrentSetPanel(context)
-            } else if context.isCardio {
-                cardioTarget(context)
-            } else {
-                WatchCrownSetLoggingControls(
-                    context: context,
-                    onExecutionAction: handleCrownAction
-                )
-                .id(currentSetSignature)
-            }
-        }
-        .watchCard()
-    }
-
-    private var syncingCommitCard: some View {
-        WatchEmptyStatePanel(
-            systemImage: "arrow.triangle.2.circlepath",
-            title: "Syncing with iPhone",
-            message: "Finishing the last set. The next block appears when iPhone confirms it.",
             subMessage: sessionStatus.message
         )
     }
@@ -251,12 +368,13 @@ struct WatchActiveWorkoutView: View {
                 )
             } label: {
                 Label("Mark Complete", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.semibold))
+                    .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 2)
             }
             .buttonStyle(.borderedProminent)
             .tint(WatchPalette.primary)
-            .controlSize(.small)
+            .controlSize(.regular)
             .accessibilityHint("Marks this cardio block complete on iPhone.")
         }
     }
@@ -640,12 +758,13 @@ struct WatchCrownSetLoggingControls: View {
                 )
             } label: {
                 Label("Complete Set", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.semibold))
+                    .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 2)
             }
             .buttonStyle(.borderedProminent)
             .tint(WatchPalette.primary)
-            .controlSize(.small)
+            .controlSize(.regular)
             .accessibilityHint("Logs the current set on iPhone and starts a rest timer.")
         }
         .onAppear {
@@ -662,6 +781,9 @@ struct WatchCrownSetLoggingControls: View {
 
     private func crownRow(title: String, valueText: String, field: FocusedField) -> some View {
         let isFocused = focusedField == field
+        let valueFont: Font = isFocused
+            ? .system(size: 40, weight: .bold, design: .rounded).monospacedDigit()
+            : .title3.monospacedDigit().weight(.semibold)
         return VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.caption2.weight(.semibold))
@@ -669,17 +791,21 @@ struct WatchCrownSetLoggingControls: View {
                 .textCase(.uppercase)
                 .tracking(0.4)
             Text(valueText)
-                .font(.title3.monospacedDigit().weight(.semibold))
+                .font(valueFont)
+                .foregroundStyle(isFocused ? .primary : .secondary)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .animation(.easeInOut(duration: 0.18), value: isFocused)
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 10)
+        .padding(.vertical, isFocused ? 10 : 6)
         .background(
             isFocused ? WatchPalette.primary.opacity(0.28) : WatchPalette.surface,
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(isFocused ? WatchPalette.primary : WatchPalette.strokeFaint, lineWidth: 0.75)
         )
         .focusable(true)
