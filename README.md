@@ -3126,6 +3126,42 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 2 [Research-Grounded Smart Engine Update] — 2026-04-17
+
+- Added a shared adaptive training-state and dose-target layer used by both multi-week program generation and one-off session generation:
+  - introduced `TrainingStateSnapshot`, `DoseTargetProfile`, `SessionConstructionProfile`, and `DailyProgramContext`
+  - added `AdaptiveTrainingStateEngine` to derive adherence tier, recent volume completion, fatigue/recovery pressure, lift momentum, muscle stress saturation, preferred anchors, underused exercises, equipment reliability, continuity bias, and active-program interference risk from existing history only
+  - preserved conservative sparse-history fallback so low-data users stay on safe default heuristics instead of speculative personalization
+- Personalized program generation without replacing the focus-template identity system:
+  - `ProgramGenerationService` now resolves focus templates first, then applies adaptive dose targets for weekly volume, fatigue budget, intensity/RIR bias, cardio duration, accessory counts, and anchor-preservation behavior
+  - `ProgramGenerationWeekScheduleBuilder` now supports earlier/lighter step-backs when fatigue, adherence, or interference signals warrant them while keeping fixed defaults for sparse history
+  - replaced string-derived cardio session inference with explicit `ProgramCardioSessionType` metadata on session definitions and threaded that into cardio prescription planning
+- Upgraded daily recommendation and workout generation to be active-program-aware, deterministic, and slot-based:
+  - `SuggestMeSomeRecommendationService` now passes shared adaptive state and active-program support context into generated build requests
+  - `SuggestMeSomeGenerationService` now builds workouts from deterministic required/optional slot profiles instead of greedy/random assembly, with support-aware backfill for missed movement families and interference avoidance for blocked next-session anchors
+  - `SuggestMeSomeWorkoutPrescriptionService` now uses goal-specific prescription styles for strength top-set/backoff, strength straight sets, hypertrophy double progression, recovery technique work, and conditioning intervals instead of random rep selection
+  - cardio append behavior is now governed by construction profile intent instead of opportunistic/random add-ons
+- Added focused Feature 15 validation for:
+  - sparse vs rich adaptive state derivation
+  - adaptive step-back scheduling and cardio archetype routing
+  - deterministic daily generation, active-program interference protection, and goal-specific prescription behavior
+- Scientific Basis:
+  - [American College of Sports Medicine position stand. Progression models in resistance training for healthy adults](https://pubmed.ncbi.nlm.nih.gov/19204579/)
+  - [Dose-response relationship between weekly resistance training volume and increases in muscle mass](https://pubmed.ncbi.nlm.nih.gov/?term=27433992)
+  - [Effects of Resistance Training Frequency on Measures of Muscle Hypertrophy](https://pubmed.ncbi.nlm.nih.gov/27102172/)
+  - [Effect of Resistance Training Frequency on Gains in Muscular Strength](https://pubmed.ncbi.nlm.nih.gov/29470825/)
+  - [Comparison of Periodized and Non-Periodized Resistance Training on Maximal Strength](https://pubmed.ncbi.nlm.nih.gov/28497285/)
+  - [Influence of Resistance Training Proximity-to-Failure on Skeletal Muscle Hypertrophy](https://pubmed.ncbi.nlm.nih.gov/36334240/)
+  - [The Effects of Concurrent Aerobic and Strength Training on Muscle Fiber Hypertrophy](https://pubmed.ncbi.nlm.nih.gov/35476184/)
+  - [Comparison of Polarized Versus Other Types of Endurance Training Intensity Distribution](https://pubmed.ncbi.nlm.nih.gov/38717713/)
+- Verification:
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,id=849D1FC3-B2D4-418B-BD6F-31898EBFC962' -only-testing:SuggestMeSomeTests/Feature15Prompt2AdaptiveStateEngineTests -only-testing:SuggestMeSomeTests/Feature15Prompt2ProgramGenerationAdaptiveTests -only-testing:SuggestMeSomeTests/Feature15Prompt2DailyGenerationAdaptiveTests -only-testing:SuggestMeSomeTests/Feature4GeneratorValidationTests -only-testing:SuggestMeSomeTests/Feature9RecommendationEngineValidationTests -only-testing:SuggestMeSomeTests/Feature9SuggestMeSomeBuildValidationTests -only-testing:SuggestMeSomeTests/Feature10Prompt3ProgramGeneratorDecompositionTests -only-testing:SuggestMeSomeTests/Feature13Prompt3NextBlockRecommendationEngineTests`
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+
+**Commits:** `feat: add adaptive training state and dose target engine`, `refactor: personalize program generation from adaptive dose targets`, `feat: make daily session generation program-aware and deterministic`, `docs: document feature 15 smart engine update`
+
+---
+
 
 ## Project Setup
 
