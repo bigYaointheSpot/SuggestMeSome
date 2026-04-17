@@ -210,6 +210,49 @@ struct Feature8ValidationTests {
         #expect(workouts[0].sourceWorkoutTypeDisplayName == "Running")
     }
 
+    @Test func importedWorkoutUpdatePreservesOriginalImportTimestamp() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let service = HealthKitWorkoutImportService()
+        _ = try service.upsertImportedWorkouts(
+            context: context,
+            snapshots: [
+                HealthKitImportedWorkoutSnapshot(
+                    externalIdentifier: "hk-002",
+                    startDate: day(0),
+                    durationSeconds: 1800,
+                    caloriesBurned: 250,
+                    sourceDisplayName: "Apple Watch",
+                    activityTypeIdentifier: "37",
+                    activityTypeDisplayName: "Traditional Strength Training"
+                )
+            ],
+            importedAt: day(1)
+        )
+
+        _ = try service.upsertImportedWorkouts(
+            context: context,
+            snapshots: [
+                HealthKitImportedWorkoutSnapshot(
+                    externalIdentifier: "hk-002",
+                    startDate: day(0),
+                    durationSeconds: 1800,
+                    caloriesBurned: 250,
+                    sourceDisplayName: "Apple Watch",
+                    activityTypeIdentifier: "37",
+                    activityTypeDisplayName: "Traditional Strength Training"
+                )
+            ],
+            importedAt: day(2)
+        )
+
+        let workouts = try fetchAll(Workout.self, context)
+        #expect(workouts.count == 1)
+        #expect(workouts[0].sourceImportedAt == day(1))
+        #expect(workouts[0].syncLastModifiedAt == day(2))
+    }
+
     @Test func importedWorkoutLimitedEditGuardIsEnforcedBySourceType() {
         let imported = Workout(
             date: day(0),
