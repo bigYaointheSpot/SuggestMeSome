@@ -307,6 +307,270 @@ struct Feature10SyncFoundationValidationTests {
         #expect(includingDeleted[0].metadata.deletedAt == day(3))
     }
 
+    @Test func localSyncRepositoryUpsertsProgramAndAdaptiveGraphs() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let repository = LocalSyncRepository(modelContext: context)
+
+        let programDTO = TrainingProgramSyncDTO(
+            metadata: SyncRecordMetadataDTO(
+                stableID: "program-sync-1",
+                version: 1,
+                lastModifiedAt: day(1)
+            ),
+            name: "Powerlifting Base",
+            lengthInWeeks: 8,
+            sessionsPerWeek: 4,
+            createdDate: day(0),
+            sourceRawValue: ProgramSource.userCreated.rawValue,
+            descriptionText: "Base block",
+            progressionModelRawValue: ProgramProgressionModel.linear.rawValue,
+            usedLiftMapping: true,
+            usedVolumeBalancing: true,
+            usedFatigueBalancing: true,
+            usedTopSetBackoff: true,
+            prescriptions: []
+        )
+        try repository.upsertTrainingProgramPayloads([programDTO])
+
+        let runDTO = ProgramRunSyncDTO(
+            metadata: SyncRecordMetadataDTO(
+                stableID: "run-sync-1",
+                version: 1,
+                lastModifiedAt: day(2)
+            ),
+            startDate: day(1),
+            endDate: nil,
+            isCompleted: false,
+            trainingProgramStableID: "program-sync-1",
+            previousProgramRunStableID: "run-sync-0",
+            recommendationDecisionHistoryJSON: "{\"accepted\":[]}",
+            continuitySnapshotJSON: "{\"version\":1}"
+        )
+        try repository.upsertProgramRunPayloads([runDTO])
+
+        let programs = try fetchAll(TrainingProgram.self, context)
+        let runs = try fetchAll(ProgramRun.self, context)
+        #expect(programs.count == 1)
+        #expect(runs.count == 1)
+        #expect(runs[0].program?.id == programs[0].id)
+        #expect(runs[0].previousProgramRunStableID == "run-sync-0")
+        #expect(runs[0].continuitySnapshotJSON == "{\"version\":1}")
+
+        let analysis = WeeklyTrainingAnalysis(
+            id: UUID(uuidString: "C0000000-0000-0000-0000-000000000001")!,
+            weekStartDate: day(0),
+            weekEndDate: day(6),
+            programRun: runs[0],
+            trainingProgram: programs[0],
+            programWeekNumber: 1,
+            isFinalized: true,
+            finalizedAt: day(7)
+        )
+        context.insert(analysis)
+        try context.save()
+
+        let proposalDTO = AdaptationProposalSyncDTO(
+            metadata: SyncRecordMetadataDTO(
+                stableID: "proposal-sync-1",
+                version: 1,
+                lastModifiedAt: day(3)
+            ),
+            createdAt: day(3),
+            decidedAt: nil,
+            programRunStableID: "run-sync-1",
+            trainingProgramStableID: "program-sync-1",
+            sourceAnalysisStableID: analysis.id.uuidString,
+            proposalTypeRawValue: ProposalType.increaseLoad.rawValue,
+            proposalStatusRawValue: ProposalStatus.pendingUserConfirmation.rawValue,
+            requiresUserConfirmation: true,
+            autoApplyEligible: false,
+            confidenceScore: 0.8,
+            priority: 10,
+            targetWeekStart: 2,
+            targetWeekEnd: nil,
+            targetSessionNumber: 1,
+            targetProgramSessionExerciseStableID: UUID().uuidString,
+            targetLiftKey: "squat",
+            proposedLoadPercentDelta: 2.5,
+            proposedSetDelta: nil,
+            proposedRepDelta: nil,
+            proposedDeloadFactor: nil,
+            swapFromExerciseName: nil,
+            swapToExerciseName: nil,
+            adjustmentReasonRawValue: AdjustmentReason.topSetBeatTarget.rawValue,
+            summaryText: "Increase squat load",
+            detailText: "Strong performance",
+            expiresAt: day(10)
+        )
+        try repository.upsertAdaptationProposalPayloads([proposalDTO])
+
+        let overlayDTO = AppliedProgramOverlaySyncDTO(
+            metadata: SyncRecordMetadataDTO(
+                stableID: "overlay-sync-1",
+                version: 1,
+                lastModifiedAt: day(4)
+            ),
+            createdAt: day(4),
+            appliedAt: day(4),
+            programRunStableID: "run-sync-1",
+            trainingProgramStableID: "program-sync-1",
+            sourceProposalStableID: "proposal-sync-1",
+            effectiveWeekStart: 2,
+            effectiveWeekEnd: 2,
+            overlayStatusRawValue: OverlayStatus.active.rawValue,
+            appliedByUserConfirmation: true,
+            adjustmentReasonRawValue: AdjustmentReason.topSetBeatTarget.rawValue,
+            summaryText: "Applied progression",
+            adjustments: [
+                AppliedOverlayAdjustmentSyncDTO(
+                    metadata: SyncRecordMetadataDTO(
+                        stableID: "adjustment-sync-1",
+                        version: 1,
+                        lastModifiedAt: day(4)
+                    ),
+                    sequence: 0,
+                    targetProgramSessionExerciseStableID: UUID().uuidString,
+                    targetWeekNumber: 2,
+                    targetSessionNumber: 1,
+                    adjustmentTypeRawValue: OverlayAdjustmentType.load.rawValue,
+                    loadPercentDelta: 2.5,
+                    absolutePrescribedWeight: nil,
+                    setDelta: nil,
+                    absoluteTargetSets: nil,
+                    repDelta: nil,
+                    absoluteTargetReps: nil,
+                    replacementExerciseName: nil,
+                    adjustmentReasonRawValue: AdjustmentReason.topSetBeatTarget.rawValue,
+                    isAutoApplied: false
+                )
+            ]
+        )
+        try repository.upsertAppliedOverlayPayloads([overlayDTO])
+
+        let proposals = try fetchAll(AdaptationProposal.self, context)
+        let overlays = try fetchAll(AppliedProgramOverlay.self, context)
+        let adjustments = try fetchAll(AppliedOverlayAdjustment.self, context)
+
+        #expect(proposals.count == 1)
+        #expect(proposals[0].programRun?.id == runs[0].id)
+        #expect(proposals[0].trainingProgram?.id == programs[0].id)
+        #expect(proposals[0].sourceAnalysis?.id == analysis.id)
+
+        #expect(overlays.count == 1)
+        #expect(overlays[0].programRun?.id == runs[0].id)
+        #expect(overlays[0].trainingProgram?.id == programs[0].id)
+        #expect(overlays[0].sourceProposal?.id == proposals[0].id)
+        #expect(adjustments.count == 1)
+        #expect(adjustments[0].overlay?.id == overlays[0].id)
+    }
+
+    @Test func localSyncRepositoryUpsertsCoachAndHealthKitRows() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let repository = LocalSyncRepository(modelContext: context)
+
+        let program = TrainingProgram(
+            id: UUID(uuidString: "D0000000-0000-0000-0000-000000000001")!,
+            syncStableID: "program-sync-coach",
+            syncVersion: 1,
+            syncLastModifiedAt: day(0),
+            name: "Coach Program",
+            lengthInWeeks: 4,
+            sessionsPerWeek: 3,
+            createdDate: day(0)
+        )
+        context.insert(program)
+
+        let run = ProgramRun(
+            id: UUID(uuidString: "D0000000-0000-0000-0000-000000000002")!,
+            syncStableID: "run-sync-coach",
+            syncVersion: 1,
+            syncLastModifiedAt: day(0),
+            startDate: day(0)
+        )
+        run.program = program
+        context.insert(run)
+        try context.save()
+
+        try repository.upsertDailyCheckInPayloads([
+            DailyCoachCheckInSyncDTO(
+                metadata: SyncRecordMetadataDTO(
+                    stableID: "checkin-sync-1",
+                    version: 1,
+                    lastModifiedAt: day(1)
+                ),
+                date: day(1),
+                dayStart: day(1),
+                sleepQuality: 4,
+                soreness: 2,
+                energy: 4,
+                stress: 2,
+                availableTimeMinutes: 50,
+                hasPainOrDiscomfort: false,
+                painNotes: nil,
+                programRunStableID: "run-sync-coach",
+                createdAt: day(1),
+                updatedAt: day(1)
+            )
+        ])
+        try repository.upsertWeeklyReviewPayloads([
+            DailyCoachWeeklyReviewSyncDTO(
+                metadata: SyncRecordMetadataDTO(
+                    stableID: "review-sync-1",
+                    version: 1,
+                    lastModifiedAt: day(2)
+                ),
+                weekStart: day(0),
+                weekEnd: day(6),
+                isProgramWeek: true,
+                programRunStableID: "run-sync-coach",
+                headline: "Solid week",
+                winText: "Bench moved well",
+                watchoutText: "Sleep slipped",
+                nextActionText: "Keep recovery steady",
+                sourceWeeklyAnalysisIDText: nil,
+                hasBeenSeen: false,
+                createdAt: day(2)
+            )
+        ])
+        try repository.upsertHealthKitSummaryPayloads([
+            HealthKitDailySummarySyncDTO(
+                metadata: SyncRecordMetadataDTO(
+                    stableID: "health-sync-1",
+                    version: 1,
+                    lastModifiedAt: day(3)
+                ),
+                dayStart: day(1),
+                sleepDurationSeconds: 28_000,
+                timeInBedSeconds: 30_000,
+                restingHeartRateBPM: 55,
+                heartRateVariabilityMS: 48,
+                activeEnergyKilocalories: 620,
+                stepCount: 9_500,
+                bodyMassKilograms: 84.5,
+                sourceUpdatedAt: day(3),
+                createdAt: day(3),
+                updatedAt: day(3)
+            )
+        ])
+
+        let checkIns = try fetchAll(DailyCoachCheckIn.self, context)
+        let reviews = try fetchAll(DailyCoachWeeklyReview.self, context)
+        let healthSummaries = try fetchAll(HealthKitDailySummary.self, context)
+
+        #expect(checkIns.count == 1)
+        #expect(checkIns[0].programRun?.id == run.id)
+        #expect(reviews.count == 1)
+        #expect(reviews[0].programRun?.id == run.id)
+        #expect(healthSummaries.count == 1)
+        #expect(healthSummaries[0].restingHeartRateBPM == 55)
+
+        let since = try repository.fetchHealthKitSummaryPayloads(since: day(2))
+        #expect(since.count == 1)
+        #expect(since[0].metadata.stableID == "health-sync-1")
+    }
+
     // MARK: - Helpers
 
     private func makeInMemoryContainer() throws -> ModelContainer {
@@ -403,5 +667,9 @@ struct Feature10SyncFoundationValidationTests {
     private func day(_ offset: Int) -> Date {
         let base = Date(timeIntervalSince1970: 1_765_000_000)
         return Calendar(identifier: .gregorian).date(byAdding: .day, value: offset, to: base) ?? base
+    }
+
+    private func fetchAll<T: PersistentModel>(_ type: T.Type, _ context: ModelContext) throws -> [T] {
+        try context.fetch(FetchDescriptor<T>())
     }
 }

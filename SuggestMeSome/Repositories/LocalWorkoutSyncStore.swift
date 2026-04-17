@@ -1,0 +1,119 @@
+import Foundation
+import SwiftData
+
+@MainActor
+struct LocalWorkoutSyncStore {
+    let context: LocalSyncStoreContext
+
+    func fetchWorkoutPayloads(
+        since: Date?,
+        includeDeleted: Bool
+    ) throws -> [WorkoutSyncDTO] {
+        let workouts = try context.fetchRows(Workout.self)
+            .filter { includeDeleted || $0.syncDeletedAt == nil }
+        return context.filteredBySince(workouts, since: since)
+            .sorted { $0.date > $1.date }
+            .map { $0.toSyncDTO() }
+    }
+
+    func upsertWorkoutPayloads(_ payloads: [WorkoutSyncDTO]) throws {
+        guard !payloads.isEmpty else { return }
+
+        var existingWorkouts = try context.stableIDMap(for: Workout.self)
+        let programRuns = try context.stableIDMap(for: ProgramRun.self)
+
+        for payload in payloads {
+            let programRun = payload.programRunStableID.flatMap { programRuns[$0] }
+            if let existing = existingWorkouts[payload.metadata.stableID] {
+                existing.apply(syncDTO: payload, programRun: programRun)
+                try upsertExerciseEntries(payload.exerciseEntries, into: existing)
+            } else {
+                let workout = Workout.fromSyncDTO(payload, programRun: programRun)
+                context.modelContext.insert(workout)
+                insertExerciseGraph(for: workout)
+                existingWorkouts[payload.metadata.stableID] = workout
+            }
+        }
+
+        try context.save()
+    }
+
+    func markWorkoutDeleted(stableID: String, deletedAt: Date) throws {
+        let workouts = try context.fetchRows(Workout.self)
+        guard let workout = workouts.first(where: { $0.resolvedSyncStableID == stableID }) else { return }
+        workout.markSyncDeleted(at: deletedAt)
+        try context.save()
+    }
+
+    private func insertExerciseGraph(for workout: Workout) {
+        for entry in workout.exerciseEntries {
+            entry.workout = workout
+            context.modelContext.insert(entry)
+            for set in entry.sets {
+                set.exerciseEntry = entry
+                context.modelContext.insert(set)
+            }
+        }
+    }
+
+    private func upsertExerciseEntries(
+        _ payloads: [ExerciseEntrySyncDTO],
+        into workout: Workout
+    ) throws {
+        var existingByID: [String: ExerciseEntry] = [:]
+        for entry in workout.exerciseEntries {
+            entry.initializeSyncMetadataIfNeeded()
+            existingByID[entry.resolvedSyncStableID] = entry
+        }
+
+        var incomingIDs: Set<String> = []
+        for payload in payloads {
+            incomingIDs.insert(payload.metadata.stableID)
+            if let existing = existingByID[payload.metadata.stableID] {
+                existing.apply(syncDTO: payload)
+                existing.workout = workout
+                try upsertSets(payload.sets, into: existing)
+            } else {
+                let entry = ExerciseEntry.fromSyncDTO(payload)
+                entry.workout = workout
+                context.modelContext.insert(entry)
+                for set in entry.sets {
+                    set.exerciseEntry = entry
+                    context.modelContext.insert(set)
+                }
+            }
+        }
+
+        for stale in workout.exerciseEntries where !incomingIDs.contains(stale.resolvedSyncStableID) {
+            context.modelContext.delete(stale)
+        }
+    }
+
+    private func upsertSets(
+        _ payloads: [SetEntrySyncDTO],
+        into entry: ExerciseEntry
+    ) throws {
+        var existingByID: [String: SetEntry] = [:]
+        for set in entry.sets {
+            set.initializeSyncMetadataIfNeeded()
+            existingByID[set.resolvedSyncStableID] = set
+        }
+
+        var incomingIDs: Set<String> = []
+        for payload in payloads {
+            incomingIDs.insert(payload.metadata.stableID)
+            if let existing = existingByID[payload.metadata.stableID] {
+                existing.apply(syncDTO: payload)
+                existing.exerciseEntry = entry
+            } else {
+                let set = SetEntry.fromSyncDTO(payload)
+                set.exerciseEntry = entry
+                context.modelContext.insert(set)
+            }
+        }
+
+        for stale in entry.sets where !incomingIDs.contains(stale.resolvedSyncStableID) {
+            context.modelContext.delete(stale)
+        }
+    }
+}
