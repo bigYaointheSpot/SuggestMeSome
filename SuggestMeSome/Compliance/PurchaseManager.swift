@@ -19,6 +19,10 @@ final class PurchaseManager {
     static let shared = PurchaseManager()
 
     private static let entitlementCacheKey = "purchase.entitlement.state.v1"
+#if DEBUG
+    private static let debugPremiumOverrideKey = "purchase.entitlement.debug.override.v1"
+    private static let debugPremiumOverrideStatusMessage = "Developer premium override is active on this debug build."
+#endif
 
     private let userDefaults: UserDefaults
     private let productID: String
@@ -37,6 +41,10 @@ final class PurchaseManager {
     var premiumProduct: Product?
 #endif
 
+#if DEBUG
+    var debugPremiumOverrideEnabled: Bool
+#endif
+
     init(
         userDefaults: UserDefaults = .standard,
         productID: String? = nil,
@@ -44,12 +52,22 @@ final class PurchaseManager {
     ) {
         self.userDefaults = userDefaults
         self.productID = productID ?? ComplianceConfiguration.premiumUnlockProductID
+#if DEBUG
+        self.debugPremiumOverrideEnabled = userDefaults.bool(forKey: Self.debugPremiumOverrideKey)
+#endif
         if let rawValue = userDefaults.string(forKey: Self.entitlementCacheKey),
            let cached = EntitlementState(rawValue: rawValue) {
             self.entitlementState = cached
         } else {
             self.entitlementState = .free
         }
+
+#if DEBUG
+        if debugPremiumOverrideEnabled {
+            self.entitlementState = .premiumUnlocked
+            self.statusMessage = Self.debugPremiumOverrideStatusMessage
+        }
+#endif
 
 #if canImport(StoreKit)
         if startListeningForTransactions {
@@ -104,12 +122,34 @@ final class PurchaseManager {
             hasUnlockedPremium = true
         }
 
+#if DEBUG
+        if debugPremiumOverrideEnabled {
+            apply(entitlementState: .premiumUnlocked)
+            statusMessage = Self.debugPremiumOverrideStatusMessage
+            lastErrorMessage = nil
+            return
+        }
+#endif
+
         if hasUnlockedPremium {
             apply(entitlementState: .premiumUnlocked)
             statusMessage = "Premium Unlock is active on this device."
-        } else if entitlementState != .premiumUnlocked {
+        } else {
             apply(entitlementState: .free)
+#if DEBUG
+            if statusMessage == Self.debugPremiumOverrideStatusMessage {
+                statusMessage = nil
+            }
+#endif
         }
+#else
+#if DEBUG
+        if debugPremiumOverrideEnabled {
+            apply(entitlementState: .premiumUnlocked)
+            statusMessage = Self.debugPremiumOverrideStatusMessage
+            lastErrorMessage = nil
+        }
+#endif
 #endif
     }
 
@@ -203,11 +243,39 @@ final class PurchaseManager {
         guard case .verified(let transaction) = update else { return }
         guard transaction.productID == productID else { return }
 
+#if DEBUG
+        if debugPremiumOverrideEnabled {
+            apply(entitlementState: .premiumUnlocked)
+            statusMessage = Self.debugPremiumOverrideStatusMessage
+            lastErrorMessage = nil
+            return
+        }
+#endif
+
         if transaction.revocationDate == nil {
             apply(entitlementState: .premiumUnlocked)
             statusMessage = "Premium Unlock is active on this device."
         } else if entitlementState != .premiumUnlocked {
             apply(entitlementState: .free)
+        }
+    }
+#endif
+
+#if DEBUG
+    func setDebugPremiumOverride(_ enabled: Bool) {
+        debugPremiumOverrideEnabled = enabled
+        userDefaults.set(enabled, forKey: Self.debugPremiumOverrideKey)
+        lastErrorMessage = nil
+
+        if enabled {
+            apply(entitlementState: .premiumUnlocked)
+            statusMessage = Self.debugPremiumOverrideStatusMessage
+        } else {
+            statusMessage = "Developer premium override is off for this debug build."
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.refreshEntitlements()
+            }
         }
     }
 #endif

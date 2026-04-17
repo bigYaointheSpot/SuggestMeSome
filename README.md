@@ -2701,7 +2701,7 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ### Feature 13 — Structured Block Payoff Layer
 
-**Status:** In Progress
+**Status:** Complete
 
 ---
 
@@ -2989,7 +2989,11 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
-#### Prompt 13 [Paid App Compliance and Monetization Hardening] — 2026-04-17
+### Feature 14 — Compliance and updates for monetization
+
+**Status:** In Progress
+
+#### Prompt 1 [Paid App Compliance and Monetization Hardening] — 2026-04-17
 
 - Added a paid-app compliance and monetization foundation:
   - introduced a dedicated `Compliance` module with centralized placeholder-backed legal configuration, versioned in-app documents, onboarding acceptance tracking, and a reusable legal/privacy center
@@ -3003,6 +3007,21 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - re-ran the Feature 14 monetization suite plus targeted Feature 8/11/12/13 regression coverage, followed by a full iOS build with the embedded watch target
 
 **Commits:** `feat: add paid compliance and premium gating`, `fix: harden paid compliance messaging and validation`
+
+---
+
+#### Prompt 2 [Offer Code Redemption and Developer Premium Toggle] — 2026-04-17
+
+- Added in-app premium redemption support that stays inside Apple’s purchase flow:
+  - surfaced a `Redeem Offer Code` action on the premium paywall and in Settings so testers and future customers can open Apple’s system redemption sheet directly from the app
+  - refreshed premium status after the redemption sheet closes so a successful code redemption can activate `Premium Unlock` without requiring users to hunt for a separate restore step
+- Added a debug-only premium override for local development builds:
+  - `PurchaseManager` now supports a persistent debug entitlement override that survives app relaunches on Xcode-installed builds without pretending to be a real App Store purchase
+  - Settings now exposes a developer-only toggle that lets local builds switch cleanly between free and premium behavior on device for testing gated flows
+- Added focused validation for:
+  - the debug premium override lifecycle, including persistence across relaunch and clean fallback to the free tier when the override is turned back off
+
+**Commit:** `feat: add premium redemption and debug override`
 
 ---
 

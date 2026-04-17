@@ -7,6 +7,10 @@
 
 import SwiftUI
 
+#if canImport(StoreKit)
+import StoreKit
+#endif
+
 struct LegalDocumentView: View {
     let document: LegalDocumentVersion
 
@@ -336,6 +340,14 @@ struct PaywallView: View {
             }
             .font(.subheadline.weight(.semibold))
 
+#if canImport(StoreKit)
+            OfferCodeRedemptionButton(
+                title: "Redeem Offer Code",
+                systemImage: "ticket"
+            )
+            .font(.subheadline.weight(.semibold))
+#endif
+
             if let statusMessage = purchaseManager.statusMessage {
                 Text(statusMessage)
                     .font(.footnote)
@@ -377,6 +389,36 @@ struct PremiumGateView: View {
         PaywallView(feature: feature)
     }
 }
+
+#if canImport(StoreKit)
+struct OfferCodeRedemptionButton: View {
+    let title: String
+    let systemImage: String
+
+    @Environment(PurchaseManager.self) private var purchaseManager
+    @State private var isShowingOfferCodeRedemption = false
+
+    var body: some View {
+        Button {
+            isShowingOfferCodeRedemption = true
+        } label: {
+            Label(title, systemImage: systemImage)
+        }
+        .offerCodeRedemption(isPresented: $isShowingOfferCodeRedemption) { result in
+            Task { @MainActor in
+                switch result {
+                case .success:
+                    purchaseManager.statusMessage = "Offer code redemption finished. If the code was valid, Premium Unlock will activate shortly."
+                    purchaseManager.lastErrorMessage = nil
+                    await purchaseManager.refreshEntitlements()
+                case .failure:
+                    purchaseManager.lastErrorMessage = "Offer code redemption could not be opened right now."
+                }
+            }
+        }
+    }
+}
+#endif
 
 private struct FeatureGateContainer<Content: View>: View {
     let feature: PremiumFeature

@@ -207,6 +207,28 @@ struct SettingsTab: View {
                 Label("Restore Purchases", systemImage: "arrow.clockwise.circle")
             }
 
+#if canImport(StoreKit)
+            OfferCodeRedemptionButton(
+                title: "Redeem Offer Code",
+                systemImage: "ticket"
+            )
+#endif
+
+#if DEBUG
+            Toggle(
+                isOn: Binding(
+                    get: { purchaseManager.debugPremiumOverrideEnabled },
+                    set: { purchaseManager.setDebugPremiumOverride($0) }
+                )
+            ) {
+                Label("Developer Premium Override", systemImage: "hammer.circle")
+            }
+
+            Text("Debug builds only. Toggle between free and premium on your own Xcode-installed app without affecting release behavior or real App Store purchases.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+#endif
+
             if let statusMessage = purchaseManager.statusMessage {
                 Text(statusMessage)
                     .font(.footnote)

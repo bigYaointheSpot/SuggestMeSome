@@ -98,6 +98,43 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(purchaseManager.isPremiumUnlocked)
     }
 
+#if DEBUG
+    @Test func debugPremiumOverrideCanToggleBetweenFreeAndPremium() async {
+        let suiteName = "Feature14DebugPurchaseManager.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let purchaseManager = PurchaseManager(
+            userDefaults: defaults,
+            startListeningForTransactions: false
+        )
+
+        #expect(!purchaseManager.debugPremiumOverrideEnabled)
+        #expect(purchaseManager.entitlementState == .free)
+
+        purchaseManager.setDebugPremiumOverride(true)
+
+        #expect(purchaseManager.debugPremiumOverrideEnabled)
+        #expect(purchaseManager.entitlementState == .premiumUnlocked)
+        #expect(purchaseManager.isPremiumUnlocked)
+
+        let reloaded = PurchaseManager(
+            userDefaults: defaults,
+            startListeningForTransactions: false
+        )
+
+        #expect(reloaded.debugPremiumOverrideEnabled)
+        #expect(reloaded.entitlementState == .premiumUnlocked)
+
+        reloaded.setDebugPremiumOverride(false)
+        await reloaded.refreshEntitlements()
+
+        #expect(!reloaded.debugPremiumOverrideEnabled)
+        #expect(reloaded.entitlementState == .free)
+        #expect(!reloaded.isPremiumUnlocked)
+    }
+#endif
+
     @Test func legalConfigurationIncludesRequiredDisclosuresAndAppleHealthCopy() {
         #expect(
             ComplianceConfiguration.premiumUnlockDisclosure ==
