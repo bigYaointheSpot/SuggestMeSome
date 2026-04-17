@@ -2991,7 +2991,7 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ### Feature 14 — Compliance and updates for monetization
 
-**Status:** In Progress
+**Status:** Complete
 
 #### Prompt 1 [Paid App Compliance and Monetization Hardening] — 2026-04-17
 
@@ -3075,6 +3075,28 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - updated the `SuggestMeSomeWatch` target build settings so both Debug and Release configurations use the new Watch asset catalog icon
 
 **Commit:** `feat: add watch app icon`
+
+---
+
+#### Prompt 7 [Watch Experience Overhaul] — 2026-04-17
+
+- Rebuilt the active-workout surface around best-in-class watch UX patterns:
+  - replaced the scrolling stack with a horizontal `TabView(.page)` that pages between Session, Current Set, and Rest so each screen carries one focus
+  - added a `TimelineView`-backed live-ticking elapsed clock that reconciles with iPhone snapshots instead of freezing between updates
+  - promoted the focused crown value to a large rounded monospaced numeric and widened the primary action buttons to full-width tinted targets for wrist-tap accuracy
+  - added a positive-tinted gradient background that auto-switches the watch to the Rest page when the local rest timer starts
+- Polished the glanceable surfaces:
+  - tinted the Today Plan header band by readiness tier, bumped card surface opacity for sunlight contrast, hid the connection dot when the iPhone is reachable, and added a halfway-through-rest haptic milestone
+- Added platform-level wins backed by HealthKit and ActivityKit:
+  - `WatchWorkoutSessionController` starts an `HKWorkoutSession` on `workoutLaunch` and ends it on `sessionCompletion` so the watch keeps always-on display, collects heart rate and active energy, and credits the Activity rings
+  - added HealthKit entitlement and usage descriptions to the `SuggestMeSomeWatch` target
+  - `LiveWorkoutActivityAttributes` + `LiveWorkoutActivityController` start a Live Activity on launch, update on every live snapshot, and end on completion so the active workout surfaces on the iPhone Lock Screen and Dynamic Island while the watch stays primary
+  - added `NSSupportsLiveActivities` to the iPhone target; the controller no-ops gracefully until a WidgetKit extension is added via Xcode to render the `ActivityConfiguration` UI
+- Verification:
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'platform=watchOS Simulator'`
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator'`
+
+**Commits:** `feat: page active workout and live-tick elapsed time`, `feat: polish watch visuals with haptics and tint`, `refactor: tint rest countdown positive green`, `feat: back watch workouts with HKWorkoutSession`, `feat: start iphone live activity alongside watch bridge`
 
 ---
 
