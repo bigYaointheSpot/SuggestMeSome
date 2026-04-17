@@ -4,21 +4,14 @@ struct SuggestMeSomeWorkoutPrescriptionService {
     let personalRecordLookupService: SuggestMeSomePersonalRecordLookupService
     let timeBudgetService: SuggestMeSomeTimeBudgetService
 
-    // MARK: - Rep range
-
-    private func repRange(for intensity: Int) -> ClosedRange<Int> {
-        switch intensity {
-        case 1: return 10...12
-        case 2: return 8...10
-        case 3: return 6...8
-        case 4: return 4...6
-        case 5: return 3...5
-        default: return 8...10
-        }
-    }
-
-    private func targetReps(for intensity: Int) -> Int {
-        Int.random(in: repRange(for: intensity))
+    private struct StrengthPrescriptionProfile {
+        let style: SuggestMeSomePrescriptionStyle
+        let workingSetCount: Int
+        let workingReps: Int
+        let backoffReps: Int
+        let topSetWeightScale: Double
+        let straightSetWeightScales: [Double]
+        let usesTopSetBackoff: Bool
     }
 
     // MARK: - Goal-aware configuration
@@ -50,11 +43,108 @@ struct SuggestMeSomeWorkoutPrescriptionService {
     }
 
     /// Number of working sets to prescribe given the goal.
-    private func workingSetCount(for goal: SuggestMeSomeGenerationGoal?) -> Int {
+    private func prescriptionProfile(
+        for exercise: Exercise,
+        intensity: Int,
+        goal: SuggestMeSomeGenerationGoal?,
+        style: SuggestMeSomePrescriptionStyle?
+    ) -> StrengthPrescriptionProfile {
+        let resolvedStyle = style ?? defaultStyle(for: goal, exercise: exercise)
+
+        switch resolvedStyle {
+        case .strengthTopSetBackoff:
+            let topReps: Int
+            switch intensity {
+            case 5: topReps = 3
+            case 4: topReps = 4
+            default: topReps = 5
+            }
+            return StrengthPrescriptionProfile(
+                style: resolvedStyle,
+                workingSetCount: exercise.exerciseType == .compound ? 4 : 3,
+                workingReps: topReps,
+                backoffReps: topReps + 2,
+                topSetWeightScale: 0.74 + Double(intensity) * 0.045,
+                straightSetWeightScales: [0.92, 0.89, 0.87],
+                usesTopSetBackoff: true
+            )
+        case .strengthStraightSets:
+            let reps = intensity >= 4 ? 5 : 6
+            return StrengthPrescriptionProfile(
+                style: resolvedStyle,
+                workingSetCount: exercise.exerciseType == .compound ? 4 : 3,
+                workingReps: reps,
+                backoffReps: reps,
+                topSetWeightScale: 0.72 + Double(intensity) * 0.04,
+                straightSetWeightScales: [0.94, 0.97, 1.0, 1.0],
+                usesTopSetBackoff: false
+            )
+        case .hypertrophyDoubleProgression:
+            let reps: Int
+            switch intensity {
+            case 1: reps = 12
+            case 2: reps = 10
+            case 3: reps = 8
+            case 4: reps = 8
+            default: reps = 6
+            }
+            return StrengthPrescriptionProfile(
+                style: resolvedStyle,
+                workingSetCount: exercise.exerciseType == .compound ? 4 : 3,
+                workingReps: reps,
+                backoffReps: reps,
+                topSetWeightScale: 0.66 + Double(intensity) * 0.035,
+                straightSetWeightScales: [0.95, 0.97, 1.0, 1.0],
+                usesTopSetBackoff: false
+            )
+        case .recoveryTechnique:
+            return StrengthPrescriptionProfile(
+                style: resolvedStyle,
+                workingSetCount: 2,
+                workingReps: 10,
+                backoffReps: 10,
+                topSetWeightScale: 0.62,
+                straightSetWeightScales: [0.96, 1.0],
+                usesTopSetBackoff: false
+            )
+        case .conditioningIntervals:
+            return StrengthPrescriptionProfile(
+                style: resolvedStyle,
+                workingSetCount: exercise.exerciseType == .compound ? 3 : 2,
+                workingReps: 12,
+                backoffReps: 12,
+                topSetWeightScale: 0.68,
+                straightSetWeightScales: [0.96, 1.0, 1.0],
+                usesTopSetBackoff: false
+            )
+        case .cardioSteadyState:
+            return StrengthPrescriptionProfile(
+                style: .hypertrophyDoubleProgression,
+                workingSetCount: exercise.exerciseType == .compound ? 3 : 2,
+                workingReps: 8,
+                backoffReps: 8,
+                topSetWeightScale: 0.70,
+                straightSetWeightScales: [0.95, 1.0, 1.0],
+                usesTopSetBackoff: false
+            )
+        }
+    }
+
+    private func defaultStyle(
+        for goal: SuggestMeSomeGenerationGoal?,
+        exercise: Exercise
+    ) -> SuggestMeSomePrescriptionStyle {
         switch goal {
-        case .recovery: return 2
-        case .conditioning: return 3
-        default: return 4
+        case .strength:
+            return exercise.exerciseType == .compound ? .strengthTopSetBackoff : .strengthStraightSets
+        case .hypertrophy:
+            return .hypertrophyDoubleProgression
+        case .recovery:
+            return .recoveryTechnique
+        case .conditioning, .fatLoss:
+            return .conditioningIntervals
+        case .generalFitness, nil:
+            return .hypertrophyDoubleProgression
         }
     }
 
@@ -63,12 +153,19 @@ struct SuggestMeSomeWorkoutPrescriptionService {
     func prescribeStrengthExercise(
         _ exercise: Exercise,
         intensity: Int,
-        goal: SuggestMeSomeGenerationGoal? = nil
+        goal: SuggestMeSomeGenerationGoal? = nil,
+        prescriptionStyle: SuggestMeSomePrescriptionStyle? = nil
     ) -> GeneratedExercise {
-        let reps = targetReps(for: intensity)
+        let profile = prescriptionProfile(
+            for: exercise,
+            intensity: intensity,
+            goal: goal,
+            style: prescriptionStyle
+        )
+        let reps = profile.workingReps
         let factor = loadFactor(for: goal)
         let skipWarmups = shouldSkipWarmups(for: exercise, goal: goal)
-        let workingSets = workingSetCount(for: goal)
+        let workingSetCount = profile.workingSetCount
 
         let sets: [GeneratedSet]
 
@@ -76,54 +173,49 @@ struct SuggestMeSomeWorkoutPrescriptionService {
             for: exercise,
             repCount: reps
         ) {
-            // Apply intensity scaling and goal-aware load factor
-            let heavyWorkingWeight = baseWeight * (0.75 + Double(intensity) * 0.04) * factor
+            let heavyWorkingWeight = baseWeight * profile.topSetWeightScale * factor
 
             if skipWarmups {
-                sets = (1...workingSets).map { i in
-                    GeneratedSet(
-                        setNumber: i,
-                        isWarmup: false,
-                        suggestedReps: reps,
-                        suggestedWeight: heavyWorkingWeight * workingPercentage(setIndex: i, totalSets: workingSets),
-                        unit: unit
-                    )
-                }
+                sets = workingSets(
+                    profile: profile,
+                    workingSets: workingSetCount,
+                    topWeight: heavyWorkingWeight,
+                    unit: unit
+                )
             } else {
                 let warmupPercentages: [Double] = [0.40, 0.55, 0.70]
                 let warmups = warmupPercentages.enumerated().map { i, pct in
                     GeneratedSet(
                         setNumber: i + 1,
                         isWarmup: true,
-                        suggestedReps: reps,
+                        suggestedReps: profile.style == .strengthTopSetBackoff ? max(3, reps - 1) : reps,
                         suggestedWeight: heavyWorkingWeight * pct,
                         unit: unit
                     )
                 }
-                let working = (1...workingSets).map { i in
-                    GeneratedSet(
-                        setNumber: i,
-                        isWarmup: false,
-                        suggestedReps: reps,
-                        suggestedWeight: heavyWorkingWeight * workingPercentage(setIndex: i, totalSets: workingSets),
-                        unit: unit
-                    )
-                }
+                let working = workingSets(
+                    profile: profile,
+                    workingSets: workingSetCount,
+                    topWeight: heavyWorkingWeight,
+                    unit: unit
+                )
                 sets = warmups + working
             }
         } else {
             // No usable PR data — emit nil-weight sets
             if skipWarmups {
-                sets = (1...workingSets).map { i in
-                    GeneratedSet(setNumber: i, isWarmup: false, suggestedReps: reps, suggestedWeight: nil, unit: .lbs)
-                }
+                sets = nilWeightWorkingSets(profile: profile, workingSets: workingSetCount)
             } else {
                 let warmups = (1...3).map { i in
-                    GeneratedSet(setNumber: i, isWarmup: true, suggestedReps: reps, suggestedWeight: nil, unit: .lbs)
+                    GeneratedSet(
+                        setNumber: i,
+                        isWarmup: true,
+                        suggestedReps: profile.style == .strengthTopSetBackoff ? max(3, reps - 1) : reps,
+                        suggestedWeight: nil,
+                        unit: .lbs
+                    )
                 }
-                let working = (1...workingSets).map { i in
-                    GeneratedSet(setNumber: i, isWarmup: false, suggestedReps: reps, suggestedWeight: nil, unit: .lbs)
-                }
+                let working = nilWeightWorkingSets(profile: profile, workingSets: workingSetCount)
                 sets = warmups + working
             }
         }
@@ -135,16 +227,97 @@ struct SuggestMeSomeWorkoutPrescriptionService {
         )
     }
 
-    func prescribeCardioExercise(_ exercise: Exercise, durationMinutes: Double) -> GeneratedExercise {
+    func prescribeCardioExercise(
+        _ exercise: Exercise,
+        durationMinutes: Double,
+        prescriptionStyle: SuggestMeSomePrescriptionStyle = .cardioSteadyState
+    ) -> GeneratedExercise {
         GeneratedExercise(exercise: exercise, sets: [], effectiveTimeMinutes: durationMinutes)
     }
 
     // MARK: - Helpers
 
-    /// Ramping working-set percentages: starts at 85% and climbs to 100% over the set count.
-    private func workingPercentage(setIndex: Int, totalSets: Int) -> Double {
-        guard totalSets > 1 else { return 1.0 }
-        let step = 0.15 / Double(totalSets - 1)
-        return 0.85 + step * Double(setIndex - 1)
+    private func workingSets(
+        profile: StrengthPrescriptionProfile,
+        workingSets: Int,
+        topWeight: Double,
+        unit: WeightUnit
+    ) -> [GeneratedSet] {
+        if profile.usesTopSetBackoff {
+            var sets: [GeneratedSet] = [
+                GeneratedSet(
+                    setNumber: 1,
+                    isWarmup: false,
+                    suggestedReps: profile.workingReps,
+                    suggestedWeight: topWeight,
+                    unit: unit
+                )
+            ]
+            let backoffCount = max(0, workingSets - 1)
+            for index in 0..<backoffCount {
+                let scale = profile.straightSetWeightScales[min(index, profile.straightSetWeightScales.count - 1)]
+                sets.append(
+                    GeneratedSet(
+                        setNumber: index + 2,
+                        isWarmup: false,
+                        suggestedReps: profile.backoffReps,
+                        suggestedWeight: topWeight * scale,
+                        unit: unit
+                    )
+                )
+            }
+            return sets
+        }
+
+        return (0..<workingSets).map { index in
+            let scale = profile.straightSetWeightScales[min(index, profile.straightSetWeightScales.count - 1)]
+            return GeneratedSet(
+                setNumber: index + 1,
+                isWarmup: false,
+                suggestedReps: profile.workingReps,
+                suggestedWeight: topWeight * scale,
+                unit: unit
+            )
+        }
+    }
+
+    private func nilWeightWorkingSets(
+        profile: StrengthPrescriptionProfile,
+        workingSets: Int
+    ) -> [GeneratedSet] {
+        if profile.usesTopSetBackoff {
+            var sets: [GeneratedSet] = [
+                GeneratedSet(
+                    setNumber: 1,
+                    isWarmup: false,
+                    suggestedReps: profile.workingReps,
+                    suggestedWeight: nil,
+                    unit: .lbs
+                )
+            ]
+            let backoffCount = max(0, workingSets - 1)
+            for index in 0..<backoffCount {
+                sets.append(
+                    GeneratedSet(
+                        setNumber: index + 2,
+                        isWarmup: false,
+                        suggestedReps: profile.backoffReps,
+                        suggestedWeight: nil,
+                        unit: .lbs
+                    )
+                )
+            }
+            return sets
+        }
+
+        return (1...workingSets).map { index in
+            GeneratedSet(
+                setNumber: index,
+                isWarmup: false,
+                suggestedReps: profile.workingReps,
+                suggestedWeight: nil,
+                unit: .lbs
+            )
+        }
     }
 }

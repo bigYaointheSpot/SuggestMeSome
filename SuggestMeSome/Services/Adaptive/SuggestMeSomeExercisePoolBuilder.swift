@@ -39,4 +39,12 @@ struct SuggestMeSomeExercisePoolBuilder {
         let allGroups = (try? context.fetch(descriptor)) ?? []
         return allGroups.filter { $0.name.lowercased() != "cardio" }
     }
+
+    func fetchAllCardioExercises() -> [Exercise] {
+        let descriptor = FetchDescriptor<MuscleGroup>()
+        let allGroups = (try? context.fetch(descriptor)) ?? []
+        return allGroups
+            .filter { $0.name.lowercased() == "cardio" }
+            .flatMap(\.exercises)
+    }
 }

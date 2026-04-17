@@ -24,6 +24,15 @@ struct SuggestMeSomeRecommendationService {
         )
         let recentWorkouts = snapshot.recentWorkouts
         let activeRun = snapshot.activeRun
+        let adaptiveEngine = AdaptiveTrainingStateEngine(context: context)
+        let trainingState = adaptiveEngine.buildSnapshot(
+            sessionsPerWeek: activeRun?.program?.sessionsPerWeek,
+            activeRunOverride: activeRun
+        )
+        let dailyProgramContext = adaptiveEngine.buildDailyProgramContext(
+            snapshot: trainingState,
+            activeRunOverride: activeRun
+        )
 
         // Pain/discomfort is the highest-priority override — it forces recovery mode and
         // caps intensity to 1 regardless of all other signals.
@@ -68,6 +77,7 @@ struct SuggestMeSomeRecommendationService {
             || (overlapCount >= 2 && adjustedIntensity >= 4)
             || !blockedLifts.isEmpty
             || programConflict.hasConflict
+            || dailyProgramContext.interferenceScore >= 0.70
 
         let finalMode = adjustedMode(
             baseMode: painForced ? .recovery : resolvedMode,
@@ -114,7 +124,9 @@ struct SuggestMeSomeRecommendationService {
             selectedExercises: selectedExercises,
             goal: finalGoal,
             equipmentProfile: configuration.equipmentProfile,
-            sessionMode: finalMode
+            sessionMode: finalMode,
+            activeProgramContext: dailyProgramContext,
+            stateSnapshotOverride: trainingState
         ) : nil
 
         let chips = buildReasonChips(
@@ -126,7 +138,8 @@ struct SuggestMeSomeRecommendationService {
             blockedLifts: blockedLifts,
             overlapCount: overlapCount,
             hasProgramConflict: programConflict.hasConflict,
-            coachContext: coachContext
+            coachContext: coachContext,
+            dailyProgramContext: dailyProgramContext
         )
         let continuitySummary = buildContinuitySummary(
             recentWorkouts: recentWorkouts,
@@ -136,7 +149,8 @@ struct SuggestMeSomeRecommendationService {
             equipmentProfile: configuration.equipmentProfile,
             overlapCount: overlapCount,
             blockedLifts: blockedLifts,
-            coachContext: coachContext
+            coachContext: coachContext,
+            dailyProgramContext: dailyProgramContext
         )
         let nextActionGuidance = buildNextActionGuidance(
             finalMode: finalMode,
@@ -155,7 +169,8 @@ struct SuggestMeSomeRecommendationService {
                 hasProgramConflict: programConflict.hasConflict,
                 durationMinutes: configuration.durationMinutes,
                 buildable: buildable,
-                coachContext: coachContext
+                coachContext: coachContext,
+                dailyProgramContext: dailyProgramContext
             ),
             rationale: rationaleText(
                 configuredMode: configuration.mode,
@@ -166,7 +181,8 @@ struct SuggestMeSomeRecommendationService {
                 blockedLifts: blockedLifts,
                 overlapCount: overlapCount,
                 programConflictReason: programConflict.reason,
-                coachContext: coachContext
+                coachContext: coachContext,
+                dailyProgramContext: dailyProgramContext
             ),
             reasonChips: chips,
             wasRedirected: finalMode != configuration.mode,
@@ -826,7 +842,8 @@ struct SuggestMeSomeRecommendationService {
         hasProgramConflict: Bool,
         durationMinutes: Int,
         buildable: Bool,
-        coachContext: SuggestMeSomeCoachContext? = nil
+        coachContext: SuggestMeSomeCoachContext? = nil,
+        dailyProgramContext: DailyProgramContext? = nil
     ) -> String {
         guard buildable else {
             return "Increase the duration to at least 20 minutes to build a session from this recommendation."
@@ -881,6 +898,10 @@ struct SuggestMeSomeRecommendationService {
             parts.append("This recommendation avoids redundant overlap with your active training program.")
         }
 
+        if let dailyProgramContext, dailyProgramContext.shouldSupportActiveProgram, let nextSessionName = dailyProgramContext.nextSessionName {
+            parts.append("Today's session is also shaped to support your active program's next planned session: \(nextSessionName).")
+        }
+
         if parts.isEmpty {
             switch mode {
             case .recovery:
@@ -916,7 +937,8 @@ struct SuggestMeSomeRecommendationService {
         blockedLifts: Set<CanonicalLift>,
         overlapCount: Int,
         programConflictReason: String?,
-        coachContext: SuggestMeSomeCoachContext? = nil
+        coachContext: SuggestMeSomeCoachContext? = nil,
+        dailyProgramContext: DailyProgramContext? = nil
     ) -> String {
         var reasons: [String] = []
 
@@ -937,6 +959,15 @@ struct SuggestMeSomeRecommendationService {
 
         if let programConflictReason {
             reasons.append(programConflictReason)
+        }
+
+        if let dailyProgramContext, dailyProgramContext.shouldSupportActiveProgram {
+            if let nextSessionName = dailyProgramContext.nextSessionName {
+                reasons.append("Generation request carries active-program context so the built workout can avoid interfering with \(nextSessionName).")
+            }
+            if !dailyProgramContext.missedMovementFamilies.isEmpty {
+                reasons.append("Missed movement families from the active program are available as secondary fill targets when load tolerance allows.")
+            }
         }
 
         if let ctx = coachContext {
@@ -990,7 +1021,8 @@ struct SuggestMeSomeRecommendationService {
         blockedLifts: Set<CanonicalLift>,
         overlapCount: Int,
         hasProgramConflict: Bool,
-        coachContext: SuggestMeSomeCoachContext? = nil
+        coachContext: SuggestMeSomeCoachContext? = nil,
+        dailyProgramContext: DailyProgramContext? = nil
     ) -> [String] {
         var chips: [String] = []
 
@@ -1012,6 +1044,9 @@ struct SuggestMeSomeRecommendationService {
 
         if hasProgramConflict {
             chips.append("Program-aware")
+        }
+        if dailyProgramContext?.shouldSupportActiveProgram == true {
+            chips.append("Program support")
         }
 
         // Coach context chips — each one maps to an explicit decision factor.
@@ -1061,7 +1096,8 @@ struct SuggestMeSomeRecommendationService {
         equipmentProfile: SuggestMeSomeEquipmentProfile,
         overlapCount: Int,
         blockedLifts: Set<CanonicalLift>,
-        coachContext: SuggestMeSomeCoachContext?
+        coachContext: SuggestMeSomeCoachContext?,
+        dailyProgramContext: DailyProgramContext? = nil
     ) -> String {
         let latestStandalone = recentWorkouts.first(where: { $0.programRun == nil })
         let hoursSince = latestStandalone.map { max(0, Int(Date().timeIntervalSince($0.date) / 3600)) }
@@ -1069,6 +1105,9 @@ struct SuggestMeSomeRecommendationService {
 
         if activeRun != nil {
             parts.append("Active program context is present; SuggestMeSome is following that broader training continuity.")
+            if let nextSessionName = dailyProgramContext?.nextSessionName {
+                parts.append("The next planned session is \(nextSessionName), so today is shaped around that handoff.")
+            }
         } else if let hoursSince {
             let timeLabel: String
             if hoursSince < 24 {
