@@ -9,7 +9,9 @@ import SwiftUI
 import SwiftData
 
 struct PersonalRecordsView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \PersonalRecord.exerciseName) private var records: [PersonalRecord]
+    @State private var showingClearAllConfirmation = false
 
     /// Records grouped by exercise name, each group sorted by rep count ascending.
     var grouped: [(exerciseName: String, records: [PersonalRecord])] {
@@ -42,6 +44,27 @@ struct PersonalRecordsView: View {
         }
         .navigationTitle("Personal Records")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            if !records.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Wipe PR Data", role: .destructive) {
+                        showingClearAllConfirmation = true
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            "Wipe All PR Data?",
+            isPresented: $showingClearAllConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Wipe PR Data", role: .destructive) {
+                try? PersonalRecordMaintenanceService.clearAllPRData(context: modelContext)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all personal record rows and clears the PR markers on saved sets.")
+        }
     }
 }
 

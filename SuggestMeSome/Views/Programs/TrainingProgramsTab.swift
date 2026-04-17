@@ -166,6 +166,7 @@ struct ProgramRunExpandableRow: View {
     @State private var selectedWeek = 1
     @State private var expandedSessions: Set<Int> = []
     @State private var showingEndConfirmation = false
+    @State private var showingDeleteHistoryConfirmation = false
 
     private var runWorkouts: [Workout] {
         TrainingContextQueryService.runScopedWorkouts(for: run, in: allWorkouts)
@@ -221,6 +222,14 @@ struct ProgramRunExpandableRow: View {
         } message: {
             Text("This will mark the program as completed.")
         }
+        .confirmationDialog("Delete Program History?", isPresented: $showingDeleteHistoryConfirmation, titleVisibility: .visible) {
+            Button("Delete from History", role: .destructive) {
+                try? TrainingHistoryDeletionService.deleteProgramRunHistory(run, context: modelContext)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the completed run, its linked workouts, and its adaptive history. Personal records will be rebuilt from any remaining workouts.")
+        }
     }
 
     // MARK: Row Header
@@ -260,6 +269,8 @@ struct ProgramRunExpandableRow: View {
             if run.isCompleted {
                 Divider()
                 blockReviewRow
+                Divider()
+                deleteHistoryRow
             }
             if !run.isCompleted {
                 Divider()
@@ -445,6 +456,23 @@ struct ProgramRunExpandableRow: View {
             showingEndConfirmation = true
         } label: {
             Text("End Program")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(Color(.secondarySystemBackground))
+    }
+
+    // MARK: Delete History Row
+
+    private var deleteHistoryRow: some View {
+        Button {
+            showingDeleteHistoryConfirmation = true
+        } label: {
+            Text("Delete from History")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.red)
                 .frame(maxWidth: .infinity)

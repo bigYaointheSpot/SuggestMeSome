@@ -283,64 +283,16 @@ struct SettingsTab: View {
     // MARK: - Data deletion
 
     private func deleteAllData() {
-        for workout in allWorkouts { modelContext.delete(workout) }
-        let allPRs = (try? modelContext.fetch(FetchDescriptor<PersonalRecord>())) ?? []
-        for pr in allPRs { modelContext.delete(pr) }
-        try? modelContext.save()
+        try? PersonalRecordMaintenanceService.deleteWorkouts(allWorkouts, context: modelContext)
+        try? PersonalRecordMaintenanceService.clearAllPRData(context: modelContext)
     }
 
     private func deleteWorkoutsInRange(from start: Date, to end: Date) {
         let dayStart = Calendar.current.startOfDay(for: start)
         let dayEnd   = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: end)!
 
-        let targets      = allWorkouts.filter { $0.date >= dayStart && $0.date <= dayEnd }
-        let affectedNames = Set(targets.flatMap { $0.exerciseEntries.map(\.exerciseName) })
-
-        for workout in targets { modelContext.delete(workout) }
-        try? modelContext.save()
-
-        if !affectedNames.isEmpty {
-            recomputePRs(for: affectedNames)
-            try? modelContext.save()
-        }
-    }
-
-    private func recomputePRs(for exerciseNames: Set<String>) {
-        let existingPRs = (try? modelContext.fetch(FetchDescriptor<PersonalRecord>())) ?? []
-        for pr in existingPRs where exerciseNames.contains(pr.exerciseName) {
-            modelContext.delete(pr)
-        }
-
-        let remaining = (try? modelContext.fetch(FetchDescriptor<Workout>())) ?? []
-
-        struct PRKey: Hashable { let name: String; let reps: Int }
-        typealias Candidate = (weight: Double, unit: WeightUnit, date: Date, set: SetEntry)
-        var best: [PRKey: Candidate] = [:]
-
-        for workout in remaining {
-            for entry in workout.exerciseEntries {
-                guard exerciseNames.contains(entry.exerciseName) else { continue }
-                for set in entry.sets {
-                    set.isPR = false
-                    guard set.reps > 0, set.weight > 0 else { continue }
-                    let key = PRKey(name: entry.exerciseName, reps: set.reps)
-                    let lbs = entry.unit == .kg ? set.weight * 2.20462 : set.weight
-                    if let cur = best[key] {
-                        let curLbs = cur.unit == .kg ? cur.weight * 2.20462 : cur.weight
-                        if lbs > curLbs { best[key] = (set.weight, entry.unit, workout.date, set) }
-                    } else {
-                        best[key] = (set.weight, entry.unit, workout.date, set)
-                    }
-                }
-            }
-        }
-
-        for (key, c) in best {
-            modelContext.insert(PersonalRecord(
-                exerciseName: key.name, repCount: key.reps,
-                weight: c.weight, unit: c.unit, dateAchieved: c.date))
-            c.set.isPR = true
-        }
+        let targets = allWorkouts.filter { $0.date >= dayStart && $0.date <= dayEnd }
+        try? PersonalRecordMaintenanceService.deleteWorkouts(targets, context: modelContext)
     }
 }
 

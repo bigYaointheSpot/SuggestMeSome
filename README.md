@@ -2933,6 +2933,24 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 10 [History Deletion and Personal Record Cleanup] — 2026-04-16
+
+- Hardened deletion flows so personal records stay consistent with the remaining workout history:
+  - workout deletion now routes through `PersonalRecordMaintenanceService`, which rebuilds affected PR rows from the surviving workouts instead of leaving deleted-workout records behind
+  - the main workout history delete flow and Settings date-range deletion now share the same PR rebuild path
+  - full PR wipe support is now available from `PersonalRecordsView`, clearing both `PersonalRecord` rows and any `SetEntry.isPR` markers
+- Added completed program history deletion for structured blocks:
+  - completed runs in `TrainingProgramsTab` can now be deleted from history
+  - `TrainingHistoryDeletionService` removes the completed run, its linked workouts, and run-scoped adaptive and Daily Coach artifacts before rebuilding affected PRs
+- Added focused backend regression coverage for:
+  - deleting a workout and falling back to the next-valid PR
+  - deleting completed program history while removing run-scoped artifacts
+  - wiping all PR data and resetting saved-set PR flags
+
+**Commit:** `fix: harden history deletion and PR cleanup`
+
+---
+
 
 ## Project Setup
 

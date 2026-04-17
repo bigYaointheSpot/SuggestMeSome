@@ -340,12 +340,17 @@ struct WorkoutsTab: View {
                 set: { if !$0 { workoutToDelete = nil } }
             )) {
                 Button("Delete", role: .destructive) {
-                    if let w = workoutToDelete { modelContext.delete(w) }
+                    if let workoutToDelete {
+                        try? PersonalRecordMaintenanceService.deleteWorkout(
+                            workoutToDelete,
+                            context: modelContext
+                        )
+                    }
                     workoutToDelete = nil
                 }
                 Button("Cancel", role: .cancel) { workoutToDelete = nil }
             } message: {
-                Text("This workout and all its data will be permanently deleted.")
+                Text("This workout and all its data will be permanently deleted. Personal records will be rebuilt from your remaining workouts.")
             }
         }
     }

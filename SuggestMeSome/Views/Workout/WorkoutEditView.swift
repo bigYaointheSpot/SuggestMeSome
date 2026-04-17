@@ -263,74 +263,9 @@ struct WorkoutEditView: View {
         try? modelContext.save()
 
         // Recompute PRs globally for all affected exercises
-        recomputePRs(for: affectedNames)
-
+        try? PersonalRecordMaintenanceService.recomputePRs(for: affectedNames, context: modelContext)
         try? modelContext.save()
         dismiss()
-    }
-
-    // MARK: - Global PR recomputation
-    //
-    // When editing may lower or remove a weight, the previous PR might no longer
-    // be the best. This function:
-    //   1. Deletes all PersonalRecord rows for affected exercises.
-    //   2. Scans every SetEntry across every workout for those exercises.
-    //   3. Finds the global best weight per (exerciseName, repCount) pair.
-    //   4. Recreates PersonalRecord rows and marks isPR on the winning SetEntries.
-    //
-    // All weight comparisons are normalised to lbs (1 kg = 2.20462 lbs).
-
-    private func recomputePRs(for exerciseNames: Set<String>) {
-        // 1. Remove stale PRs
-        let existingPRs = (try? modelContext.fetch(FetchDescriptor<PersonalRecord>())) ?? []
-        for pr in existingPRs where exerciseNames.contains(pr.exerciseName) {
-            modelContext.delete(pr)
-        }
-
-        // 2. Scan all workouts
-        let allWorkouts = (try? modelContext.fetch(FetchDescriptor<Workout>())) ?? []
-
-        struct PRKey: Hashable { let exerciseName: String; let repCount: Int }
-        typealias Candidate = (weight: Double, unit: WeightUnit, date: Date, setEntry: SetEntry)
-        var best: [PRKey: Candidate] = [:]
-
-        for w in allWorkouts {
-            for entry in w.exerciseEntries {
-                guard exerciseNames.contains(entry.exerciseName) else { continue }
-                for set in entry.sets {
-                    set.isPR = false           // reset every set we touch
-                    guard set.reps > 0, set.weight > 0 else { continue }
-
-                    let key      = PRKey(exerciseName: entry.exerciseName, repCount: set.reps)
-                    let newLbs   = toLbs(set.weight, unit: entry.unit)
-
-                    if let current = best[key] {
-                        if newLbs > toLbs(current.weight, unit: current.unit) {
-                            best[key] = (set.weight, entry.unit, w.date, set)
-                        }
-                    } else {
-                        best[key] = (set.weight, entry.unit, w.date, set)
-                    }
-                }
-            }
-        }
-
-        // 3. Recreate PRs and mark winners
-        for (key, candidate) in best {
-            let pr = PersonalRecord(
-                exerciseName: key.exerciseName,
-                repCount: key.repCount,
-                weight: candidate.weight,
-                unit: candidate.unit,
-                dateAchieved: candidate.date
-            )
-            modelContext.insert(pr)
-            candidate.setEntry.isPR = true
-        }
-    }
-
-    private func toLbs(_ weight: Double, unit: WeightUnit) -> Double {
-        unit == .kg ? weight * 2.20462 : weight
     }
 }
 
