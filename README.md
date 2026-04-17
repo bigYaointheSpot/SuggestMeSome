@@ -2925,7 +2925,7 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - sync growth no longer funnels through one all-purpose repository file
   - HealthKit import and recovery rules can evolve without bloating their service entrypoints
 
-**Commits:** `refactor: split lift trend tracking service`, `refactor: split local sync repository`, `refactor: split healthkit workout import service`, `refactor: split healthkit recovery sync service`
+**Commits:** `refactor: split session outcome inference service`, `refactor: split lift trend tracking service`, `refactor: split local sync repository`, `refactor: split healthkit workout import service`, `refactor: split healthkit recovery sync service`
 
 ---
 
