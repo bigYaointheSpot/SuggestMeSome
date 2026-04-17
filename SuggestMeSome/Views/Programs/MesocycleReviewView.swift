@@ -15,6 +15,8 @@ struct MesocycleReviewView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isPhaseRecapExpanded = true
     @State private var showingAIGenerator = false
+    @State private var selectedRecommendation: MesocycleNextBlockRecommendation?
+    @State private var confirmedPrefill: MesocycleNextBlockPrefill?
 
     var body: some View {
         ScrollView {
@@ -34,7 +36,11 @@ struct MesocycleReviewView: View {
                     )
                 }
                 MesocycleNarrativeSection(text: snapshot.narrativeSummary)
-                MesocycleNextBlockSection(recommendations: snapshot.rankedRecommendations)
+                MesocycleNextBlockSection(
+                    recommendations: snapshot.rankedRecommendations,
+                    selectedStableID: selectedRecommendation?.stableID,
+                    onSelect: { selectedRecommendation = $0 }
+                )
                 Color.clear.frame(height: 88)
             }
             .padding(.horizontal, 16)
@@ -45,11 +51,34 @@ struct MesocycleReviewView: View {
         .safeAreaInset(edge: .bottom) {
             MesocycleReviewCTABar(
                 onClose: { dismiss() },
-                onViewNextBlock: { showingAIGenerator = true }
+                onViewNextBlock: { primaryCTATapped() }
+            )
+        }
+        .sheet(item: $selectedRecommendation) { rec in
+            NextBlockPrefillReviewSheet(
+                recommendation: rec,
+                onConfirm: { editedPrefill in
+                    confirmedPrefill = editedPrefill
+                    selectedRecommendation = nil
+                    showingAIGenerator = true
+                },
+                onDecline: {
+                    // TODO: persist MesocycleRecommendationDecision.declined via review store in a later prompt.
+                    selectedRecommendation = nil
+                }
             )
         }
         .fullScreenCover(isPresented: $showingAIGenerator) {
-            AIProgramGeneratorView(prefill: snapshot.defaultNextBlockPrefill)
+            AIProgramGeneratorView(prefill: confirmedPrefill ?? snapshot.defaultNextBlockPrefill)
+        }
+    }
+
+    private func primaryCTATapped() {
+        if let first = snapshot.rankedRecommendations.first {
+            selectedRecommendation = first
+        } else {
+            confirmedPrefill = nil
+            showingAIGenerator = true
         }
     }
 }
@@ -432,6 +461,13 @@ private struct MesocycleNarrativeSection: View {
 
 private struct MesocycleNextBlockSection: View {
     let recommendations: [MesocycleNextBlockRecommendation]
+    let selectedStableID: String?
+    let onSelect: (MesocycleNextBlockRecommendation) -> Void
+
+    private var secondaryRecommendations: [MesocycleNextBlockRecommendation] {
+        guard recommendations.count > 1 else { return [] }
+        return Array(recommendations.dropFirst())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -451,8 +487,33 @@ private struct MesocycleNextBlockSection: View {
             .padding(.top, 14)
             .padding(.bottom, 10)
             Divider().padding(.leading, 16)
+
             if let top = recommendations.first {
-                MesocycleRecommendationCard(recommendation: top)
+                VStack(alignment: .leading, spacing: 12) {
+                    NextBlockRecommendationCard(
+                        recommendation: top,
+                        style: .primary,
+                        isSelected: selectedStableID == top.stableID,
+                        onTap: { onSelect(top) }
+                    )
+                    if !secondaryRecommendations.isEmpty {
+                        Text("More options")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 4)
+                        VStack(spacing: 8) {
+                            ForEach(secondaryRecommendations, id: \.stableID) { rec in
+                                NextBlockRecommendationCard(
+                                    recommendation: rec,
+                                    style: .secondary,
+                                    isSelected: selectedStableID == rec.stableID,
+                                    onTap: { onSelect(rec) }
+                                )
+                            }
+                        }
+                    }
+                }
+                .padding(16)
             } else {
                 Text("Recommendations will appear here after the block is analyzed.")
                     .font(.subheadline)
@@ -462,52 +523,6 @@ private struct MesocycleNextBlockSection: View {
         }
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-private struct MesocycleRecommendationCard: View {
-    let recommendation: MesocycleNextBlockRecommendation
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(recommendation.title)
-                        .font(.subheadline.weight(.semibold))
-                    Text(recommendation.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(recommendation.targetFocusDisplayName)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(Color.teal.opacity(0.12))
-                        .foregroundStyle(.teal)
-                        .clipShape(Capsule())
-                    Text("\(recommendation.suggestedDurationWeeks)w · \(recommendation.suggestedSessionsPerWeek)×/wk")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if !recommendation.rationale.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(recommendation.rationale, id: \.self) { point in
-                        HStack(alignment: .top, spacing: 6) {
-                            Text("·")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.teal)
-                            Text(point)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(16)
     }
 }
 

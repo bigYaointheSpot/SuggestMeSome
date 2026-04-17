@@ -2776,6 +2776,32 @@ Additive sync architecture groundwork so persisted training/coaching entities ca
 
 ---
 
+#### Prompt 4 [Ranked Recommendations and Editable Prefill UI] — 2026-04-16
+
+- Added `NextBlockRecommendationCard.swift` as a reusable card component with two styles:
+  - `.primary`: featured top-rank card with "Recommended" capsule, title, summary, fit-score chip ("Strong fit" / "Good fit" / "Alt path"), focus/duration/sessions/level badge row, and bulleted rationale
+  - `.secondary`: compact row with rank badge (`#2`, `#3`), title, summary, focus pill, and fit chip — tappable to reveal the same editable prefill sheet
+  - conforms `MesocycleNextBlockRecommendation` to `Identifiable` via its existing `stableID`
+- Added `NextBlockPrefillReviewSheet.swift` for explicit-confirmation entry into generation:
+  - "Why this is recommended" header with the recommendation title, summary, and rationale bullets
+  - "Carried Forward" section rendering style / intensity / notable PR lifts / preserved exercise-name badges via a lightweight `FlowLayout`, plus the carry-forward rationale text
+  - "Program Shape" editable rows: focus menu, level segmented picker, duration pills (6/8/10/12 w), sessions/week pills (2–6, honoring `FocusTemplateLibrary.minimumFrequency`)
+  - "Starting 1RMs" list: per-exercise numeric TextField + unit segmented picker, seeded from `NextBlockPrefillContext.oneRepMaxSuggestions`, with the original `sourceSummary` shown as helper copy
+  - right-aligned "Recommended" vs "Edited" capsule on every editable row so the user can see at a glance which defaults they have diverged from
+  - safe decline ("Not now" + "Cancel") and explicit "Continue" CTA bar styled after `MesocycleReviewView`'s bottom actions — only "Continue" advances into generation
+  - rebuilds a `NextBlockPrefillContext` on confirm that preserves the original source / recommendation IDs, rationale, value-source audit trail, intensity context, preserved exercise names, and notes so the carry-forward provenance is not lost during edits
+- Integrated into `MesocycleReviewView`:
+  - `MesocycleNextBlockSection` now renders the full ranked list — primary card first, then a "More options" subheader with the rest as `.secondary` cards; each card's tap bubbles up through an `onSelect` closure
+  - added `@State selectedRecommendation` / `confirmedPrefill` and presents `NextBlockPrefillReviewSheet` via `.sheet(item:)` when a card is selected
+  - the existing bottom "View Next Block" CTA now seeds `selectedRecommendation = recommendations.first` so both entry points funnel through the editable review sheet; the empty-recommendation case still falls back to the generator with `defaultNextBlockPrefill`
+  - `.fullScreenCover` for `AIProgramGeneratorView` is now only presented after confirm, passing `confirmedPrefill ?? snapshot.defaultNextBlockPrefill`
+  - decline path (sheet Cancel / "Not now") clears the selection without starting generation — `MesocycleRecommendationDecision` persistence is stubbed with an inline `// TODO` for a later prompt so accepted/declined paths remain representable in the UI without half-shipping a logger
+- No changes to the `AIProgramGeneratorView.init(prefill:)` seam — the sheet reuses the existing injection contract, so the editable flow is purely additive and the current AI generation / program-review flow still works unchanged from `TrainingProgramsTab`.
+
+**Commit:** `feat: add ranked next-block recommendation picker and editable prefill sheet`
+
+---
+
 
 ## Project Setup
 
