@@ -68,7 +68,9 @@ enum ComplianceConfiguration {
     static let placeholderConsumerHealthNoticeURL = URL(string: "https://suggestmesome.example/consumer-health")!
     static let requiresOrganizationAccountBeforeRelease = true
 
-    static let adultsOnlyDisclosure = "SuggestMeSome is intended for adults age 18 and older."
+    static let adultsOnlyLegalDisclosure = "SuggestMeSome is intended for adults age 18 and older."
+    static let onboardingEligibilityTitle = "Training eligibility"
+    static let onboardingEligibilityDisclosure = "SuggestMeSome is designed for independent adult training use. By continuing, you confirm that you're 18 or older."
     static let wellnessDisclaimerDisclosure = "SuggestMeSome provides fitness and wellness guidance only. It is not medical advice, diagnosis, or treatment, and it should not be used for emergency or medical decisions."
     static let smartGuidanceDisclosure = "Some workouts, programs, and coaching explanations are generated from your logged training data and app logic. Review recommendations before acting on them."
     static let consumerHealthDataDisclosure = "Your workouts, readiness check-ins, recovery data, and coaching outputs can reveal health information. SuggestMeSome uses this data to provide the features you request and does not use Apple Health data for advertising."
@@ -168,7 +170,7 @@ enum ComplianceConfiguration {
 
             ## Product scope
 
-            \(adultsOnlyDisclosure)
+            \(adultsOnlyLegalDisclosure)
 
             \(appName) provides workout logging, smart workout and program suggestions, analytics, and wellness-oriented coaching support.
 

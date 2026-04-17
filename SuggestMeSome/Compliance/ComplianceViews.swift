@@ -550,8 +550,8 @@ struct ComplianceOnboardingFlow: View {
                     welcomeStep
                 case .ageGate:
                     copyStep(
-                        title: "Adults 18+",
-                        body: ComplianceConfiguration.adultsOnlyDisclosure
+                        title: ComplianceConfiguration.onboardingEligibilityTitle,
+                        body: ComplianceConfiguration.onboardingEligibilityDisclosure
                     )
                 case .wellness:
                     copyStep(

@@ -3025,6 +3025,20 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 3 [Onboarding Age Disclosure Tone Refinement] — 2026-04-17
+
+- Softened the onboarding age-confirmation slide so it reads like a standard fitness-app eligibility note instead of an adult-content gate:
+  - replaced the `Adults 18+` title with `Training eligibility`
+  - updated the slide body to frame the requirement as independent adult training use while still clearly confirming that the user is `18 or older`
+- Preserved the stricter legal language in the formal Terms content:
+  - kept the exact `intended for adults age 18 and older` wording in the legal document copy so the user-facing onboarding tone can improve without weakening the compliance posture
+- Added focused regression coverage for:
+  - distinct onboarding-versus-legal age copy so future compliance edits do not accidentally collapse the softer intro wording back into the stricter legal phrasing
+
+**Commit:** `refactor: soften onboarding age disclosure`
+
+---
+
 
 ## Project Setup
 

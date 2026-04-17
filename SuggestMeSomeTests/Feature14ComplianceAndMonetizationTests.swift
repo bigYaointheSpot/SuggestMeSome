@@ -141,6 +141,15 @@ struct Feature14ComplianceAndMonetizationTests {
             "Premium Unlock is a one-time purchase. It unlocks coaching, analytics, smart generation, Apple Health integration, and Apple Watch features. Manual workout logging remains free."
         )
         #expect(
+            ComplianceConfiguration.onboardingEligibilityTitle == "Training eligibility"
+        )
+        #expect(
+            ComplianceConfiguration.onboardingEligibilityDisclosure.contains("18 or older")
+        )
+        #expect(
+            ComplianceConfiguration.adultsOnlyLegalDisclosure == "SuggestMeSome is intended for adults age 18 and older."
+        )
+        #expect(
             ComplianceConfiguration.appleHealthDisclosure.contains("Apple Health")
         )
         #expect(
