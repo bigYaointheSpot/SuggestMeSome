@@ -129,6 +129,103 @@ struct Feature10Prompt7WatchFoundationTests {
         #expect(decoded == envelope)
     }
 
+    @Test func envelopeRoundTripsForWatchPresenceHeartbeat() throws {
+        let heartbeat = WatchPresenceHeartbeatPayload(
+            sentAt: Date(timeIntervalSince1970: 1_700_001_100)
+        )
+        let envelope = WatchPayloadEnvelope(
+            kind: .watchPresenceHeartbeat,
+            payload: heartbeat,
+            sentAt: Date(timeIntervalSince1970: 1_700_001_101)
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        let data = try encoder.encode(envelope)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let decoded = try decoder.decode(
+            WatchPayloadEnvelope<WatchPresenceHeartbeatPayload>.self,
+            from: data
+        )
+
+        #expect(decoded == envelope)
+    }
+
+    @Test func watchStatusResolverStaysPendingBeforeActivationCompletes() {
+        let checkedAt = Date(timeIntervalSince1970: 1_700_002_000)
+        let status = WatchCompanionStatusResolver.makeStatus(
+            from: WatchCompanionSessionSnapshot(
+                isSupported: true,
+                activationState: .notActivated,
+                isPaired: false,
+                isWatchAppInstalled: false,
+                isReachable: false
+            ),
+            evidence: WatchCompanionEvidence(),
+            checkedAt: checkedAt
+        )
+
+        #expect(status.availability == .statusPending)
+        #expect(status.activationState == .notActivated)
+        #expect(status.message.contains("activating"))
+    }
+
+    @Test func watchStatusResolverKeepsConfirmedCompanionDuringInactiveSessionTransitions() {
+        let checkedAt = Date(timeIntervalSince1970: 1_700_002_100)
+        var evidence = WatchCompanionEvidence()
+        evidence.recordInstalledCompanion(at: checkedAt.addingTimeInterval(-300))
+
+        let status = WatchCompanionStatusResolver.makeStatus(
+            from: WatchCompanionSessionSnapshot(
+                isSupported: true,
+                activationState: .inactive,
+                isPaired: false,
+                isWatchAppInstalled: false,
+                isReachable: false
+            ),
+            evidence: evidence,
+            checkedAt: checkedAt
+        )
+
+        #expect(status.availability == .statusPending)
+        #expect(status.message.contains("previously confirmed"))
+    }
+
+    @Test func watchHeartbeatEvidenceTracksLastWatchContact() {
+        let heartbeatAt = Date(timeIntervalSince1970: 1_700_002_200)
+        var evidence = WatchCompanionEvidence()
+
+        evidence.recordWatchContact(at: heartbeatAt)
+
+        #expect(evidence.lastWatchContactAt == heartbeatAt)
+        #expect(evidence.lastConfirmedInstallAt == heartbeatAt)
+    }
+
+    @Test func watchStatusResolverAllowsReplayAfterTransientFalseInstallRead() {
+        let now = Date(timeIntervalSince1970: 1_700_002_300)
+        var evidence = WatchCompanionEvidence()
+        evidence.recordWatchContact(at: now.addingTimeInterval(-60))
+
+        let snapshot = WatchCompanionSessionSnapshot(
+            isSupported: true,
+            activationState: .activated,
+            isPaired: true,
+            isWatchAppInstalled: false,
+            isReachable: false
+        )
+        let status = WatchCompanionStatusResolver.makeStatus(
+            from: snapshot,
+            evidence: evidence,
+            checkedAt: now
+        )
+
+        #expect(WatchCompanionStatusResolver.canSendPayloads(with: snapshot, evidence: evidence, now: now))
+        #expect(status.availability == .companionInstalled)
+        #expect(status.lastWatchContactAt == evidence.lastWatchContactAt)
+    }
+
     // MARK: - Today Plan Snapshot Mapping
 
     @Test func todayPlanSnapshotCarriesProgramSessionLabel() {
@@ -749,6 +846,7 @@ struct Feature10Prompt7WatchFoundationTests {
         )
         return TodayPlan(
             recommendation: recommendation,
+            objectiveRecoveryEvaluation: .disabled(),
             confidence: confidence,
             confidenceRationale: "Rationale",
             attribution: attribution,

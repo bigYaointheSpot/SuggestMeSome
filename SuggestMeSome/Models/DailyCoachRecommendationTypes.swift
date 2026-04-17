@@ -51,7 +51,7 @@ enum ReadinessTier {
 // MARK: - ObjectiveRecoveryStatus
 
 /// Coarse objective recovery signal derived from HealthKit daily summaries.
-enum ObjectiveRecoveryStatus {
+enum ObjectiveRecoveryStatus: Equatable {
     case good
     case neutral
     case caution
@@ -69,11 +69,46 @@ enum DailyCoachRecommendationSource: String {
 // MARK: - ObjectiveRecoveryInsight
 
 /// Explainable objective signal summary from recent HealthKit metrics.
-struct ObjectiveRecoveryInsight {
+struct ObjectiveRecoveryInsight: Equatable {
     let status: ObjectiveRecoveryStatus
     let compactSummary: String
     let detailSummary: String
     let evaluatedMetricsCount: Int
+}
+
+// MARK: - ObjectiveRecoveryEvaluation
+
+enum ObjectiveRecoveryEvaluationState: Equatable {
+    case disabled
+    case notYetSynced
+    case insufficientBaseline
+    case awaitingCurrentDayMetrics
+    case ready
+}
+
+struct ObjectiveRecoveryEvaluation: Equatable {
+    let state: ObjectiveRecoveryEvaluationState
+    let insight: ObjectiveRecoveryInsight?
+
+    static func disabled() -> ObjectiveRecoveryEvaluation {
+        ObjectiveRecoveryEvaluation(state: .disabled, insight: nil)
+    }
+
+    static func notYetSynced() -> ObjectiveRecoveryEvaluation {
+        ObjectiveRecoveryEvaluation(state: .notYetSynced, insight: nil)
+    }
+
+    static func insufficientBaseline() -> ObjectiveRecoveryEvaluation {
+        ObjectiveRecoveryEvaluation(state: .insufficientBaseline, insight: nil)
+    }
+
+    static func awaitingCurrentDayMetrics() -> ObjectiveRecoveryEvaluation {
+        ObjectiveRecoveryEvaluation(state: .awaitingCurrentDayMetrics, insight: nil)
+    }
+
+    static func ready(_ insight: ObjectiveRecoveryInsight) -> ObjectiveRecoveryEvaluation {
+        ObjectiveRecoveryEvaluation(state: .ready, insight: insight)
+    }
 }
 
 // MARK: - DailyCoachSuggestionItem

@@ -3,14 +3,23 @@ import SwiftData
 import HealthKit
 
 enum HealthKitRecoveryWindow {
+    static func makeTrailingDays(
+        _ dayCount: Int,
+        referenceDate: Date,
+        calendar: Calendar
+    ) -> (start: Date, end: Date) {
+        let normalizedDayCount = max(1, dayCount)
+        let todayStart = calendar.startOfDay(for: referenceDate)
+        let start = calendar.date(byAdding: .day, value: -(normalizedDayCount - 1), to: todayStart) ?? todayStart
+        let tomorrowStart = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
+        return (start: start, end: tomorrowStart)
+    }
+
     static func makeLast90Days(
         referenceDate: Date,
         calendar: Calendar
     ) -> (start: Date, end: Date) {
-        let todayStart = calendar.startOfDay(for: referenceDate)
-        let start = calendar.date(byAdding: .day, value: -89, to: todayStart) ?? todayStart
-        let tomorrowStart = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
-        return (start: start, end: tomorrowStart)
+        makeTrailingDays(90, referenceDate: referenceDate, calendar: calendar)
     }
 
     static func makeDayStarts(

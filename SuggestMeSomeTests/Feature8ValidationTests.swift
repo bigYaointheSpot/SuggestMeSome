@@ -15,6 +15,81 @@ import Testing
 @MainActor
 struct Feature8ValidationTests {
 
+    @Test func recoveryAutoRefreshBootstrapsWhenRecoveryHasNeverSynced() {
+        let decision = HealthKitRecoveryAutoRefreshPolicy.decide(
+            HealthKitRecoveryAutoRefreshDecisionInput(
+                trigger: .appDidBecomeActive,
+                now: day(0),
+                healthKitEnabled: true,
+                useHealthKitInDailyCoach: true,
+                hasLocalSummaries: false,
+                hasComparableCurrentDaySummary: false,
+                lastSuccessfulRecoverySyncAt: nil,
+                lastAutoRefreshAt: nil
+            ),
+            calendar: utcCalendar()
+        )
+
+        #expect(decision == .syncLastDays(HealthKitRecoveryAutoRefreshPolicy.bootstrapDayCount))
+    }
+
+    @Test func recoveryAutoRefreshSkipsForegroundRefreshWhenTodayWasAlreadySynced() {
+        let now = day(0)
+        let decision = HealthKitRecoveryAutoRefreshPolicy.decide(
+            HealthKitRecoveryAutoRefreshDecisionInput(
+                trigger: .appDidBecomeActive,
+                now: now,
+                healthKitEnabled: true,
+                useHealthKitInDailyCoach: true,
+                hasLocalSummaries: true,
+                hasComparableCurrentDaySummary: false,
+                lastSuccessfulRecoverySyncAt: now,
+                lastAutoRefreshAt: now
+            ),
+            calendar: utcCalendar()
+        )
+
+        #expect(decision == .skip(.alreadyFresh))
+    }
+
+    @Test func recoveryAutoRefreshAllowsDailyCoachRetryAfterFourHoursWithoutComparableTodaySummary() {
+        let now = day(0)
+        let retryAnchor = now.addingTimeInterval(-(HealthKitRecoveryAutoRefreshPolicy.dailyCoachRetryInterval + 60))
+        let decision = HealthKitRecoveryAutoRefreshPolicy.decide(
+            HealthKitRecoveryAutoRefreshDecisionInput(
+                trigger: .dailyCoachOpened,
+                now: now,
+                healthKitEnabled: true,
+                useHealthKitInDailyCoach: true,
+                hasLocalSummaries: true,
+                hasComparableCurrentDaySummary: false,
+                lastSuccessfulRecoverySyncAt: now,
+                lastAutoRefreshAt: retryAnchor
+            ),
+            calendar: utcCalendar()
+        )
+
+        #expect(decision == .syncLastDays(HealthKitRecoveryAutoRefreshPolicy.foregroundRefreshDayCount))
+    }
+
+    @Test func recoveryAutoRefreshSkipsEntirelyWhenHealthKitCoachSupportIsDisabled() {
+        let decision = HealthKitRecoveryAutoRefreshPolicy.decide(
+            HealthKitRecoveryAutoRefreshDecisionInput(
+                trigger: .dailyCoachOpened,
+                now: day(0),
+                healthKitEnabled: false,
+                useHealthKitInDailyCoach: true,
+                hasLocalSummaries: false,
+                hasComparableCurrentDaySummary: false,
+                lastSuccessfulRecoverySyncAt: nil,
+                lastAutoRefreshAt: nil
+            ),
+            calendar: utcCalendar()
+        )
+
+        #expect(decision == .skip(.disabled))
+    }
+
     @Test func healthKitAuthorizationTreatsCompletedFlowAsConnectedEvenWhenOptionalWriteIsDenied() {
         let snapshot = HealthKitAuthorizationSnapshot(
             availability: .available,
@@ -211,6 +286,88 @@ struct Feature8ValidationTests {
         #expect(rec.primarySuggestion.type == .trimOneBackoffSet)
     }
 
+    @Test func recoveryEvaluationMarksDisabledWhenHealthKitSupportIsOff() {
+        let evaluation = HealthKitRecoveryInsightService.evaluate(
+            from: [],
+            healthKitEnabled: false,
+            useHealthKitInDailyCoach: true,
+            hasSuccessfulRecoverySync: false,
+            referenceDate: day(0),
+            calendar: utcCalendar()
+        )
+
+        #expect(evaluation == .disabled())
+    }
+
+    @Test func recoveryEvaluationMarksNotYetSyncedBeforeFirstSuccessfulRecoveryImport() {
+        let evaluation = HealthKitRecoveryInsightService.evaluate(
+            from: [makeRecoverySummary(dayOffset: -1, sleepSeconds: 28_800, restingHeartRate: 55)],
+            healthKitEnabled: true,
+            useHealthKitInDailyCoach: true,
+            hasSuccessfulRecoverySync: false,
+            referenceDate: day(0),
+            calendar: utcCalendar()
+        )
+
+        #expect(evaluation == .notYetSynced())
+    }
+
+    @Test func recoveryEvaluationMarksInsufficientBaselineWhenOnlyOneComparableMetricExists() {
+        let summaries = (1...10).map { offset in
+            makeRecoverySummary(dayOffset: -offset, sleepSeconds: 28_800)
+        } + [
+            makeRecoverySummary(dayOffset: 0, sleepSeconds: 29_400)
+        ]
+
+        let evaluation = HealthKitRecoveryInsightService.evaluate(
+            from: summaries,
+            healthKitEnabled: true,
+            useHealthKitInDailyCoach: true,
+            hasSuccessfulRecoverySync: true,
+            referenceDate: day(0),
+            calendar: utcCalendar()
+        )
+
+        #expect(evaluation == .insufficientBaseline())
+    }
+
+    @Test func recoveryEvaluationMarksAwaitingCurrentDayMetricsWhenOnlyOlderRowsExist() {
+        let summaries = (1...10).map { offset in
+            makeRecoverySummary(dayOffset: -offset, sleepSeconds: 28_800, restingHeartRate: 55)
+        }
+
+        let evaluation = HealthKitRecoveryInsightService.evaluate(
+            from: summaries,
+            healthKitEnabled: true,
+            useHealthKitInDailyCoach: true,
+            hasSuccessfulRecoverySync: true,
+            referenceDate: day(0),
+            calendar: utcCalendar()
+        )
+
+        #expect(evaluation == .awaitingCurrentDayMetrics())
+    }
+
+    @Test func recoveryEvaluationReturnsReadyWhenTodayAndBaselineProvideComparableSignals() {
+        let summaries = (1...10).map { offset in
+            makeRecoverySummary(dayOffset: -offset, sleepSeconds: 28_800, restingHeartRate: 55)
+        } + [
+            makeRecoverySummary(dayOffset: 0, sleepSeconds: 29_400, restingHeartRate: 54)
+        ]
+
+        let evaluation = HealthKitRecoveryInsightService.evaluate(
+            from: summaries,
+            healthKitEnabled: true,
+            useHealthKitInDailyCoach: true,
+            hasSuccessfulRecoverySync: true,
+            referenceDate: day(0),
+            calendar: utcCalendar()
+        )
+
+        #expect(evaluation.state == .ready)
+        #expect(evaluation.insight != nil)
+    }
+
     @Test func importedWorkoutUpsertDedupesByExternalIdentifier() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
@@ -401,6 +558,25 @@ struct Feature8ValidationTests {
 
     private func fetchAll<T: PersistentModel>(_ type: T.Type, _ context: ModelContext) throws -> [T] {
         try context.fetch(FetchDescriptor<T>())
+    }
+
+    private func makeRecoverySummary(
+        dayOffset: Int,
+        sleepSeconds: Int? = nil,
+        restingHeartRate: Double? = nil,
+        heartRateVariability: Double? = nil,
+        activeEnergy: Double? = nil
+    ) -> HealthKitDailySummary {
+        HealthKitDailySummary(
+            dayStart: day(dayOffset),
+            sleepDurationSeconds: sleepSeconds,
+            restingHeartRateBPM: restingHeartRate,
+            heartRateVariabilityMS: heartRateVariability,
+            activeEnergyKilocalories: activeEnergy,
+            sourceUpdatedAt: day(0),
+            createdAt: day(0),
+            updatedAt: day(0)
+        )
     }
 
     private func day(_ offset: Int) -> Date {

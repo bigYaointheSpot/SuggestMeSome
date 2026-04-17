@@ -96,6 +96,31 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         completion = nil
     }
 
+    func sendPresenceHeartbeat() {
+        guard let session,
+              session.activationState == .activated,
+              let message = WatchBridgeMessageCodec.makeMessageIfPossible(
+                kind: .watchPresenceHeartbeat,
+                payload: WatchPresenceHeartbeatPayload()
+              ) else {
+            return
+        }
+
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil) { [weak self] _ in
+                session.transferUserInfo(message)
+                Task { @MainActor in
+                    self?.refreshSessionStatus(message: "Watch presence queued for iPhone.")
+                }
+            }
+            refreshSessionStatus(message: "Watch presence sent to iPhone.")
+            return
+        }
+
+        session.transferUserInfo(message)
+        refreshSessionStatus(message: "Watch presence queued for iPhone.")
+    }
+
     var connectionMessage: String {
         sessionStatus.message
     }
@@ -203,6 +228,8 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 }
                 return true
             }
+        case .watchPresenceHeartbeat:
+            return
         case .workoutExecutionAction:
             return
         }
@@ -348,7 +375,7 @@ private extension WatchPayloadKind {
         switch self {
         case .workoutLaunch, .workoutProgress, .liveWorkoutSnapshot, .currentSessionContext:
             return true
-        case .todayPlanSnapshot, .sessionCompletion, .workoutExecutionAction:
+        case .todayPlanSnapshot, .sessionCompletion, .workoutExecutionAction, .watchPresenceHeartbeat:
             return false
         }
     }
@@ -430,6 +457,7 @@ extension WatchCompanionSessionStore: WCSessionDelegate {
         Task { @MainActor in
             refreshSessionStatus(message: error?.localizedDescription)
             applyApplicationContext(session.applicationContext)
+            sendPresenceHeartbeat()
         }
     }
 

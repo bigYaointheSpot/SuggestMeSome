@@ -20,7 +20,7 @@ enum TodayPlanExplanationAssembler {
         activeRun: ProgramRun?,
         pendingProposalCount: Int,
         recentWorkouts: [Workout],
-        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation,
         overlayContext: TodayPlanOverlayInfluenceContext
     ) -> TodayPlanSourceAttribution {
         let manualInfluence: String
@@ -33,19 +33,7 @@ enum TodayPlanExplanationAssembler {
             manualInfluence = "No check-in submitted today. Readiness defaults to neutral and available time defaults to 60 min."
         }
 
-        let healthKitInfluence: String
-        if let insight = objectiveRecoveryInsight {
-            switch insight.status {
-            case .good:
-                healthKitInfluence = "HealthKit objective recovery: Good. Supported the recommendation without changing session shape."
-            case .neutral:
-                healthKitInfluence = "HealthKit objective recovery: Neutral. Near baseline and did not materially change today's recommendation."
-            case .caution:
-                healthKitInfluence = "HealthKit objective recovery: Caution. Applied a medium conservative nudge only; it does not override manual readiness."
-            }
-        } else {
-            healthKitInfluence = "HealthKit signals unavailable or disabled. Daily Coach is running in baseline mode."
-        }
+        let healthKitInfluence = healthKitInfluenceText(for: objectiveRecoveryEvaluation)
 
         let programInfluence: String
         if let run = activeRun, let program = run.program {
@@ -90,7 +78,7 @@ enum TodayPlanExplanationAssembler {
         if activeRun?.program != nil { labels.append("Program") }
         if overlayContext.activeOverlayCount > 0 { labels.append("Approved Overlays") }
         if pendingProposalCount > 0 { labels.append("Proposals") }
-        if objectiveRecoveryInsight != nil { labels.append("Health Data") }
+        if objectiveRecoveryEvaluation.state == .ready { labels.append("Health Data") }
         if !recentWorkouts.isEmpty { labels.append("Training History") }
 
         let flags = TodayPlanInfluenceFlags(
@@ -99,7 +87,7 @@ enum TodayPlanExplanationAssembler {
             usedPendingProposalContext: pendingProposalCount > 0,
             usedRuntimeCoachAdjustment: recommendation.primarySuggestion.type != .runAsPlanned || recommendation.hasPainFlag,
             usedRecentHistoryContext: !recentWorkouts.isEmpty,
-            usedHealthKitRecoveryNudge: objectiveRecoveryInsight?.status == .caution
+            usedHealthKitRecoveryNudge: objectiveRecoveryEvaluation.insight?.status == .caution
         )
 
         return TodayPlanSourceAttribution(
@@ -117,7 +105,7 @@ enum TodayPlanExplanationAssembler {
         recommendation: DailyCoachRecommendation,
         checkIn: DailyCoachCheckIn?,
         activeRun: ProgramRun?,
-        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation,
         adherenceRescue: AdherenceRescue?
     ) -> String {
         var parts: [String] = []
@@ -147,8 +135,10 @@ enum TodayPlanExplanationAssembler {
             parts.append("Program adherence is \(rescue.sessionsBehindCount) session\(rescue.sessionsBehindCount == 1 ? "" : "s") behind expected pace; \(rescue.guidanceType.rawValue.lowercased()) guidance is active.")
         }
 
-        if objectiveRecoveryInsight?.status == .caution {
+        if objectiveRecoveryEvaluation.insight?.status == .caution {
             parts.append("HealthKit objective recovery is cautious, so the recommendation includes only a medium conservative nudge.")
+        } else if let baselineNote = healthKitWhyTodayNote(for: objectiveRecoveryEvaluation) {
+            parts.append(baselineNote)
         }
 
         parts.append(recommendation.primarySuggestion.compactText)
@@ -178,7 +168,7 @@ enum TodayPlanExplanationAssembler {
     static func buildChangeSummary(
         recommendation: DailyCoachRecommendation,
         checkIn: DailyCoachCheckIn?,
-        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation,
         adherenceRescue: AdherenceRescue?,
         overlayContext: TodayPlanOverlayInfluenceContext,
         proposalAwareness: [TodayPlanProposalAwarenessItem],
@@ -202,7 +192,7 @@ enum TodayPlanExplanationAssembler {
             }
         }
 
-        if objectiveRecoveryInsight?.status == .caution {
+        if objectiveRecoveryEvaluation.insight?.status == .caution {
             hasRuntimeAdjustment = true
             details.append("HealthKit recovery showed caution and added a medium conservative nudge.")
         }
@@ -256,6 +246,47 @@ enum TodayPlanExplanationAssembler {
         }
 
         return TodayPlanChangeSummary(changeType: type, headline: headline, details: details)
+    }
+
+    static func healthKitInfluenceText(for evaluation: ObjectiveRecoveryEvaluation) -> String {
+        if let insight = evaluation.insight {
+            switch insight.status {
+            case .good:
+                return "HealthKit objective recovery: Good. Supported the recommendation without changing session shape."
+            case .neutral:
+                return "HealthKit objective recovery: Neutral. Near baseline and did not materially change today's recommendation."
+            case .caution:
+                return "HealthKit objective recovery: Caution. Applied a medium conservative nudge only; it does not override manual readiness."
+            }
+        }
+
+        switch evaluation.state {
+        case .disabled:
+            return "HealthKit objective recovery is turned off. Daily Coach is running in baseline mode."
+        case .notYetSynced:
+            return "HealthKit permissions may be active, but recovery data has not synced into SuggestMeSome yet. Daily Coach is running in baseline mode."
+        case .insufficientBaseline:
+            return "Today's HealthKit data is present, but there is not enough baseline history yet to score objective recovery. Daily Coach is running in baseline mode."
+        case .awaitingCurrentDayMetrics:
+            return "HealthKit recovery sync is up to date, but today's comparable recovery signals are not available yet. Daily Coach is running in baseline mode."
+        case .ready:
+            return "HealthKit objective recovery is ready."
+        }
+    }
+
+    static func healthKitWhyTodayNote(for evaluation: ObjectiveRecoveryEvaluation) -> String? {
+        switch evaluation.state {
+        case .disabled:
+            return "Objective recovery is turned off, so no HealthKit nudge was applied."
+        case .notYetSynced:
+            return "Objective recovery has not synced yet, so no HealthKit nudge was applied."
+        case .insufficientBaseline:
+            return "Objective recovery does not have enough baseline history yet, so no HealthKit nudge was applied."
+        case .awaitingCurrentDayMetrics:
+            return "Today's HealthKit recovery signals are not comparable yet, so no HealthKit nudge was applied."
+        case .ready:
+            return nil
+        }
     }
 
     static func buildNextStepGuidance(

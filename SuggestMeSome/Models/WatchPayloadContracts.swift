@@ -39,6 +39,7 @@ enum WatchPayloadKind: String, Codable {
     case liveWorkoutSnapshot
     case sessionCompletion
     case workoutExecutionAction
+    case watchPresenceHeartbeat
 }
 
 // MARK: - Execution Interaction Types
@@ -195,6 +196,18 @@ struct WatchCurrentSessionContext: Codable, Equatable {
     /// planned → runtime-adjusted mid-session.
     var sessionVersionStableID: String? = nil
     var capturedAt: Date
+}
+
+// MARK: - Watch Presence Heartbeat
+
+/// Lightweight watch -> phone presence ping used to confirm the companion is
+/// installed and awake even when `WCSession.isWatchAppInstalled` lags.
+struct WatchPresenceHeartbeatPayload: Codable, Equatable {
+    var sentAt: Date
+
+    init(sentAt: Date = Date()) {
+        self.sentAt = sentAt
+    }
 }
 
 enum WatchRestTimerTransitionPolicy {

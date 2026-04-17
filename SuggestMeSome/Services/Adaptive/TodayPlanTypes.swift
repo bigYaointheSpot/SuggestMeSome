@@ -172,6 +172,8 @@ struct AdherenceRescue {
 struct TodayPlan {
     /// Core coaching recommendation (existing type — carries primary/secondary suggestions).
     let recommendation: DailyCoachRecommendation
+    /// Full HealthKit recovery evaluation, including baseline-mode reasons.
+    let objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation
     /// Deterministic confidence band for this plan.
     let confidence: TodayPlanConfidence
     /// Human-readable explanation of why this confidence level was assigned.

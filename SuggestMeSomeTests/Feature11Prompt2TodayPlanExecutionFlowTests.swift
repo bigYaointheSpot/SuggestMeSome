@@ -181,6 +181,7 @@ struct Feature11Prompt2TodayPlanExecutionFlowTests {
     private func makePlan(awareness: [TodayPlanProposalAwarenessItem]) -> TodayPlan {
         TodayPlan(
             recommendation: makeRecommendation(type: .runAsPlanned),
+            objectiveRecoveryEvaluation: .disabled(),
             confidence: .medium,
             confidenceRationale: "test",
             attribution: TodayPlanSourceAttribution(

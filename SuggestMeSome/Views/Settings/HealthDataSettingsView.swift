@@ -41,6 +41,7 @@ final class HealthDataSettingsViewModel: ObservableObject {
     private let authorizationService = HealthKitAuthorizationService()
     private let recoverySyncService = HealthKitRecoverySyncService()
     private let workoutImportService = HealthKitWorkoutImportService()
+    private let recoveryAutoRefreshCoordinator = HealthKitRecoveryAutoRefreshCoordinator.shared
     private let watchBridge: WatchCompanionBridge
 
     init(watchBridge: WatchCompanionBridge? = nil) {
@@ -72,6 +73,7 @@ final class HealthDataSettingsViewModel: ObservableObject {
         do {
             try await recoverySyncService.syncLast90Days(context: context)
             let now = Date()
+            HealthKitSettingsStorage.setDate(now, forKey: HealthKitSettingsStorage.recoveryLastSyncTimestampKey)
             syncStatus = .success(now)
             return true
         } catch let error as HealthKitRecoverySyncError {
@@ -86,10 +88,33 @@ final class HealthDataSettingsViewModel: ObservableObject {
         }
     }
 
+    func autoRefreshRecoveryIfNeeded(
+        context: ModelContext,
+        trigger: HealthKitRecoveryRefreshTrigger
+    ) async {
+        syncStatus = .syncing
+        let outcome = await recoveryAutoRefreshCoordinator.refreshIfNeeded(
+            trigger: trigger,
+            context: context
+        )
+        switch outcome {
+        case .skipped:
+            syncStatus = .idle
+        case .synced(dayCount: _, syncedAt: let syncedAt):
+            syncStatus = .success(syncedAt)
+        case .failed:
+            syncStatus = .failed("Automatic recovery refresh failed. Check Health permissions and try again.")
+        }
+    }
+
     func syncImportedWorkouts(context: ModelContext) async -> Bool {
         workoutImportStatus = .importing
         do {
             let result = try await workoutImportService.importLast90Days(context: context)
+            HealthKitSettingsStorage.setDate(
+                Date(),
+                forKey: HealthKitSettingsStorage.workoutImportLastSyncTimestampKey
+            )
             workoutImportStatus = .success(result.summaryText)
             return true
         } catch let error as HealthKitWorkoutImportError {
@@ -116,11 +141,19 @@ struct HealthDataSettingsView: View {
     @AppStorage("healthkit.importWorkouts") private var importHealthKitWorkouts = false
     @AppStorage("healthkit.writeWorkouts") private var writeAppWorkoutsToHealthKit = false
     @AppStorage("healthkit.permissionsRequested") private var healthKitPermissionsRequested = false
-    @AppStorage("healthkit.lastSyncTimestamp") private var healthKitLastSyncTimestamp: Double = 0
+    @AppStorage(HealthKitSettingsStorage.recoveryLastSyncTimestampKey)
+    private var recoveryLastSyncTimestamp: Double = 0
+    @AppStorage(HealthKitSettingsStorage.workoutImportLastSyncTimestampKey)
+    private var workoutImportLastSyncTimestamp: Double = 0
 
-    private var lastSyncDate: Date? {
-        guard healthKitLastSyncTimestamp > 0 else { return nil }
-        return Date(timeIntervalSince1970: healthKitLastSyncTimestamp)
+    private var recoveryLastSyncDate: Date? {
+        guard recoveryLastSyncTimestamp > 0 else { return nil }
+        return Date(timeIntervalSince1970: recoveryLastSyncTimestamp)
+    }
+
+    private var workoutImportLastSyncDate: Date? {
+        guard workoutImportLastSyncTimestamp > 0 else { return nil }
+        return Date(timeIntervalSince1970: workoutImportLastSyncTimestamp)
     }
 
     private var isUnavailable: Bool {
@@ -186,16 +219,16 @@ struct HealthDataSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if let lastSyncDate {
+            if let recoveryLastSyncDate {
                 HStack {
-                    Text("Last Sync")
+                    Text("Recovery Sync")
                     Spacer()
-                    Text(lastSyncDate, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                    Text(recoveryLastSyncDate, format: .dateTime.month(.abbreviated).day().year().hour().minute())
                         .foregroundStyle(.secondary)
                 }
             } else {
                 HStack {
-                    Text("Last Sync")
+                    Text("Recovery Sync")
                     Spacer()
                     Text("No sync yet")
                         .foregroundStyle(.secondary)
@@ -214,6 +247,10 @@ struct HealthDataSettingsView: View {
                     } else {
                         await viewModel.refreshStatus(hasRequestedAuthorization: healthKitPermissionsRequested)
                     }
+                    await viewModel.autoRefreshRecoveryIfNeeded(
+                        context: modelContext,
+                        trigger: .authorizationStatusUpdated
+                    )
                 }
             }
             .disabled(!healthKitEnabled || isUnavailable || viewModel.isLoading)
@@ -221,16 +258,17 @@ struct HealthDataSettingsView: View {
             Button("Refresh Status") {
                 Task {
                     await viewModel.refreshStatus(hasRequestedAuthorization: healthKitPermissionsRequested)
+                    await viewModel.autoRefreshRecoveryIfNeeded(
+                        context: modelContext,
+                        trigger: .authorizationStatusUpdated
+                    )
                 }
             }
             .disabled(isUnavailable || viewModel.isLoading)
 
             Button("Sync Recovery Data (Last 90 Days)") {
                 Task {
-                    let didSync = await viewModel.syncRecoverySummaries(context: modelContext)
-                    if didSync {
-                        healthKitLastSyncTimestamp = Date().timeIntervalSince1970
-                    }
+                    _ = await viewModel.syncRecoverySummaries(context: modelContext)
                 }
             }
             .disabled(!healthKitEnabled || isUnavailable || viewModel.isLoading || isSyncing)
@@ -245,6 +283,10 @@ struct HealthDataSettingsView: View {
                 .disabled(!healthKitEnabled || isUnavailable)
 
             Text("The app reads objective recovery data to lightly assist Daily Coach readiness decisions.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Text("Daily Coach stays in baseline mode until recovery data has synced at least once and today's comparable HealthKit signals are available.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -263,7 +305,7 @@ struct HealthDataSettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Text("Watch companion coming soon. This release only adds connection groundwork and shared payload seams.")
+            Text("Opening the watch app refreshes companion presence and replays the latest Today Plan or live workout state when the bridge reconnects.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
@@ -278,6 +320,66 @@ struct HealthDataSettingsView: View {
                     .foregroundStyle(.secondary)
                 }
             }
+
+            HStack {
+                Text("Last Watch Contact")
+                Spacer()
+                if let lastWatchContactAt = viewModel.watchStatus.lastWatchContactAt {
+                    Text(
+                        lastWatchContactAt,
+                        format: .dateTime.month(.abbreviated).day().year().hour().minute()
+                    )
+                    .foregroundStyle(.secondary)
+                } else {
+                    Text("No contact yet")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+#if DEBUG
+            HStack {
+                Text("Activation State")
+                Spacer()
+                Text(viewModel.watchStatus.activationState.rawValue)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text("Paired")
+                Spacer()
+                Text(yesNoText(viewModel.watchStatus.isPaired))
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text("Companion Installed")
+                Spacer()
+                Text(yesNoText(viewModel.watchStatus.isCompanionAppInstalled))
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text("Reachable")
+                Spacer()
+                Text(yesNoText(viewModel.watchStatus.isReachable))
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text("Last Payload Replay")
+                Spacer()
+                if let lastPayloadReplayAt = viewModel.watchStatus.lastPayloadReplayAt {
+                    Text(
+                        lastPayloadReplayAt,
+                        format: .dateTime.month(.abbreviated).day().year().hour().minute()
+                    )
+                    .foregroundStyle(.secondary)
+                } else {
+                    Text("No replay yet")
+                        .foregroundStyle(.secondary)
+                }
+            }
+#endif
 
             Button("Refresh Watch Status") {
                 Task {
@@ -298,10 +400,7 @@ struct HealthDataSettingsView: View {
 
             Button("Import Workouts (Last 90 Days)") {
                 Task {
-                    let didSync = await viewModel.syncImportedWorkouts(context: modelContext)
-                    if didSync {
-                        healthKitLastSyncTimestamp = Date().timeIntervalSince1970
-                    }
+                    _ = await viewModel.syncImportedWorkouts(context: modelContext)
                 }
             }
             .disabled(
@@ -323,6 +422,22 @@ struct HealthDataSettingsView: View {
             Text("Workout writeback is limited to workout type, timing, duration, and optional active energy.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            if let workoutImportLastSyncDate {
+                HStack {
+                    Text("Last Workout Import")
+                    Spacer()
+                    Text(workoutImportLastSyncDate, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                HStack {
+                    Text("Last Workout Import")
+                    Spacer()
+                    Text("No import yet")
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             workoutImportStatusMessage
         }
@@ -396,6 +511,8 @@ struct HealthDataSettingsView: View {
         switch viewModel.watchStatus.availability {
         case .unsupported:
             return "Unavailable"
+        case .statusPending:
+            return "Connecting"
         case .notPaired:
             return "Not Paired"
         case .pairedNoCompanionApp:
@@ -411,6 +528,8 @@ struct HealthDataSettingsView: View {
         switch viewModel.watchStatus.availability {
         case .unsupported:
             return .secondary
+        case .statusPending:
+            return .secondary
         case .notPaired, .pairedNoCompanionApp:
             return .orange
         case .companionInstalled:
@@ -418,6 +537,10 @@ struct HealthDataSettingsView: View {
         case .reachable:
             return .green
         }
+    }
+
+    private func yesNoText(_ value: Bool) -> String {
+        value ? "Yes" : "No"
     }
 
     @ViewBuilder

@@ -2951,6 +2951,24 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 11 [HealthKit Refresh and Watch Companion Stability] — 2026-04-17
+
+- Stabilized Daily Coach HealthKit recovery refresh behavior:
+  - added a guarded foreground/Daily Coach auto-refresh coordinator that bootstraps the first 90-day sync, refreshes the last 30 days on app activation, and retries later in the day when current-day comparable metrics are still missing
+  - split recovery sync timestamps from workout import timestamps, added a legacy recovery timestamp migration path, and updated Daily Coach explanation text so baseline mode now distinguishes disabled, not-yet-synced, insufficient-baseline, and awaiting-current-day-metrics states
+  - refreshed Health Data settings copy to reflect recovery sync state and the new auto-refresh behavior without removing the manual 90-day sync fallback
+- Hardened Apple Watch companion presence and replay handling:
+  - made phone-side watch status activation-aware, added a pending/connecting state, and preserved last confirmed companion evidence during transient `WCSession` churn
+  - added a lightweight `watchPresenceHeartbeat` payload so the watch confirms presence on activation and when the watch app becomes active, allowing the phone to record last watch contact and replay the latest Today Plan/live workout payloads even after a stale “not installed” read
+  - removed the stale “coming soon” copy from Health Data settings and replaced it with live watch status messaging plus debug transport details for activation, pairing, install, reachability, last contact, and last replay
+- Added focused regression coverage for:
+  - HealthKit auto-refresh policy decisions and objective recovery evaluation states
+  - watch heartbeat payload round-trips, pending/inactive status resolution, evidence retention, and replay fallback after transient install-state misreads
+
+**Commit:** `fix: stabilize healthkit refresh and watch companion status`
+
+---
+
 
 ## Project Setup
 

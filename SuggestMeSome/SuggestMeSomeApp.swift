@@ -10,6 +10,7 @@ import SwiftData
 
 @main
 struct SuggestMeSomeApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var activeWorkoutSessionStore = ActiveWorkoutSessionStore()
 
     private static let sharedSchema = Schema([
@@ -92,9 +93,21 @@ struct SuggestMeSomeApp: App {
                     _ = PersistenceMaintenanceCoordinator.runStartupMaintenance(
                         context: sharedModelContainer.mainContext
                     )
+                    HealthKitSettingsStorage.migrateLegacyRecoverySyncTimestampIfNeeded(
+                        context: sharedModelContainer.mainContext
+                    )
                     WatchSessionCoordinator.shared.installExecutionActionHandler(
                         activeWorkoutSessionStore: activeWorkoutSessionStore
                     )
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active else { return }
+                    Task { @MainActor in
+                        _ = await HealthKitRecoveryAutoRefreshCoordinator.shared.refreshIfNeeded(
+                            trigger: .appDidBecomeActive,
+                            context: sharedModelContainer.mainContext
+                        )
+                    }
                 }
         }
         .modelContainer(sharedModelContainer)

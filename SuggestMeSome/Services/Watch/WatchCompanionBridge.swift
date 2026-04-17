@@ -31,6 +31,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
 
     private(set) var latestStatus: WatchCompanionStatus
     var executionActionHandler: WatchExecutionActionHandler?
+    private var watchEvidence = WatchCompanionEvidence()
     private var latestTodayPlanSnapshot: WatchTodayPlanSnapshot?
     private var latestWorkoutLaunchPayload: WatchWorkoutLaunchPayload?
     private var latestWorkoutProgressSnapshot: WatchWorkoutProgressSnapshot?
@@ -46,7 +47,18 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
 #if canImport(WatchConnectivity)
         if WCSession.isSupported() {
             self.session = WCSession.default
-            self.latestStatus = DefaultWatchCompanionBridge.makeStatus(from: WCSession.default, checkedAt: Date())
+            let checkedAt = Date()
+            let snapshot = DefaultWatchCompanionBridge.makeSessionSnapshot(from: WCSession.default)
+            var evidence = WatchCompanionEvidence()
+            if snapshot.activationState == .activated, snapshot.isWatchAppInstalled {
+                evidence.recordInstalledCompanion(at: checkedAt)
+            }
+            self.watchEvidence = evidence
+            self.latestStatus = WatchCompanionStatusResolver.makeStatus(
+                from: snapshot,
+                evidence: evidence,
+                checkedAt: checkedAt
+            )
         } else {
             self.session = nil
             self.latestStatus = .unsupported()
@@ -70,9 +82,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
             latestStatus = .unsupported()
             return latestStatus
         }
-        let updated = Self.makeStatus(from: session, checkedAt: Date())
-        latestStatus = updated
-        return updated
+        return refreshLatestStatus(from: session, checkedAt: Date())
 #else
         latestStatus = .unsupported()
         return latestStatus
@@ -86,7 +96,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestCurrentSessionContext = nil
         latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
-        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let session, canSendPayloads(on: session) else { return }
         guard let message = Self.makeTransferMessage(kind: .workoutLaunch, payload: payload) else { return }
         sendTransferMessage(message, on: session)
 #else
@@ -98,7 +108,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestWorkoutProgressSnapshot = snapshot
         latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
-        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let session, canSendPayloads(on: session) else { return }
         guard let message = Self.makeTransferMessage(kind: .workoutProgress, payload: snapshot) else { return }
         sendTransferMessage(message, on: session)
 #else
@@ -119,7 +129,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestLiveWorkoutSnapshot = snapshot
         latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
-        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let session, canSendPayloads(on: session) else { return }
         guard let message = Self.makeContextMessage(kind: .liveWorkoutSnapshot, payload: snapshot) else { return }
         sendContextMessage(message, on: session)
 #else
@@ -131,7 +141,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestCurrentSessionContext = context
         latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
-        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let session, canSendPayloads(on: session) else { return }
         guard let message = Self.makeContextMessage(kind: .currentSessionContext, payload: context) else { return }
         sendContextMessage(message, on: session)
 #else
@@ -146,7 +156,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestLiveWorkoutSnapshot = nil
         latestCurrentSessionContext = nil
 #if canImport(WatchConnectivity)
-        guard let session, session.activationState == .activated, session.isWatchAppInstalled else { return }
+        guard let session, canSendPayloads(on: session) else { return }
         guard let message = Self.makeContextMessage(kind: .sessionCompletion, payload: payload) else { return }
         sendContextMessage(
             message,
@@ -205,7 +215,11 @@ extension DefaultWatchCompanionBridge {
 #if canImport(WatchConnectivity)
 @MainActor
 extension DefaultWatchCompanionBridge: WCSessionDelegate {
-    nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
+    nonisolated func sessionDidBecomeInactive(_ session: WCSession) {
+        Task { @MainActor in
+            _ = await refreshStatus()
+        }
+    }
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
         session.activate()
     }
@@ -249,11 +263,46 @@ extension DefaultWatchCompanionBridge: WCSessionDelegate {
 }
 
 private extension DefaultWatchCompanionBridge {
+    func refreshLatestStatus(from session: WCSession, checkedAt: Date) -> WatchCompanionStatus {
+        let snapshot = Self.makeSessionSnapshot(from: session)
+        if snapshot.activationState == .activated, snapshot.isWatchAppInstalled {
+            watchEvidence.recordInstalledCompanion(at: checkedAt)
+        }
+        latestStatus = WatchCompanionStatusResolver.makeStatus(
+            from: snapshot,
+            evidence: watchEvidence,
+            checkedAt: checkedAt
+        )
+        return latestStatus
+    }
+
+    func canSendPayloads(on session: WCSession, now: Date = Date()) -> Bool {
+        WatchCompanionStatusResolver.canSendPayloads(
+            with: Self.makeSessionSnapshot(from: session),
+            evidence: watchEvidence,
+            now: now
+        )
+    }
+
+    func recordPayloadReplay(at date: Date = Date()) {
+        watchEvidence.recordPayloadReplay(at: date)
+        if let session {
+            latestStatus = WatchCompanionStatusResolver.makeStatus(
+                from: Self.makeSessionSnapshot(from: session),
+                evidence: watchEvidence,
+                checkedAt: date
+            )
+        } else {
+            latestStatus = .unsupported(checkedAt: date)
+        }
+    }
+
     func sendTransferMessage(
         _ message: [String: Any],
         on session: WCSession,
         queueDurablyWhenUnreachable: Bool = true
     ) {
+        recordPayloadReplay()
         if session.isReachable {
             session.sendMessage(message, replyHandler: nil) { _ in
                 guard queueDurablyWhenUnreachable else { return }
@@ -271,6 +320,7 @@ private extension DefaultWatchCompanionBridge {
         transferOnForegroundSendFailure: Bool = false,
         transferWhenUnreachable: Bool = false
     ) {
+        recordPayloadReplay()
         // Keep application context as the durable latest-state channel, but
         // mirror foreground-active updates over sendMessage so the watch UI
         // does not stall behind an optimistic local transition.
@@ -296,8 +346,7 @@ private extension DefaultWatchCompanionBridge {
         guard let snapshot = latestTodayPlanSnapshot else { return }
 #if canImport(WatchConnectivity)
         guard let session,
-              session.activationState == .activated,
-              session.isWatchAppInstalled,
+              canSendPayloads(on: session),
               let message = Self.makeContextMessage(kind: .todayPlanSnapshot, payload: snapshot) else {
             return
         }
@@ -309,8 +358,7 @@ private extension DefaultWatchCompanionBridge {
         guard let completion = latestSessionCompletionPayload else { return }
 #if canImport(WatchConnectivity)
         guard let session,
-              session.activationState == .activated,
-              session.isWatchAppInstalled,
+              canSendPayloads(on: session),
               let message = Self.makeContextMessage(kind: .sessionCompletion, payload: completion) else {
             return
         }
@@ -326,8 +374,7 @@ private extension DefaultWatchCompanionBridge {
     func sendLatestActiveWorkoutIfPossible() {
 #if canImport(WatchConnectivity)
         guard let session,
-              session.activationState == .activated,
-              session.isWatchAppInstalled else {
+              canSendPayloads(on: session) else {
             return
         }
 
@@ -355,59 +402,67 @@ private extension DefaultWatchCompanionBridge {
 
     func handleIncomingMessage(_ dictionary: [String: Any]) {
         guard let message = try? WatchBridgeMessageCodec.decodeMessage(from: dictionary),
-              message.isSupportedSchemaVersion,
-              message.kind == .workoutExecutionAction,
-              let action = try? WatchBridgeMessageCodec.decodePayload(
-                WatchWorkoutExecutionActionDTO.self,
-                from: message
-              ) else {
+              message.isSupportedSchemaVersion else {
             return
         }
-        executionActionHandler?(action)
+        switch message.kind {
+        case .watchPresenceHeartbeat:
+            guard let heartbeat = try? WatchBridgeMessageCodec.decodePayload(
+                WatchPresenceHeartbeatPayload.self,
+                from: message
+            ) else {
+                return
+            }
+            watchEvidence.recordWatchContact(at: max(message.sentAt, heartbeat.sentAt))
+            if let session {
+                latestStatus = refreshLatestStatus(from: session, checkedAt: Date())
+            } else {
+                latestStatus = .unsupported()
+            }
+            replayLatestSnapshotsIfPossible()
+
+        case .workoutExecutionAction:
+            guard let action = try? WatchBridgeMessageCodec.decodePayload(
+                WatchWorkoutExecutionActionDTO.self,
+                from: message
+            ) else {
+                return
+            }
+            executionActionHandler?(action)
+
+        case .workoutLaunch,
+             .workoutProgress,
+             .todayPlanSnapshot,
+             .currentSessionContext,
+             .liveWorkoutSnapshot,
+             .sessionCompletion:
+            return
+        }
     }
 
-    static func makeStatus(from session: WCSession, checkedAt: Date) -> WatchCompanionStatus {
-        if !session.isPaired {
-            return WatchCompanionStatus(
-                availability: .notPaired,
-                isPaired: false,
-                isCompanionAppInstalled: false,
-                isReachable: false,
-                message: "No paired Apple Watch detected.",
-                checkedAt: checkedAt
-            )
-        }
-
-        if !session.isWatchAppInstalled {
-            return WatchCompanionStatus(
-                availability: .pairedNoCompanionApp,
-                isPaired: true,
-                isCompanionAppInstalled: false,
-                isReachable: false,
-                message: "Watch is paired. Companion app is not installed yet.",
-                checkedAt: checkedAt
-            )
-        }
-
-        if session.isReachable {
-            return WatchCompanionStatus(
-                availability: .reachable,
-                isPaired: true,
-                isCompanionAppInstalled: true,
-                isReachable: true,
-                message: "Watch companion is reachable.",
-                checkedAt: checkedAt
-            )
-        }
-
-        return WatchCompanionStatus(
-            availability: .companionInstalled,
-            isPaired: true,
-            isCompanionAppInstalled: true,
-            isReachable: false,
-            message: "Watch is paired and companion app is installed.",
-            checkedAt: checkedAt
+    static func makeSessionSnapshot(from session: WCSession) -> WatchCompanionSessionSnapshot {
+        WatchCompanionSessionSnapshot(
+            isSupported: true,
+            activationState: WatchCompanionActivationState(session.activationState),
+            isPaired: session.isPaired,
+            isWatchAppInstalled: session.isWatchAppInstalled,
+            isReachable: session.isReachable
         )
+    }
+}
+
+private extension WatchCompanionActivationState {
+    init(_ activationState: WCSessionActivationState) {
+        switch activationState {
+        case .notActivated:
+            self = .notActivated
+        case .inactive:
+            self = .inactive
+        case .activated:
+            self = .activated
+        @unknown default:
+            self = .unknown
+        }
     }
 }
 #endif

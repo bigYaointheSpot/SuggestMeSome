@@ -308,6 +308,7 @@ struct Feature11Prompt7IntegrationHardeningTests {
     private func makePlan(labels: [String], usedProgram: Bool) -> TodayPlan {
         TodayPlan(
             recommendation: makeRecommendation(type: .runAsPlanned),
+            objectiveRecoveryEvaluation: .disabled(),
             confidence: .medium,
             confidenceRationale: "test",
             attribution: TodayPlanSourceAttribution(

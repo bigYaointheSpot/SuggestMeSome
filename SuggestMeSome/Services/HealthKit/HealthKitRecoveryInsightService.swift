@@ -17,13 +17,76 @@ struct HealthKitRecoveryInsightService {
         referenceDate: Date = Date(),
         calendar: Calendar = .current
     ) -> ObjectiveRecoveryInsight? {
-        guard let current = latestComparableSummary(from: summaries, referenceDate: referenceDate, calendar: calendar) else {
+        guard let current = currentDayComparableSummary(
+            from: summaries,
+            referenceDate: referenceDate,
+            calendar: calendar
+        ) else {
             return nil
         }
 
-        let assessments = buildAssessments(
+        return buildInsight(
             current: current,
             allSummaries: summaries,
+            calendar: calendar
+        )
+    }
+
+    static func evaluate(
+        from summaries: [HealthKitDailySummary],
+        healthKitEnabled: Bool,
+        useHealthKitInDailyCoach: Bool,
+        hasSuccessfulRecoverySync: Bool,
+        referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> ObjectiveRecoveryEvaluation {
+        guard healthKitEnabled, useHealthKitInDailyCoach else {
+            return .disabled()
+        }
+
+        guard hasSuccessfulRecoverySync, !summaries.isEmpty else {
+            return .notYetSynced()
+        }
+
+        guard let current = currentDayComparableSummary(
+            from: summaries,
+            referenceDate: referenceDate,
+            calendar: calendar
+        ) else {
+            return .awaitingCurrentDayMetrics()
+        }
+
+        guard let insight = buildInsight(
+            current: current,
+            allSummaries: summaries,
+            calendar: calendar
+        ) else {
+            return .insufficientBaseline()
+        }
+
+        return .ready(insight)
+    }
+
+    static func hasComparableCurrentDaySummary(
+        from summaries: [HealthKitDailySummary],
+        referenceDate: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Bool {
+        currentDayComparableSummary(
+            from: summaries,
+            referenceDate: referenceDate,
+            calendar: calendar
+        ) != nil
+    }
+
+    private static func buildInsight(
+        current: HealthKitDailySummary,
+        allSummaries: [HealthKitDailySummary],
+        calendar: Calendar
+    ) -> ObjectiveRecoveryInsight? {
+        let assessments = buildAssessments(
+            current: current,
+            allSummaries: allSummaries,
             calendar: calendar
         )
 
@@ -54,15 +117,14 @@ struct HealthKitRecoveryInsightService {
         )
     }
 
-    private static func latestComparableSummary(
+    private static func currentDayComparableSummary(
         from summaries: [HealthKitDailySummary],
         referenceDate: Date,
         calendar: Calendar
     ) -> HealthKitDailySummary? {
         let today = calendar.startOfDay(for: referenceDate)
         return summaries
-            .filter { calendar.startOfDay(for: $0.dayStart) <= today }
-            .sorted { $0.dayStart > $1.dayStart }
+            .filter { calendar.startOfDay(for: $0.dayStart) == today }
             .first { hasAnyCoreMetric($0) }
     }
 

@@ -26,10 +26,11 @@ struct TodayPlanEngine {
         pendingProposals: [AdaptationProposal] = [],
         activeOverlays: [AppliedProgramOverlay] = [],
         recentWorkouts: [Workout],
-        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation,
         completedSessions: Set<ProgramSessionCompletionKey>? = nil,
         completedWorkoutCountForRun: Int = 0
     ) -> TodayPlan {
+        let objectiveRecoveryInsight = objectiveRecoveryEvaluation.insight
 
         // ── Step 1: Core recommendation (existing engine, unchanged) ──────
         let recommendation = DailyCoachRecommendationService.generate(
@@ -63,7 +64,7 @@ struct TodayPlanEngine {
             activeRun: activeRun,
             pendingProposalCount: pendingProposalCount,
             recentWorkouts: recentWorkouts,
-            objectiveRecoveryInsight: objectiveRecoveryInsight,
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
             overlayContext: overlayContext
         )
 
@@ -86,7 +87,7 @@ struct TodayPlanEngine {
             recommendation: recommendation,
             checkIn: checkIn,
             activeRun: activeRun,
-            objectiveRecoveryInsight: objectiveRecoveryInsight,
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
             adherenceRescue: surfacedRescue
         )
         let proposalAwareness = TodayPlanExplanationAssembler.buildProposalAwareness(
@@ -97,7 +98,7 @@ struct TodayPlanEngine {
         let changeSummary = TodayPlanExplanationAssembler.buildChangeSummary(
             recommendation: recommendation,
             checkIn: checkIn,
-            objectiveRecoveryInsight: objectiveRecoveryInsight,
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
             adherenceRescue: surfacedRescue,
             overlayContext: overlayContext,
             proposalAwareness: proposalAwareness,
@@ -114,6 +115,7 @@ struct TodayPlanEngine {
 
         return TodayPlan(
             recommendation: recommendation,
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
             confidence: confidence,
             confidenceRationale: confidenceRationale,
             attribution: attribution,
@@ -123,6 +125,32 @@ struct TodayPlanEngine {
             changeSummary: changeSummary,
             proposalAwareness: proposalAwareness,
             nextStepGuidance: nextStepGuidance
+        )
+    }
+
+    static func buildPlan(
+        checkIn: DailyCoachCheckIn?,
+        activeRun: ProgramRun?,
+        latestAnalysis: WeeklyTrainingAnalysis?,
+        pendingProposalCount: Int,
+        pendingProposals: [AdaptationProposal] = [],
+        activeOverlays: [AppliedProgramOverlay] = [],
+        recentWorkouts: [Workout],
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        completedSessions: Set<ProgramSessionCompletionKey>? = nil,
+        completedWorkoutCountForRun: Int = 0
+    ) -> TodayPlan {
+        buildPlan(
+            checkIn: checkIn,
+            activeRun: activeRun,
+            latestAnalysis: latestAnalysis,
+            pendingProposalCount: pendingProposalCount,
+            pendingProposals: pendingProposals,
+            activeOverlays: activeOverlays,
+            recentWorkouts: recentWorkouts,
+            objectiveRecoveryEvaluation: objectiveRecoveryInsight.map(ObjectiveRecoveryEvaluation.ready) ?? .disabled(),
+            completedSessions: completedSessions,
+            completedWorkoutCountForRun: completedWorkoutCountForRun
         )
     }
 
@@ -201,7 +229,7 @@ struct TodayPlanEngine {
         activeRun: ProgramRun?,
         pendingProposalCount: Int,
         recentWorkouts: [Workout],
-        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation,
         overlayContext: TodayPlanOverlayInfluenceContext = TodayPlanOverlayInfluenceContext(
             activeOverlayCount: 0,
             overlaysAffectingTodayCount: 0
@@ -213,7 +241,30 @@ struct TodayPlanEngine {
             activeRun: activeRun,
             pendingProposalCount: pendingProposalCount,
             recentWorkouts: recentWorkouts,
-            objectiveRecoveryInsight: objectiveRecoveryInsight,
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
+            overlayContext: overlayContext
+        )
+    }
+
+    static func buildAttribution(
+        recommendation: DailyCoachRecommendation,
+        checkIn: DailyCoachCheckIn?,
+        activeRun: ProgramRun?,
+        pendingProposalCount: Int,
+        recentWorkouts: [Workout],
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        overlayContext: TodayPlanOverlayInfluenceContext = TodayPlanOverlayInfluenceContext(
+            activeOverlayCount: 0,
+            overlaysAffectingTodayCount: 0
+        )
+    ) -> TodayPlanSourceAttribution {
+        buildAttribution(
+            recommendation: recommendation,
+            checkIn: checkIn,
+            activeRun: activeRun,
+            pendingProposalCount: pendingProposalCount,
+            recentWorkouts: recentWorkouts,
+            objectiveRecoveryEvaluation: objectiveRecoveryInsight.map(ObjectiveRecoveryEvaluation.ready) ?? .disabled(),
             overlayContext: overlayContext
         )
     }
@@ -223,8 +274,9 @@ struct TodayPlanEngine {
         activeRun: ProgramRun?,
         pendingProposalCount: Int,
         recentWorkouts: [Workout],
-        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
+        objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation
     ) -> TodayPlanSourceAttribution {
+        let objectiveRecoveryInsight = objectiveRecoveryEvaluation.insight
         let recommendation = DailyCoachRecommendationService.generate(
             checkIn: checkIn,
             activeRun: activeRun,
@@ -239,7 +291,23 @@ struct TodayPlanEngine {
             activeRun: activeRun,
             pendingProposalCount: pendingProposalCount,
             recentWorkouts: recentWorkouts,
-            objectiveRecoveryInsight: objectiveRecoveryInsight
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation
+        )
+    }
+
+    static func buildAttribution(
+        checkIn: DailyCoachCheckIn?,
+        activeRun: ProgramRun?,
+        pendingProposalCount: Int,
+        recentWorkouts: [Workout],
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?
+    ) -> TodayPlanSourceAttribution {
+        buildAttribution(
+            checkIn: checkIn,
+            activeRun: activeRun,
+            pendingProposalCount: pendingProposalCount,
+            recentWorkouts: recentWorkouts,
+            objectiveRecoveryEvaluation: objectiveRecoveryInsight.map(ObjectiveRecoveryEvaluation.ready) ?? .disabled()
         )
     }
 
@@ -249,16 +317,55 @@ struct TodayPlanEngine {
         recommendation: DailyCoachRecommendation,
         checkIn: DailyCoachCheckIn?,
         activeRun: ProgramRun?,
-        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation,
         adherenceRescue: AdherenceRescue?
     ) -> String {
         TodayPlanExplanationAssembler.buildWhyToday(
             recommendation: recommendation,
             checkIn: checkIn,
             activeRun: activeRun,
-            objectiveRecoveryInsight: objectiveRecoveryInsight,
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
             adherenceRescue: adherenceRescue
         )
+    }
+
+    static func buildWhyToday(
+        recommendation: DailyCoachRecommendation,
+        checkIn: DailyCoachCheckIn?,
+        activeRun: ProgramRun?,
+        objectiveRecoveryInsight: ObjectiveRecoveryInsight?,
+        adherenceRescue: AdherenceRescue?
+    ) -> String {
+        buildWhyToday(
+            recommendation: recommendation,
+            checkIn: checkIn,
+            activeRun: activeRun,
+            objectiveRecoveryEvaluation: objectiveRecoveryInsight.map(ObjectiveRecoveryEvaluation.ready) ?? .disabled(),
+            adherenceRescue: adherenceRescue
+        )
+    }
+
+    static func buildWhatChangedToday(
+        recommendation: DailyCoachRecommendation,
+        checkIn: DailyCoachCheckIn?,
+        objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation,
+        adherenceRescue: AdherenceRescue?,
+        pendingProposalCount: Int,
+        overlayContext: TodayPlanOverlayInfluenceContext = TodayPlanOverlayInfluenceContext(
+            activeOverlayCount: 0,
+            overlaysAffectingTodayCount: 0
+        ),
+        proposalAwareness: [TodayPlanProposalAwarenessItem] = []
+    ) -> String {
+        TodayPlanExplanationAssembler.buildChangeSummary(
+            recommendation: recommendation,
+            checkIn: checkIn,
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
+            adherenceRescue: adherenceRescue,
+            overlayContext: overlayContext,
+            proposalAwareness: proposalAwareness,
+            pendingProposalCount: pendingProposalCount
+        ).compactText
     }
 
     static func buildWhatChangedToday(
@@ -273,14 +380,14 @@ struct TodayPlanEngine {
         ),
         proposalAwareness: [TodayPlanProposalAwarenessItem] = []
     ) -> String {
-        TodayPlanExplanationAssembler.buildChangeSummary(
+        buildWhatChangedToday(
             recommendation: recommendation,
             checkIn: checkIn,
-            objectiveRecoveryInsight: objectiveRecoveryInsight,
+            objectiveRecoveryEvaluation: objectiveRecoveryInsight.map(ObjectiveRecoveryEvaluation.ready) ?? .disabled(),
             adherenceRescue: adherenceRescue,
+            pendingProposalCount: pendingProposalCount,
             overlayContext: overlayContext,
-            proposalAwareness: proposalAwareness,
-            pendingProposalCount: pendingProposalCount
-        ).compactText
+            proposalAwareness: proposalAwareness
+        )
     }
 }

@@ -56,6 +56,8 @@ struct DailyCoachView: View {
 
     @AppStorage("healthkit.enabled") private var healthKitEnabled = false
     @AppStorage("healthkit.dailyCoachEnabled") private var useHealthKitInDailyCoach = false
+    @AppStorage(HealthKitSettingsStorage.recoveryLastSyncTimestampKey)
+    private var recoveryLastSyncTimestamp: Double = 0
 
     // MARK: Computed helpers
 
@@ -107,7 +109,7 @@ struct DailyCoachView: View {
             pendingProposals: pendingProposals,
             activeOverlays: activeOverlaysForRun,
             recentWorkouts: TrainingContextQueryService.recentWorkouts(from: recentWorkouts, limit: 20),
-            objectiveRecoveryInsight: objectiveRecoveryInsight,
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
             completedSessions: completedSessionKeysForRun,
             completedWorkoutCountForRun: completedWorkoutCountForRun
         )
@@ -130,10 +132,12 @@ struct DailyCoachView: View {
         return context.overlaysAffectingTodayCount > 0
     }
 
-    private var objectiveRecoveryInsight: ObjectiveRecoveryInsight? {
-        guard healthKitEnabled, useHealthKitInDailyCoach else { return nil }
-        return HealthKitRecoveryInsightService.computeInsight(
-            from: Array(healthKitDailySummaries.prefix(90))
+    private var objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation {
+        HealthKitRecoveryInsightService.evaluate(
+            from: Array(healthKitDailySummaries.prefix(90)),
+            healthKitEnabled: healthKitEnabled,
+            useHealthKitInDailyCoach: useHealthKitInDailyCoach,
+            hasSuccessfulRecoverySync: recoveryLastSyncTimestamp > 0
         )
     }
 
@@ -362,6 +366,12 @@ struct DailyCoachView: View {
             AIProgramGeneratorView(prefill: latestCompletedReviewSnapshot?.defaultNextBlockPrefill)
         }
         .onAppear {
+            Task {
+                _ = await HealthKitRecoveryAutoRefreshCoordinator.shared.refreshIfNeeded(
+                    trigger: .dailyCoachOpened,
+                    context: modelContext
+                )
+            }
             publishTodayPlanToWatchIfNeeded(force: true)
         }
         .onChange(of: watchTodayPlanSignature) { _, _ in
@@ -600,8 +610,10 @@ struct DailyCoachView: View {
 
             Divider()
 
-            if let insight = rec.objectiveRecoveryInsight {
+            if let insight = plan.objectiveRecoveryEvaluation.insight {
                 objectiveRecoveryRow(insight)
+            } else if plan.objectiveRecoveryEvaluation.state != .disabled {
+                objectiveRecoveryBaselineRow(plan.objectiveRecoveryEvaluation)
             }
 
             recommendationSourcesRow(plan.attribution.activeSourceLabels)
@@ -676,8 +688,13 @@ struct DailyCoachView: View {
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let insight = rec.objectiveRecoveryInsight {
+                if let insight = plan.objectiveRecoveryEvaluation.insight {
                     Text(insight.detailSummary)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if plan.objectiveRecoveryEvaluation.state != .disabled {
+                    Text(TodayPlanExplanationAssembler.healthKitInfluenceText(for: plan.objectiveRecoveryEvaluation))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -750,6 +767,20 @@ struct DailyCoachView: View {
         }
     }
 
+    private func objectiveRecoveryBaselineRow(_ evaluation: ObjectiveRecoveryEvaluation) -> some View {
+        HStack(spacing: 8) {
+            Text("Objective Recovery")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            objectiveRecoveryStateBadge(evaluation.state)
+            Text(objectiveRecoveryBaselineSummary(for: evaluation.state))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer()
+        }
+    }
+
     private func objectiveRecoveryBadge(_ status: ObjectiveRecoveryStatus) -> some View {
         let (label, color): (String, Color) = switch status {
         case .good: ("Good", .green)
@@ -764,6 +795,44 @@ struct DailyCoachView: View {
             .background(color.opacity(0.15))
             .foregroundStyle(color)
             .clipShape(Capsule())
+    }
+
+    private func objectiveRecoveryStateBadge(_ state: ObjectiveRecoveryEvaluationState) -> some View {
+        let (label, color): (String, Color) = switch state {
+        case .disabled:
+            ("Off", .secondary)
+        case .notYetSynced:
+            ("Sync Needed", .orange)
+        case .insufficientBaseline:
+            ("Building Baseline", .orange)
+        case .awaitingCurrentDayMetrics:
+            ("Waiting", .indigo)
+        case .ready:
+            ("Ready", .green)
+        }
+
+        return Text(label)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.15))
+            .foregroundStyle(color)
+            .clipShape(Capsule())
+    }
+
+    private func objectiveRecoveryBaselineSummary(for state: ObjectiveRecoveryEvaluationState) -> String {
+        switch state {
+        case .disabled:
+            return "HealthKit objective recovery is off."
+        case .notYetSynced:
+            return "Recovery data has not synced into SuggestMeSome yet."
+        case .insufficientBaseline:
+            return "More HealthKit history is needed before Daily Coach can score recovery."
+        case .awaitingCurrentDayMetrics:
+            return "Today's comparable recovery signals have not landed yet."
+        case .ready:
+            return "Objective recovery is ready."
+        }
     }
 
     private func recommendationSourcesRow(_ labels: [String]) -> some View {

@@ -43,11 +43,25 @@ final class HealthKitRecoverySyncService {
 
     @MainActor
     func syncLast90Days(context: ModelContext, referenceDate: Date = Date()) async throws {
+        try await syncLastDays(
+            context: context,
+            days: 90,
+            referenceDate: referenceDate
+        )
+    }
+
+    @MainActor
+    func syncLastDays(
+        context: ModelContext,
+        days: Int,
+        referenceDate: Date = Date()
+    ) async throws {
         guard HKHealthStore.isHealthDataAvailable() else {
             throw HealthKitRecoverySyncError.healthDataUnavailable
         }
 
-        let window = HealthKitRecoveryWindow.makeLast90Days(
+        let window = HealthKitRecoveryWindow.makeTrailingDays(
+            max(1, days),
             referenceDate: referenceDate,
             calendar: calendar
         )
@@ -130,3 +144,5 @@ final class HealthKitRecoverySyncService {
         )
     }
 }
+
+extension HealthKitRecoverySyncService: HealthKitRecoverySyncing {}
