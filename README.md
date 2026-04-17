@@ -2910,17 +2910,21 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 #### Prompt 9 [Backend Scalability Domain Extractions] — 2026-04-16
 
-- Split the next four backend growth seams behind stable public APIs:
+- Split the next backend growth seams behind stable public APIs:
+  - `SessionOutcomeInferenceService` now acts as a thin orchestration layer while history loading, score/input building, and scoring math live in focused helpers
+  - standalone outcome inference now loads only prior workouts for baseline history instead of fetching all `ExerciseEntry` rows and filtering in memory
   - `LiftTrendTrackingService` now delegates scoped analysis loading, trend-point normalization, metric computation, and persistence to focused helpers instead of one monolithic file
   - `LocalSyncRepository` now stays as the facade while workout, program, coach, adaptive, and HealthKit summary sync logic live in domain-specific stores backed by shared sync-store utilities
   - `HealthKitWorkoutImportService` now separates HealthKit workout querying, sample-to-snapshot mapping, and imported-workout persistence
   - `HealthKitRecoverySyncService` now separates windowing, concurrent HealthKit metric fetching, daily snapshot assembly, and summary upsert persistence
 - Added focused regression coverage for the new backend boundaries:
+  - session outcome inference now verifies future workouts cannot leak into standalone baseline scoring
   - lift-trend tracking now proves scoped program-run isolation
   - sync repository tests now cover program/adaptive graph linking plus coach and HealthKit summary upserts
   - HealthKit import tests now verify re-import preserves the original import timestamp while still marking sync updates
   - HealthKit recovery tests now verify the latest source-update timestamp is persisted across updates
 - This extraction pass keeps current app behavior intact while making future backend scaling safer:
+  - outcome inference now scales with workout history more safely and is easier to evolve without touching persistence, history loading, and scoring rules together
   - adaptive history reads are more intentionally scoped
   - sync growth no longer funnels through one all-purpose repository file
   - HealthKit import and recovery rules can evolve without bloating their service entrypoints
