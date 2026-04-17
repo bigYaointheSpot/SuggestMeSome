@@ -12,6 +12,10 @@ struct SuggestMeSomeGenerationRequest {
     /// Session mode carried from the recommendation stage.
     /// Used by the generation service to apply mode-specific workout shaping.
     let sessionMode: SuggestMeSomeSessionMode?
+    /// Optional active-program context used to support the next planned session.
+    let activeProgramContext: DailyProgramContext?
+    /// Optional adaptive-state override used by deterministic tests and validation paths.
+    let stateSnapshotOverride: TrainingStateSnapshot?
 
     init(
         generationType: WorkoutGenerationType,
@@ -21,7 +25,9 @@ struct SuggestMeSomeGenerationRequest {
         selectedExercises: [Exercise] = [],
         goal: SuggestMeSomeGenerationGoal? = nil,
         equipmentProfile: SuggestMeSomeEquipmentProfile? = nil,
-        sessionMode: SuggestMeSomeSessionMode? = nil
+        sessionMode: SuggestMeSomeSessionMode? = nil,
+        activeProgramContext: DailyProgramContext? = nil,
+        stateSnapshotOverride: TrainingStateSnapshot? = nil
     ) {
         self.generationType = generationType
         self.durationMinutes = durationMinutes
@@ -31,10 +37,12 @@ struct SuggestMeSomeGenerationRequest {
         self.goal = goal
         self.equipmentProfile = equipmentProfile
         self.sessionMode = sessionMode
+        self.activeProgramContext = activeProgramContext
+        self.stateSnapshotOverride = stateSnapshotOverride
     }
 }
 
-enum SuggestMeSomeSessionMode: String, CaseIterable, Identifiable {
+enum SuggestMeSomeSessionMode: String, CaseIterable, Identifiable, Codable {
     case fullBody
     case upper
     case lower

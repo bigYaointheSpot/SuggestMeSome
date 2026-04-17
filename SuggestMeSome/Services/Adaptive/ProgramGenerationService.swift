@@ -25,6 +25,8 @@ struct ProgramGenerationInput {
     /// Current generation stays backward-compatible and may ignore this context,
     /// but later flows can inspect it for explainability or pre-generation editing.
     let carryForwardContext: ProgramGenerationCarryForwardContext?
+    /// Optional adaptive-state override used by validation paths and deterministic tests.
+    let stateSnapshotOverride: TrainingStateSnapshot?
 
     init(
         focus: ProgramFocus,
@@ -32,7 +34,8 @@ struct ProgramGenerationInput {
         durationWeeks: Int,
         sessionsPerWeek: Int,
         oneRepMaxes: [String: (weight: Double, unit: String)],
-        carryForwardContext: ProgramGenerationCarryForwardContext? = nil
+        carryForwardContext: ProgramGenerationCarryForwardContext? = nil,
+        stateSnapshotOverride: TrainingStateSnapshot? = nil
     ) {
         self.focus = focus
         self.level = level
@@ -40,6 +43,7 @@ struct ProgramGenerationInput {
         self.sessionsPerWeek = sessionsPerWeek
         self.oneRepMaxes = oneRepMaxes
         self.carryForwardContext = carryForwardContext
+        self.stateSnapshotOverride = stateSnapshotOverride
     }
 }
 

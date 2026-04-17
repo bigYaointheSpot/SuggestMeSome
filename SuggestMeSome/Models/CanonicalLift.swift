@@ -9,7 +9,7 @@ import Foundation
 
 /// The four canonical lift families tracked by adaptive coaching services.
 /// Raw values are the stable string keys used internally across all Feature 6 services.
-enum CanonicalLift: String, CaseIterable {
+enum CanonicalLift: String, CaseIterable, Codable {
     case bench         = "bench"
     case squat         = "squat"
     case deadlift      = "deadlift"
