@@ -6,10 +6,10 @@ struct LocalDailyCoachSyncStore {
     let context: LocalSyncStoreContext
 
     func fetchDailyCheckInPayloads(since: Date?) throws -> [DailyCoachCheckInSyncDTO] {
-        let rows = try context.fetchRows(DailyCoachCheckIn.self)
-        return context.filteredBySince(rows, since: since)
-            .sorted { $0.date > $1.date }
-            .map { $0.toSyncDTO() }
+        try context.measureSyncExport(named: "DailyCoachCheckIn", since: since) {
+            try context.fetchRows(dailyCheckInFetchDescriptor(since: since))
+                .map { $0.toSyncDTO() }
+        }
     }
 
     func upsertDailyCheckInPayloads(_ payloads: [DailyCoachCheckInSyncDTO]) throws {
@@ -50,10 +50,10 @@ struct LocalDailyCoachSyncStore {
     }
 
     func fetchWeeklyReviewPayloads(since: Date?) throws -> [DailyCoachWeeklyReviewSyncDTO] {
-        let rows = try context.fetchRows(DailyCoachWeeklyReview.self)
-        return context.filteredBySince(rows, since: since)
-            .sorted { $0.weekStart > $1.weekStart }
-            .map { $0.toSyncDTO() }
+        try context.measureSyncExport(named: "DailyCoachWeeklyReview", since: since) {
+            try context.fetchRows(weeklyReviewFetchDescriptor(since: since))
+                .map { $0.toSyncDTO() }
+        }
     }
 
     func upsertWeeklyReviewPayloads(_ payloads: [DailyCoachWeeklyReviewSyncDTO]) throws {
@@ -103,5 +103,31 @@ struct LocalDailyCoachSyncStore {
         }
 
         try context.save()
+    }
+
+    private func dailyCheckInFetchDescriptor(since: Date?) -> FetchDescriptor<DailyCoachCheckIn> {
+        let sortBy = [SortDescriptor(\DailyCoachCheckIn.date, order: .reverse)]
+        guard let sinceDate = since else {
+            return FetchDescriptor<DailyCoachCheckIn>(sortBy: sortBy)
+        }
+        return FetchDescriptor<DailyCoachCheckIn>(
+            predicate: #Predicate<DailyCoachCheckIn> { checkIn in
+                checkIn.syncLastModifiedAt >= sinceDate
+            },
+            sortBy: sortBy
+        )
+    }
+
+    private func weeklyReviewFetchDescriptor(since: Date?) -> FetchDescriptor<DailyCoachWeeklyReview> {
+        let sortBy = [SortDescriptor(\DailyCoachWeeklyReview.weekStart, order: .reverse)]
+        guard let sinceDate = since else {
+            return FetchDescriptor<DailyCoachWeeklyReview>(sortBy: sortBy)
+        }
+        return FetchDescriptor<DailyCoachWeeklyReview>(
+            predicate: #Predicate<DailyCoachWeeklyReview> { review in
+                review.syncLastModifiedAt >= sinceDate
+            },
+            sortBy: sortBy
+        )
     }
 }

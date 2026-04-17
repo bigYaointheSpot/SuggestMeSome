@@ -6,10 +6,10 @@ struct LocalHealthKitSummarySyncStore {
     let context: LocalSyncStoreContext
 
     func fetchHealthKitSummaryPayloads(since: Date?) throws -> [HealthKitDailySummarySyncDTO] {
-        let rows = try context.fetchRows(HealthKitDailySummary.self)
-        return context.filteredBySince(rows, since: since)
-            .sorted { $0.dayStart > $1.dayStart }
-            .map { $0.toSyncDTO() }
+        try context.measureSyncExport(named: "HealthKitDailySummary", since: since) {
+            try context.fetchRows(healthKitSummaryFetchDescriptor(since: since))
+                .map { $0.toSyncDTO() }
+        }
     }
 
     func upsertHealthKitSummaryPayloads(_ payloads: [HealthKitDailySummarySyncDTO]) throws {
@@ -43,5 +43,18 @@ struct LocalHealthKitSummarySyncStore {
         }
 
         try context.save()
+    }
+
+    private func healthKitSummaryFetchDescriptor(since: Date?) -> FetchDescriptor<HealthKitDailySummary> {
+        let sortBy = [SortDescriptor(\HealthKitDailySummary.dayStart, order: .reverse)]
+        guard let sinceDate = since else {
+            return FetchDescriptor<HealthKitDailySummary>(sortBy: sortBy)
+        }
+        return FetchDescriptor<HealthKitDailySummary>(
+            predicate: #Predicate<HealthKitDailySummary> { summary in
+                summary.syncLastModifiedAt >= sinceDate
+            },
+            sortBy: sortBy
+        )
     }
 }

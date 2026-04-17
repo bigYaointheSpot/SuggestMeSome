@@ -9,11 +9,14 @@ struct LocalWorkoutSyncStore {
         since: Date?,
         includeDeleted: Bool
     ) throws -> [WorkoutSyncDTO] {
-        let workouts = try context.fetchRows(Workout.self)
-            .filter { includeDeleted || $0.syncDeletedAt == nil }
-        return context.filteredBySince(workouts, since: since)
-            .sorted { $0.date > $1.date }
-            .map { $0.toSyncDTO() }
+        try context.measureSyncExport(
+            named: "Workout",
+            since: since,
+            metadata: "includeDeleted=\(includeDeleted)"
+        ) {
+            try context.fetchRows(workoutFetchDescriptor(since: since, includeDeleted: includeDeleted))
+                .map { $0.toSyncDTO() }
+        }
     }
 
     func upsertWorkoutPayloads(_ payloads: [WorkoutSyncDTO]) throws {
@@ -114,6 +117,39 @@ struct LocalWorkoutSyncStore {
 
         for stale in entry.sets where !incomingIDs.contains(stale.resolvedSyncStableID) {
             context.modelContext.delete(stale)
+        }
+    }
+
+    private func workoutFetchDescriptor(
+        since: Date?,
+        includeDeleted: Bool
+    ) -> FetchDescriptor<Workout> {
+        let sortBy = [SortDescriptor(\Workout.date, order: .reverse)]
+
+        switch (since, includeDeleted) {
+        case let (.some(sinceDate), true):
+            return FetchDescriptor<Workout>(
+                predicate: #Predicate<Workout> { workout in
+                    workout.syncLastModifiedAt >= sinceDate
+                },
+                sortBy: sortBy
+            )
+        case let (.some(sinceDate), false):
+            return FetchDescriptor<Workout>(
+                predicate: #Predicate<Workout> { workout in
+                    workout.syncLastModifiedAt >= sinceDate && workout.syncDeletedAt == nil
+                },
+                sortBy: sortBy
+            )
+        case (nil, true):
+            return FetchDescriptor<Workout>(sortBy: sortBy)
+        case (nil, false):
+            return FetchDescriptor<Workout>(
+                predicate: #Predicate<Workout> { workout in
+                    workout.syncDeletedAt == nil
+                },
+                sortBy: sortBy
+            )
         }
     }
 }

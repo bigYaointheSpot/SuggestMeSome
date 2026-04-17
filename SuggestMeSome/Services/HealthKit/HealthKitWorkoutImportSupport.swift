@@ -132,10 +132,21 @@ enum HealthKitWorkoutImportPersistence {
         snapshots: [HealthKitImportedWorkoutSnapshot],
         importedAt: Date
     ) throws -> (inserted: Int, updated: Int) {
-        let existingWorkouts = (try? context.fetch(FetchDescriptor<Workout>())) ?? []
+        guard !snapshots.isEmpty else { return (0, 0) }
+
+        let externalIdentifiers = Set(snapshots.map(\.externalIdentifier))
+        let existingWorkouts = (try? context.fetch(
+            FetchDescriptor<Workout>(
+                predicate: #Predicate<Workout> { workout in
+                    workout.sourceExternalIdentifier != nil
+                }
+            )
+        )) ?? []
         var existingByExternalIdentifier: [String: Workout] = [:]
         for workout in existingWorkouts {
-            guard let id = workout.sourceExternalIdentifier, !id.isEmpty else { continue }
+            guard let id = workout.sourceExternalIdentifier,
+                  !id.isEmpty,
+                  externalIdentifiers.contains(id) else { continue }
             existingByExternalIdentifier[id] = workout
         }
 

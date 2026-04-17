@@ -2969,6 +2969,26 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 12 [Backend Read-Path Derisking and Incremental Sync Optimization] — 2026-04-17
+
+- Reduced backend maintenance cost at startup:
+  - `PersistenceMaintenanceCoordinator` now gates the sync-metadata audit so it still runs on first launch, after schema changes, or once per day, instead of paying a full-table audit on every app start
+  - added debug-only startup maintenance timing logs so device validation can confirm when the audit runs, how long it took, and how many rows were touched
+- Made incremental sync exports actually incremental:
+  - workout, program, adaptive, Daily Coach, and HealthKit summary sync stores now fetch with typed SwiftData `since` predicates and descriptor sort order instead of loading whole tables and filtering/sorting in memory
+  - added debug-only export timing/count logs for each sync domain so we can measure payload size and elapsed time during device sync validation
+- Tightened remaining backend full-table lookup paths without changing behavior:
+  - HealthKit imported-workout upserts now prefilter to rows that already carry external identifiers before building the dedupe map
+  - weekly review upserts now look up an existing review by `sourceWeeklyAnalysisIDText` with a targeted predicate instead of scanning every review row
+- Added focused regression coverage for:
+  - startup audit gating and once-per-day rerun behavior
+  - incremental `since` fetches across workout, program, adaptive, Daily Coach, and HealthKit sync domains
+  - preserved imported-workout dedupe/update behavior and weekly review upsert stability
+
+**Commits:** `refactor: gate startup sync audit`, `refactor: optimize incremental sync exports`
+
+---
+
 
 ## Project Setup
 

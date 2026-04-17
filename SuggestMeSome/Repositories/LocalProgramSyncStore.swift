@@ -6,10 +6,10 @@ struct LocalProgramSyncStore {
     let context: LocalSyncStoreContext
 
     func fetchTrainingProgramPayloads(since: Date?) throws -> [TrainingProgramSyncDTO] {
-        let programs = try context.fetchRows(TrainingProgram.self)
-        return context.filteredBySince(programs, since: since)
-            .sorted { $0.createdDate > $1.createdDate }
-            .map { $0.toSyncDTO() }
+        try context.measureSyncExport(named: "TrainingProgram", since: since) {
+            try context.fetchRows(trainingProgramFetchDescriptor(since: since))
+                .map { $0.toSyncDTO() }
+        }
     }
 
     func upsertTrainingProgramPayloads(_ payloads: [TrainingProgramSyncDTO]) throws {
@@ -46,10 +46,10 @@ struct LocalProgramSyncStore {
     }
 
     func fetchProgramRunPayloads(since: Date?) throws -> [ProgramRunSyncDTO] {
-        let runs = try context.fetchRows(ProgramRun.self)
-        return context.filteredBySince(runs, since: since)
-            .sorted { $0.startDate > $1.startDate }
-            .map { $0.toSyncDTO() }
+        try context.measureSyncExport(named: "ProgramRun", since: since) {
+            try context.fetchRows(programRunFetchDescriptor(since: since))
+                .map { $0.toSyncDTO() }
+        }
     }
 
     func upsertProgramRunPayloads(_ payloads: [ProgramRunSyncDTO]) throws {
@@ -82,5 +82,31 @@ struct LocalProgramSyncStore {
         }
 
         try context.save()
+    }
+
+    private func trainingProgramFetchDescriptor(since: Date?) -> FetchDescriptor<TrainingProgram> {
+        let sortBy = [SortDescriptor(\TrainingProgram.createdDate, order: .reverse)]
+        guard let sinceDate = since else {
+            return FetchDescriptor<TrainingProgram>(sortBy: sortBy)
+        }
+        return FetchDescriptor<TrainingProgram>(
+            predicate: #Predicate<TrainingProgram> { program in
+                program.syncLastModifiedAt >= sinceDate
+            },
+            sortBy: sortBy
+        )
+    }
+
+    private func programRunFetchDescriptor(since: Date?) -> FetchDescriptor<ProgramRun> {
+        let sortBy = [SortDescriptor(\ProgramRun.startDate, order: .reverse)]
+        guard let sinceDate = since else {
+            return FetchDescriptor<ProgramRun>(sortBy: sortBy)
+        }
+        return FetchDescriptor<ProgramRun>(
+            predicate: #Predicate<ProgramRun> { run in
+                run.syncLastModifiedAt >= sinceDate
+            },
+            sortBy: sortBy
+        )
     }
 }

@@ -6,10 +6,10 @@ struct LocalAdaptiveSyncStore {
     let context: LocalSyncStoreContext
 
     func fetchAdaptationProposalPayloads(since: Date?) throws -> [AdaptationProposalSyncDTO] {
-        let rows = try context.fetchRows(AdaptationProposal.self)
-        return context.filteredBySince(rows, since: since)
-            .sorted { $0.createdAt > $1.createdAt }
-            .map { $0.toSyncDTO() }
+        try context.measureSyncExport(named: "AdaptationProposal", since: since) {
+            try context.fetchRows(adaptationProposalFetchDescriptor(since: since))
+                .map { $0.toSyncDTO() }
+        }
     }
 
     func upsertAdaptationProposalPayloads(_ payloads: [AdaptationProposalSyncDTO]) throws {
@@ -68,10 +68,10 @@ struct LocalAdaptiveSyncStore {
     }
 
     func fetchAppliedOverlayPayloads(since: Date?) throws -> [AppliedProgramOverlaySyncDTO] {
-        let rows = try context.fetchRows(AppliedProgramOverlay.self)
-        return context.filteredBySince(rows, since: since)
-            .sorted { $0.appliedAt > $1.appliedAt }
-            .map { $0.toSyncDTO() }
+        try context.measureSyncExport(named: "AppliedProgramOverlay", since: since) {
+            try context.fetchRows(appliedOverlayFetchDescriptor(since: since))
+                .map { $0.toSyncDTO() }
+        }
     }
 
     func upsertAppliedOverlayPayloads(_ payloads: [AppliedProgramOverlaySyncDTO]) throws {
@@ -166,5 +166,31 @@ struct LocalAdaptiveSyncStore {
         for stale in overlay.adjustments where !incomingIDs.contains(stale.resolvedSyncStableID) {
             context.modelContext.delete(stale)
         }
+    }
+
+    private func adaptationProposalFetchDescriptor(since: Date?) -> FetchDescriptor<AdaptationProposal> {
+        let sortBy = [SortDescriptor(\AdaptationProposal.createdAt, order: .reverse)]
+        guard let sinceDate = since else {
+            return FetchDescriptor<AdaptationProposal>(sortBy: sortBy)
+        }
+        return FetchDescriptor<AdaptationProposal>(
+            predicate: #Predicate<AdaptationProposal> { proposal in
+                proposal.syncLastModifiedAt >= sinceDate
+            },
+            sortBy: sortBy
+        )
+    }
+
+    private func appliedOverlayFetchDescriptor(since: Date?) -> FetchDescriptor<AppliedProgramOverlay> {
+        let sortBy = [SortDescriptor(\AppliedProgramOverlay.appliedAt, order: .reverse)]
+        guard let sinceDate = since else {
+            return FetchDescriptor<AppliedProgramOverlay>(sortBy: sortBy)
+        }
+        return FetchDescriptor<AppliedProgramOverlay>(
+            predicate: #Predicate<AppliedProgramOverlay> { overlay in
+                overlay.syncLastModifiedAt >= sinceDate
+            },
+            sortBy: sortBy
+        )
     }
 }

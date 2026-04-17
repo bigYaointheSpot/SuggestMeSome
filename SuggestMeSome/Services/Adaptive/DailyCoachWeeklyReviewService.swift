@@ -32,9 +32,13 @@ enum DailyCoachWeeklyReviewService {
         let isProgramWeek = analysis.programRun != nil
 
         // Upsert: find existing review or create a new one.
-        let existing = (try? context.fetch(FetchDescriptor<DailyCoachWeeklyReview>()))?.first {
-            $0.sourceWeeklyAnalysisIDText == analysisKey
-        }
+        let existing = (try? context.fetch(
+            FetchDescriptor<DailyCoachWeeklyReview>(
+                predicate: #Predicate<DailyCoachWeeklyReview> { review in
+                    review.sourceWeeklyAnalysisIDText == analysisKey
+                }
+            )
+        ))?.first
         let review: DailyCoachWeeklyReview
         if let existing {
             review = existing

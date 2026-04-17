@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 @MainActor
@@ -7,6 +8,10 @@ struct LocalSyncStoreContext {
 
     func fetchRows<T: PersistentModel>(_ type: T.Type) throws -> [T] {
         try modelContext.fetch(FetchDescriptor<T>())
+    }
+
+    func fetchRows<T: PersistentModel>(_ descriptor: FetchDescriptor<T>) throws -> [T] {
+        try modelContext.fetch(descriptor)
     }
 
     func stableIDMap<T: SyncTrackableModel>(_ rows: [T]) throws -> [String: T] {
@@ -33,7 +38,54 @@ struct LocalSyncStoreContext {
         }
     }
 
+    func measureSyncExport<Payload>(
+        named exportName: String,
+        since: Date?,
+        metadata: String? = nil,
+        _ block: () throws -> [Payload]
+    ) rethrows -> [Payload] {
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let payloads = try block()
+        LocalSyncStoreDiagnostics.logExport(
+            name: exportName,
+            since: since,
+            metadata: metadata,
+            payloadCount: payloads.count,
+            elapsedMilliseconds: (ProcessInfo.processInfo.systemUptime - startedAt) * 1_000
+        )
+        return payloads
+    }
+
     func save() throws {
         try modelContext.save()
+    }
+}
+
+private enum LocalSyncStoreDiagnostics {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "SuggestMeSome",
+        category: "LocalSyncStore"
+    )
+
+    static func logExport(
+        name: String,
+        since: Date?,
+        metadata: String?,
+        payloadCount: Int,
+        elapsedMilliseconds: Double
+    ) {
+        #if DEBUG
+        let roundedMilliseconds = Int(elapsedMilliseconds.rounded())
+        let sinceValue = since?.timeIntervalSince1970 ?? -1
+        if let metadata, !metadata.isEmpty {
+            logger.debug(
+                "\(name, privacy: .public) export finished in \(roundedMilliseconds)ms; payloadCount=\(payloadCount) since=\(sinceValue) \(metadata, privacy: .public)"
+            )
+        } else {
+            logger.debug(
+                "\(name, privacy: .public) export finished in \(roundedMilliseconds)ms; payloadCount=\(payloadCount) since=\(sinceValue)"
+            )
+        }
+        #endif
     }
 }

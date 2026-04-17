@@ -571,6 +571,245 @@ struct Feature10SyncFoundationValidationTests {
         #expect(since[0].metadata.stableID == "health-sync-1")
     }
 
+    @Test func localSyncRepositoryAppliesIncrementalSincePredicatesAcrossDomains() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let repository = LocalSyncRepository(modelContext: context)
+
+        let programOld = TrainingProgram(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000001")!,
+            syncStableID: "program-old",
+            syncVersion: 1,
+            syncLastModifiedAt: day(1),
+            name: "Old Program",
+            lengthInWeeks: 4,
+            sessionsPerWeek: 3,
+            createdDate: day(1)
+        )
+        let programNew = TrainingProgram(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000002")!,
+            syncStableID: "program-new",
+            syncVersion: 2,
+            syncLastModifiedAt: day(4),
+            name: "New Program",
+            lengthInWeeks: 6,
+            sessionsPerWeek: 4,
+            createdDate: day(4)
+        )
+
+        let runOld = ProgramRun(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000003")!,
+            syncStableID: "run-old",
+            syncVersion: 1,
+            syncLastModifiedAt: day(1),
+            startDate: day(1)
+        )
+        runOld.program = programOld
+        let runNew = ProgramRun(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000004")!,
+            syncStableID: "run-new",
+            syncVersion: 2,
+            syncLastModifiedAt: day(4),
+            startDate: day(4)
+        )
+        runNew.program = programNew
+
+        let workoutOld = Workout(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000005")!,
+            syncStableID: "workout-old",
+            syncVersion: 1,
+            syncLastModifiedAt: day(1),
+            date: day(1),
+            startTime: day(1),
+            durationSeconds: 1_800
+        )
+        let workoutNew = Workout(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000006")!,
+            syncStableID: "workout-new",
+            syncVersion: 2,
+            syncLastModifiedAt: day(4),
+            date: day(4),
+            startTime: day(4),
+            durationSeconds: 2_100
+        )
+        let workoutDeleted = Workout(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000007")!,
+            syncStableID: "workout-deleted",
+            syncVersion: 3,
+            syncLastModifiedAt: day(5),
+            syncDeletedAt: day(5),
+            date: day(5),
+            startTime: day(5),
+            durationSeconds: 1_200
+        )
+
+        let proposalOld = AdaptationProposal(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000008")!,
+            syncStableID: "proposal-old",
+            syncVersion: 1,
+            syncLastModifiedAt: day(1),
+            createdAt: day(1),
+            programRun: runOld,
+            trainingProgram: programOld,
+            proposalType: .increaseLoad,
+            proposalStatus: .pendingUserConfirmation,
+            requiresUserConfirmation: true,
+            targetWeekStart: 1,
+            adjustmentReason: .topSetBeatTarget,
+            summaryText: "Old proposal"
+        )
+        let proposalNew = AdaptationProposal(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000009")!,
+            syncStableID: "proposal-new",
+            syncVersion: 2,
+            syncLastModifiedAt: day(4),
+            createdAt: day(4),
+            programRun: runNew,
+            trainingProgram: programNew,
+            proposalType: .increaseLoad,
+            proposalStatus: .pendingUserConfirmation,
+            requiresUserConfirmation: true,
+            targetWeekStart: 2,
+            adjustmentReason: .topSetBeatTarget,
+            summaryText: "New proposal"
+        )
+
+        let overlayOld = AppliedProgramOverlay(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000010")!,
+            syncStableID: "overlay-old",
+            syncVersion: 1,
+            syncLastModifiedAt: day(1),
+            createdAt: day(1),
+            appliedAt: day(1),
+            programRun: runOld,
+            trainingProgram: programOld,
+            sourceProposal: proposalOld,
+            effectiveWeekStart: 1,
+            appliedByUserConfirmation: true,
+            adjustmentReason: .topSetBeatTarget,
+            summaryText: "Old overlay"
+        )
+        let overlayNew = AppliedProgramOverlay(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000011")!,
+            syncStableID: "overlay-new",
+            syncVersion: 2,
+            syncLastModifiedAt: day(4),
+            createdAt: day(4),
+            appliedAt: day(4),
+            programRun: runNew,
+            trainingProgram: programNew,
+            sourceProposal: proposalNew,
+            effectiveWeekStart: 2,
+            appliedByUserConfirmation: true,
+            adjustmentReason: .topSetBeatTarget,
+            summaryText: "New overlay"
+        )
+
+        let checkInOld = DailyCoachCheckIn(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000012")!,
+            syncStableID: "checkin-old",
+            syncVersion: 1,
+            syncLastModifiedAt: day(1),
+            date: day(1),
+            dayStart: day(1),
+            createdAt: day(1),
+            updatedAt: day(1)
+        )
+        let checkInNew = DailyCoachCheckIn(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000013")!,
+            syncStableID: "checkin-new",
+            syncVersion: 2,
+            syncLastModifiedAt: day(4),
+            date: day(4),
+            dayStart: day(4),
+            createdAt: day(4),
+            updatedAt: day(4)
+        )
+
+        let reviewOld = DailyCoachWeeklyReview(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000014")!,
+            syncStableID: "review-old",
+            syncVersion: 1,
+            syncLastModifiedAt: day(1),
+            weekStart: day(1),
+            weekEnd: day(6),
+            headline: "Old review",
+            winText: "Old win",
+            watchoutText: "Old watchout",
+            nextActionText: "Old action",
+            createdAt: day(1)
+        )
+        let reviewNew = DailyCoachWeeklyReview(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000015")!,
+            syncStableID: "review-new",
+            syncVersion: 2,
+            syncLastModifiedAt: day(4),
+            weekStart: day(4),
+            weekEnd: day(10),
+            headline: "New review",
+            winText: "New win",
+            watchoutText: "New watchout",
+            nextActionText: "New action",
+            createdAt: day(4)
+        )
+
+        let healthOld = HealthKitDailySummary(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000016")!,
+            syncStableID: "health-old",
+            syncVersion: 1,
+            syncLastModifiedAt: day(1),
+            dayStart: day(1),
+            sourceUpdatedAt: day(1),
+            createdAt: day(1),
+            updatedAt: day(1)
+        )
+        let healthNew = HealthKitDailySummary(
+            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000017")!,
+            syncStableID: "health-new",
+            syncVersion: 2,
+            syncLastModifiedAt: day(4),
+            dayStart: day(4),
+            sourceUpdatedAt: day(4),
+            createdAt: day(4),
+            updatedAt: day(4)
+        )
+
+        context.insert(programOld)
+        context.insert(programNew)
+        context.insert(runOld)
+        context.insert(runNew)
+        context.insert(workoutOld)
+        context.insert(workoutNew)
+        context.insert(workoutDeleted)
+        context.insert(proposalOld)
+        context.insert(proposalNew)
+        context.insert(overlayOld)
+        context.insert(overlayNew)
+        context.insert(checkInOld)
+        context.insert(checkInNew)
+        context.insert(reviewOld)
+        context.insert(reviewNew)
+        context.insert(healthOld)
+        context.insert(healthNew)
+        try context.save()
+
+        let since = day(2)
+
+        #expect(try repository.fetchTrainingProgramPayloads(since: since).map(\.metadata.stableID) == ["program-new"])
+        #expect(try repository.fetchProgramRunPayloads(since: since).map(\.metadata.stableID) == ["run-new"])
+        #expect(try repository.fetchWorkoutPayloads(since: since, includeDeleted: false).map(\.metadata.stableID) == ["workout-new"])
+
+        let workoutsIncludingDeleted = try repository.fetchWorkoutPayloads(since: since, includeDeleted: true)
+        #expect(workoutsIncludingDeleted.map(\.metadata.stableID) == ["workout-deleted", "workout-new"])
+        #expect(workoutsIncludingDeleted.first?.metadata.deletedAt == day(5))
+
+        #expect(try repository.fetchAdaptationProposalPayloads(since: since).map(\.metadata.stableID) == ["proposal-new"])
+        #expect(try repository.fetchAppliedOverlayPayloads(since: since).map(\.metadata.stableID) == ["overlay-new"])
+        #expect(try repository.fetchDailyCheckInPayloads(since: since).map(\.metadata.stableID) == ["checkin-new"])
+        #expect(try repository.fetchWeeklyReviewPayloads(since: since).map(\.metadata.stableID) == ["review-new"])
+        #expect(try repository.fetchHealthKitSummaryPayloads(since: since).map(\.metadata.stableID) == ["health-new"])
+    }
+
     // MARK: - Helpers
 
     private func makeInMemoryContainer() throws -> ModelContainer {
