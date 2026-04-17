@@ -112,11 +112,10 @@ enum TrainingContextQueryService {
     }
 
     static func completedWorkoutCount(for run: ProgramRun, context: ModelContext) throws -> Int {
-        let runID = run.id
-        let descriptor = FetchDescriptor<Workout>(
-            predicate: #Predicate<Workout> { $0.programRun?.id == runID }
-        )
-        return try context.fetch(descriptor).count
+        TrainingReadRepository.programRunProgressSnapshot(
+            for: run,
+            context: context
+        ).completedWorkoutCount
     }
 
     static func completedSessionKeys(
@@ -172,10 +171,10 @@ enum TrainingContextQueryService {
     }
 
     static func fetchPersonalRecords(context: ModelContext) -> [PersonalRecord] {
-        (try? context.fetch(FetchDescriptor<PersonalRecord>())) ?? []
+        TrainingReadRepository.historySnapshot(context: context).personalRecords
     }
 
     static func fetchWorkouts(context: ModelContext) -> [Workout] {
-        (try? context.fetch(FetchDescriptor<Workout>())) ?? []
+        TrainingReadRepository.historySnapshot(context: context).workouts
     }
 }

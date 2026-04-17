@@ -16,20 +16,15 @@ struct AdaptationHistoryReadSnapshot {
 
 enum ReadQueryRepository {
     static func recentWorkouts(limit: Int, context: ModelContext) -> [Workout] {
-        var descriptor = FetchDescriptor<Workout>(
-            sortBy: [SortDescriptor(\Workout.date, order: .reverse)]
-        )
-        descriptor.fetchLimit = max(1, limit)
-        return (try? context.fetch(descriptor)) ?? []
+        TrainingReadRepository.fetchWorkouts(limit: limit, context: context)
     }
 
     static func activeProgramRuns(limit: Int = 5, context: ModelContext) -> [ProgramRun] {
-        var descriptor = FetchDescriptor<ProgramRun>(
-            predicate: #Predicate<ProgramRun> { !$0.isCompleted },
-            sortBy: [SortDescriptor(\ProgramRun.startDate, order: .reverse)]
-        )
-        descriptor.fetchLimit = max(1, limit)
-        return (try? context.fetch(descriptor)) ?? []
+        TrainingReadRepository.programRunIndexSnapshot(
+            context: context,
+            activeLimit: limit,
+            completedLimit: 0
+        ).activeRuns
     }
 
     static func pendingUserProposals(
@@ -37,35 +32,11 @@ enum ReadQueryRepository {
         context: ModelContext,
         limit: Int? = nil
     ) -> [AdaptationProposal] {
-        let descriptor: FetchDescriptor<AdaptationProposal>
-        if let run {
-            let runID = run.id
-            descriptor = FetchDescriptor<AdaptationProposal>(
-                predicate: #Predicate<AdaptationProposal> {
-                    $0.programRun?.id == runID
-                },
-                sortBy: [
-                    SortDescriptor(\AdaptationProposal.priority, order: .reverse),
-                    SortDescriptor(\AdaptationProposal.createdAt, order: .reverse),
-                ]
-            )
-        } else {
-            descriptor = FetchDescriptor<AdaptationProposal>(
-                sortBy: [
-                    SortDescriptor(\AdaptationProposal.priority, order: .reverse),
-                    SortDescriptor(\AdaptationProposal.createdAt, order: .reverse),
-                ]
-            )
-        }
-
-        var mutable = descriptor
-        if let limit {
-            mutable.fetchLimit = max(1, limit)
-        }
-
-        return ((try? context.fetch(mutable)) ?? []).filter {
-            $0.proposalStatus == .pendingUserConfirmation
-        }
+        TrainingReadRepository.fetchPendingUserProposals(
+            for: run,
+            context: context,
+            limit: limit
+        )
     }
 
     static func pendingCoachContextProposals(
@@ -73,76 +44,29 @@ enum ReadQueryRepository {
         context: ModelContext,
         limit: Int = 10
     ) -> [AdaptationProposal] {
-        let descriptor: FetchDescriptor<AdaptationProposal>
-        if let run {
-            let runID = run.id
-            descriptor = FetchDescriptor<AdaptationProposal>(
-                predicate: #Predicate<AdaptationProposal> { $0.programRun?.id == runID },
-                sortBy: [
-                    SortDescriptor(\AdaptationProposal.priority, order: .reverse),
-                    SortDescriptor(\AdaptationProposal.createdAt, order: .reverse),
-                ]
-            )
-        } else {
-            descriptor = FetchDescriptor<AdaptationProposal>(
-                sortBy: [
-                    SortDescriptor(\AdaptationProposal.priority, order: .reverse),
-                    SortDescriptor(\AdaptationProposal.createdAt, order: .reverse),
-                ]
-            )
-        }
-
-        var mutable = descriptor
-        mutable.fetchLimit = max(limit, 50)
-
-        let rows = (try? context.fetch(mutable)) ?? []
-        let filtered = rows.filter { proposal in
-            let isPending = proposal.proposalStatus == .pendingUserConfirmation ||
-                proposal.proposalStatus == .pendingAutoApply
-            guard isPending else { return false }
-
-            if let run {
-                return proposal.programRun?.id == run.id
-            }
-            return proposal.programRun == nil
-        }
-
-        return Array(filtered.prefix(max(1, limit)))
+        TrainingReadRepository.fetchPendingCoachContextProposals(
+            for: run,
+            context: context,
+            limit: limit
+        )
     }
 
     static func activeOverlays(for run: ProgramRun, context: ModelContext) -> [AppliedProgramOverlay] {
-        let runID = run.id
-        let descriptor = FetchDescriptor<AppliedProgramOverlay>(
-            predicate: #Predicate<AppliedProgramOverlay> { $0.programRun?.id == runID },
-            sortBy: [SortDescriptor(\AppliedProgramOverlay.appliedAt, order: .forward)]
-        )
-        return ((try? context.fetch(descriptor)) ?? []).filter { $0.overlayStatus == .active }
+        TrainingReadRepository.fetchActiveOverlays(for: run, context: context)
     }
 
     static func completedProgramSessionKeys(for run: ProgramRun, context: ModelContext) -> Set<ProgramSessionCompletionKey> {
-        let runID = run.id
-        let descriptor = FetchDescriptor<Workout>(
-            predicate: #Predicate<Workout> {
-                $0.programRun?.id == runID &&
-                $0.programWeekNumber != nil &&
-                $0.programSessionNumber != nil
-            }
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        return Set(rows.compactMap { workout in
-            guard let week = workout.programWeekNumber, let session = workout.programSessionNumber else {
-                return nil
-            }
-            return ProgramSessionCompletionKey(weekNumber: week, sessionNumber: session)
-        })
+        TrainingReadRepository.programRunProgressSnapshot(
+            for: run,
+            context: context
+        ).completedSessionKeys
     }
 
     static func programWorkoutCount(for run: ProgramRun, context: ModelContext) -> Int {
-        let runID = run.id
-        let descriptor = FetchDescriptor<Workout>(
-            predicate: #Predicate<Workout> { $0.programRun?.id == runID }
-        )
-        return ((try? context.fetch(descriptor)) ?? []).count
+        TrainingReadRepository.programRunProgressSnapshot(
+            for: run,
+            context: context
+        ).completedWorkoutCount
     }
 
     static func adaptationHistorySnapshot(

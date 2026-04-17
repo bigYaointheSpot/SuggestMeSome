@@ -18,8 +18,12 @@ struct SuggestMeSomeRecommendationService {
         allMuscleGroups: [MuscleGroup],
         coachContext: SuggestMeSomeCoachContext? = nil
     ) -> SuggestMeSomeSessionRecommendation {
-        let recentWorkouts = fetchRecentWorkouts(limit: 24)
-        let activeRun = fetchMostRecentActiveRun()
+        let snapshot = TrainingReadRepository.recommendationContextSnapshot(
+            context: context,
+            recentWorkoutLimit: 24
+        )
+        let recentWorkouts = snapshot.recentWorkouts
+        let activeRun = snapshot.activeRun
 
         // Pain/discomfort is the highest-priority override — it forces recovery mode and
         // caps intensity to 1 regardless of all other signals.
@@ -177,25 +181,6 @@ struct SuggestMeSomeRecommendationService {
             request: request
         )
     }
-
-    // MARK: - Query helpers
-
-    private func fetchRecentWorkouts(limit: Int) -> [Workout] {
-        var descriptor = FetchDescriptor<Workout>(
-            sortBy: [SortDescriptor(\Workout.date, order: .reverse)]
-        )
-        descriptor.fetchLimit = max(1, limit)
-        return (try? context.fetch(descriptor)) ?? []
-    }
-
-    private func fetchMostRecentActiveRun() -> ProgramRun? {
-        let descriptor = FetchDescriptor<ProgramRun>(
-            predicate: #Predicate<ProgramRun> { !$0.isCompleted },
-            sortBy: [SortDescriptor(\ProgramRun.startDate, order: .reverse)]
-        )
-        return (try? context.fetch(descriptor))?.first
-    }
-
     // MARK: - Coach context integration helpers
 
     /// Applies intensity caps derived from coach context signals.

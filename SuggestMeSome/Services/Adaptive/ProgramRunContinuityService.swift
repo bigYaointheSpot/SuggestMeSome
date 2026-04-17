@@ -13,8 +13,10 @@ enum ProgramRunContinuityService {
         matching stableID: String,
         context: ModelContext
     ) -> ProgramRun? {
-        let runs = (try? context.fetch(FetchDescriptor<ProgramRun>())) ?? []
-        return runs.first { $0.resolvedSyncStableID == stableID }
+        TrainingReadRepository.programRun(
+            matchingStableID: stableID,
+            context: context
+        )
     }
 
     static func recordDecision(
