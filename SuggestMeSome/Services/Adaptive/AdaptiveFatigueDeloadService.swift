@@ -33,29 +33,24 @@ enum AdaptiveFatigueDeloadService {
         let targetWeek = completedWeek + 1
         guard targetWeek <= program.lengthInWeeks else { return }
 
-        let allAnalyses = (try? context.fetch(FetchDescriptor<WeeklyTrainingAnalysis>())) ?? []
-        let allTrends = (try? context.fetch(FetchDescriptor<LiftPerformanceTrend>())) ?? []
-        var allProposals = (try? context.fetch(FetchDescriptor<AdaptationProposal>())) ?? []
-        var allEvents = (try? context.fetch(FetchDescriptor<AdaptationEventHistory>())) ?? []
-
-        let runAnalyses = allAnalyses
-            .filter { $0.programRun?.id == run.id && $0.isFinalized }
-            .sorted { lhs, rhs in
-                let lw = lhs.programWeekNumber ?? 0
-                let rw = rhs.programWeekNumber ?? 0
-                if lw == rw { return lhs.weekStartDate < rhs.weekStartDate }
-                return lw < rw
-            }
-        let recentAnalyses = Array(runAnalyses.suffix(lookbackWeeks))
+        let snapshot = TrainingReadRepository.adaptiveProposalPipelineSnapshot(
+            for: run,
+            referenceDate: analysis.weekEndDate,
+            context: context
+        )
+        let recentAnalyses = Array(snapshot.finalizedAnalyses.suffix(lookbackWeeks))
         guard !recentAnalyses.isEmpty else { return }
 
         let signal = buildFatigueSignal(
             analysis: analysis,
             recentAnalyses: recentAnalyses,
-            trends: allTrends,
+            trends: snapshot.performanceTrends,
             runID: run.id
         )
         let decision = decideAction(from: signal, recentAnalyses: recentAnalyses)
+
+        var proposals = snapshot.proposals
+        var events = snapshot.events
 
         if decision.action == .none {
             upsertFatigueCheckEvent(
@@ -63,7 +58,7 @@ enum AdaptiveFatigueDeloadService {
                 analysis: analysis,
                 signal: signal,
                 decision: decision,
-                events: &allEvents,
+                events: &events,
                 context: context
             )
             return
@@ -74,7 +69,7 @@ enum AdaptiveFatigueDeloadService {
             targetWeek: targetWeek,
             aggressive: decision.action == .deload,
             excludingProposalID: nil,
-            proposals: allProposals
+            proposals: proposals
         )
 
         let proposal = upsertFatigueProposal(
@@ -84,7 +79,7 @@ enum AdaptiveFatigueDeloadService {
             targetWeek: targetWeek,
             signal: signal,
             decision: decision,
-            proposals: &allProposals,
+            proposals: &proposals,
             context: context
         )
 
@@ -93,7 +88,7 @@ enum AdaptiveFatigueDeloadService {
             targetWeek: targetWeek,
             aggressive: decision.action == .deload,
             excludingProposalID: proposal.id,
-            proposals: allProposals
+            proposals: proposals
         )
 
         upsertProposalEvent(
@@ -102,7 +97,7 @@ enum AdaptiveFatigueDeloadService {
             analysis: analysis,
             signal: signal,
             decision: decision,
-            events: &allEvents,
+            events: &events,
             context: context
         )
     }

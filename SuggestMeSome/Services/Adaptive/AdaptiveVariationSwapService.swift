@@ -34,28 +34,24 @@ enum AdaptiveVariationSwapService {
         guard let targetWeekTemplate = program.weeks.first(where: { $0.weekNumber == targetWeek }) else { return }
         guard !targetWeekTemplate.isDeloadWeek else { return }
 
-        let allAnalyses = (try? context.fetch(FetchDescriptor<WeeklyTrainingAnalysis>())) ?? []
-        let allOutcomes = (try? context.fetch(FetchDescriptor<ExercisePerformanceOutcome>())) ?? []
-        let allTrends = (try? context.fetch(FetchDescriptor<LiftPerformanceTrend>())) ?? []
-        var allProposals = (try? context.fetch(FetchDescriptor<AdaptationProposal>())) ?? []
-        var allOverlays = (try? context.fetch(FetchDescriptor<AppliedProgramOverlay>())) ?? []
-        var allEvents = (try? context.fetch(FetchDescriptor<AdaptationEventHistory>())) ?? []
+        let snapshot = TrainingReadRepository.adaptiveProposalPipelineSnapshot(
+            for: run,
+            referenceDate: analysis.weekEndDate,
+            context: context,
+            outcomeLookbackDays: 84,
+            includeStandaloneOutcomes: true
+        )
+        var proposals = snapshot.proposals
+        var overlays = snapshot.overlays
+        var events = snapshot.events
 
         let profile = inferredProfile(program: program, analysis: analysis)
 
-        let recentAnalyses = allAnalyses
-            .filter { $0.programRun?.id == run.id && $0.isFinalized }
-            .sorted { lhs, rhs in
-                let lw = lhs.programWeekNumber ?? 0
-                let rw = rhs.programWeekNumber ?? 0
-                if lw == rw { return lhs.weekStartDate < rhs.weekStartDate }
-                return lw < rw
-            }
-        let lookbackWindow = Array(recentAnalyses.suffix(lookbackWeeks))
+        let lookbackWindow = Array(snapshot.finalizedAnalyses.suffix(lookbackWeeks))
         guard !lookbackWindow.isEmpty else { return }
 
         let lookbackStart = lookbackWindow.first?.weekStartDate ?? analysis.weekStartDate
-        let relevantOutcomes = allOutcomes
+        let relevantOutcomes = snapshot.outcomes
             .filter { outcome in
                 guard let lift = outcome.canonicalLiftKey else { return false }
                 guard mainLiftKeys.contains(lift) else { return false }
@@ -67,19 +63,19 @@ enum AdaptiveVariationSwapService {
                 return $0.workoutDate < $1.workoutDate
             }
 
-        let runTrends = allTrends.filter { $0.programRun?.id == run.id }
+        let runTrends = snapshot.performanceTrends
         let swapTargets = nextWeekSwapTargets(program: program, targetWeek: targetWeek)
         guard !swapTargets.isEmpty else { return }
 
         let recentSwapNamesByLift = recentSwapsByLift(
             runID: run.id,
             targetWeek: targetWeek,
-            overlays: allOverlays
+            overlays: overlays
         )
         let existingAppliedLiftKeys = alreadyAppliedLiftKeys(
             runID: run.id,
             targetWeek: targetWeek,
-            overlays: allOverlays
+            overlays: overlays
         )
 
         var candidates: [SwapCandidate] = []
@@ -114,7 +110,7 @@ enum AdaptiveVariationSwapService {
                 targetWeek: targetWeek,
                 liftKey: candidate.liftKey,
                 excludingProposalID: nil,
-                proposals: allProposals
+                proposals: proposals
             )
 
             let proposal = upsertAutoAppliedProposal(
@@ -123,7 +119,7 @@ enum AdaptiveVariationSwapService {
                 run: run,
                 program: program,
                 targetWeek: targetWeek,
-                proposals: &allProposals,
+                proposals: &proposals,
                 context: context
             )
 
@@ -134,7 +130,7 @@ enum AdaptiveVariationSwapService {
                 run: run,
                 program: program,
                 targetWeek: targetWeek,
-                overlays: &allOverlays,
+                overlays: &overlays,
                 context: context
             )
 
@@ -143,7 +139,7 @@ enum AdaptiveVariationSwapService {
                 targetWeek: targetWeek,
                 liftKey: candidate.liftKey,
                 excludingProposalID: proposal.id,
-                proposals: allProposals
+                proposals: proposals
             )
             upsertOverlayEvent(
                 candidate: candidate,
@@ -151,7 +147,7 @@ enum AdaptiveVariationSwapService {
                 overlay: overlay,
                 analysis: analysis,
                 run: run,
-                events: &allEvents,
+                events: &events,
                 context: context
             )
         }

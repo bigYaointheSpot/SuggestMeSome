@@ -33,19 +33,12 @@ enum AdaptiveVolumeProgressionService {
         let focus = inferredProgramFocus(for: program, profile: profile)
         let level = inferredProgramLevel(for: program)
 
-        let allAnalyses = (try? context.fetch(FetchDescriptor<WeeklyTrainingAnalysis>())) ?? []
-        let allProposals = (try? context.fetch(FetchDescriptor<AdaptationProposal>())) ?? []
-        let allEvents = (try? context.fetch(FetchDescriptor<AdaptationEventHistory>())) ?? []
-
-        let runAnalyses = allAnalyses
-            .filter { $0.programRun?.id == run.id && $0.isFinalized }
-            .sorted { lhs, rhs in
-                let lw = lhs.programWeekNumber ?? 0
-                let rw = rhs.programWeekNumber ?? 0
-                if lw == rw { return lhs.weekStartDate < rhs.weekStartDate }
-                return lw < rw
-            }
-        let recentAnalyses = Array(runAnalyses.suffix(3))
+        let snapshot = TrainingReadRepository.adaptiveProposalPipelineSnapshot(
+            for: run,
+            referenceDate: analysis.weekEndDate,
+            context: context
+        )
+        let recentAnalyses = Array(snapshot.finalizedAnalyses.suffix(3))
 
         let weeklyTargets = ProgramExerciseMetadataService.weeklyVolumeTargets(
             focus: focus,
@@ -56,8 +49,8 @@ enum AdaptiveVolumeProgressionService {
             targetWeek: targetWeek
         )
 
-        var proposals = allProposals
-        var events = allEvents
+        var proposals = snapshot.proposals
+        var events = snapshot.events
         var candidates: [VolumeDecision] = []
 
         for muscle in ProgramVolumeMuscle.allCases {

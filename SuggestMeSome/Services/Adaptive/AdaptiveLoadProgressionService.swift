@@ -39,11 +39,16 @@ enum AdaptiveLoadProgressionService {
         )
         guard !targetsByLift.isEmpty else { return }
 
-        let fetchedOutcomes = (try? context.fetch(FetchDescriptor<ExercisePerformanceOutcome>())) ?? []
-        let fetchedTrends = (try? context.fetch(FetchDescriptor<LiftPerformanceTrend>())) ?? []
-        var proposals = (try? context.fetch(FetchDescriptor<AdaptationProposal>())) ?? []
-        var events = (try? context.fetch(FetchDescriptor<AdaptationEventHistory>())) ?? []
-        let dedupedOutcomes = dedupeOutcomes(fetchedOutcomes)
+        let snapshot = TrainingReadRepository.adaptiveProposalPipelineSnapshot(
+            for: run,
+            referenceDate: analysis.weekEndDate,
+            context: context,
+            outcomeLookbackDays: lookbackDays,
+            includeStandaloneOutcomes: true
+        )
+        var proposals = snapshot.proposals
+        var events = snapshot.events
+        let dedupedOutcomes = dedupeOutcomes(snapshot.outcomes)
 
         let level = inferredLevel(for: program)
 
@@ -55,7 +60,7 @@ enum AdaptiveLoadProgressionService {
                 run: run,
                 level: level,
                 outcomes: dedupedOutcomes,
-                trends: fetchedTrends
+                trends: snapshot.performanceTrends
             )
 
             supersedeOpenProposals(

@@ -31,6 +31,15 @@ struct RecommendationContextReadSnapshot {
     let recentWorkouts: [Workout]
 }
 
+struct AdaptiveProposalPipelineReadSnapshot {
+    let finalizedAnalyses: [WeeklyTrainingAnalysis]
+    let outcomes: [ExercisePerformanceOutcome]
+    let performanceTrends: [LiftPerformanceTrend]
+    let proposals: [AdaptationProposal]
+    let overlays: [AppliedProgramOverlay]
+    let events: [AdaptationEventHistory]
+}
+
 enum TrainingReadRepository {
     static func historySnapshot(
         context: ModelContext,
@@ -120,6 +129,69 @@ enum TrainingReadRepository {
         return RecommendationContextReadSnapshot(
             activeRun: runIndex.activeRuns.first,
             recentWorkouts: fetchWorkouts(limit: recentWorkoutLimit, context: context)
+        )
+    }
+
+    static func adaptiveProposalPipelineSnapshot(
+        for run: ProgramRun,
+        referenceDate: Date,
+        context: ModelContext,
+        outcomeLookbackDays: Int? = nil,
+        includeStandaloneOutcomes: Bool = false
+    ) -> AdaptiveProposalPipelineReadSnapshot {
+        let runID = run.id
+
+        let analysesDescriptor = FetchDescriptor<WeeklyTrainingAnalysis>(
+            predicate: #Predicate<WeeklyTrainingAnalysis> {
+                $0.programRun?.id == runID &&
+                $0.isFinalized &&
+                $0.weekEndDate <= referenceDate
+            },
+            sortBy: [
+                SortDescriptor(\WeeklyTrainingAnalysis.weekStartDate, order: .forward),
+                SortDescriptor(\WeeklyTrainingAnalysis.createdAt, order: .forward),
+            ]
+        )
+
+        let trendsDescriptor = FetchDescriptor<LiftPerformanceTrend>(
+            predicate: #Predicate<LiftPerformanceTrend> { $0.programRun?.id == runID },
+            sortBy: [
+                SortDescriptor(\LiftPerformanceTrend.updatedAt, order: .reverse),
+                SortDescriptor(\LiftPerformanceTrend.canonicalLiftKey, order: .forward),
+            ]
+        )
+
+        let proposalsDescriptor = FetchDescriptor<AdaptationProposal>(
+            predicate: #Predicate<AdaptationProposal> { $0.programRun?.id == runID },
+            sortBy: [
+                SortDescriptor(\AdaptationProposal.createdAt, order: .reverse),
+                SortDescriptor(\AdaptationProposal.priority, order: .reverse),
+            ]
+        )
+
+        let overlaysDescriptor = FetchDescriptor<AppliedProgramOverlay>(
+            predicate: #Predicate<AppliedProgramOverlay> { $0.programRun?.id == runID },
+            sortBy: [SortDescriptor(\AppliedProgramOverlay.appliedAt, order: .reverse)]
+        )
+
+        let eventsDescriptor = FetchDescriptor<AdaptationEventHistory>(
+            predicate: #Predicate<AdaptationEventHistory> { $0.programRun?.id == runID },
+            sortBy: [SortDescriptor(\AdaptationEventHistory.timestamp, order: .reverse)]
+        )
+
+        return AdaptiveProposalPipelineReadSnapshot(
+            finalizedAnalyses: (try? context.fetch(analysesDescriptor)) ?? [],
+            outcomes: fetchAdaptiveOutcomes(
+                for: run,
+                referenceDate: referenceDate,
+                context: context,
+                lookbackDays: outcomeLookbackDays,
+                includeStandaloneOutcomes: includeStandaloneOutcomes
+            ),
+            performanceTrends: (try? context.fetch(trendsDescriptor)) ?? [],
+            proposals: (try? context.fetch(proposalsDescriptor)) ?? [],
+            overlays: (try? context.fetch(overlaysDescriptor)) ?? [],
+            events: (try? context.fetch(eventsDescriptor)) ?? []
         )
     }
 
@@ -296,5 +368,38 @@ enum TrainingReadRepository {
                 SortDescriptor(\AdaptationProposal.createdAt, order: .reverse),
             ]
         )
+    }
+
+    private static func fetchAdaptiveOutcomes(
+        for run: ProgramRun,
+        referenceDate: Date,
+        context: ModelContext,
+        lookbackDays: Int?,
+        includeStandaloneOutcomes: Bool
+    ) -> [ExercisePerformanceOutcome] {
+        guard let lookbackDays, lookbackDays >= 0 else { return [] }
+
+        let lowerBound = Calendar.autoupdatingCurrent.date(
+            byAdding: .day,
+            value: -lookbackDays,
+            to: referenceDate
+        ) ?? referenceDate
+        let descriptor = FetchDescriptor<ExercisePerformanceOutcome>(
+            predicate: #Predicate<ExercisePerformanceOutcome> {
+                $0.workoutDate >= lowerBound && $0.workoutDate <= referenceDate
+            },
+            sortBy: [
+                SortDescriptor(\ExercisePerformanceOutcome.workoutDate, order: .forward),
+                SortDescriptor(\ExercisePerformanceOutcome.createdAt, order: .forward),
+            ]
+        )
+
+        let runID = run.id
+        return ((try? context.fetch(descriptor)) ?? []).filter { outcome in
+            if includeStandaloneOutcomes {
+                return outcome.programRun?.id == runID || outcome.programRun == nil
+            }
+            return outcome.programRun?.id == runID
+        }
     }
 }
