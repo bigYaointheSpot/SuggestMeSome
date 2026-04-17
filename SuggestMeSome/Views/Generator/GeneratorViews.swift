@@ -7,27 +7,39 @@ struct GeneratorSheetRootView: View {
     @Query(sort: \MuscleGroup.name) private var allMuscleGroups: [MuscleGroup]
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(PurchaseManager.self) private var purchaseManager
 
     @State private var viewModel: SuggestMeSomeGeneratorFlowViewModel?
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let viewModel {
-                    GeneratorFlowContainerView(
-                        viewModel: viewModel,
-                        allMuscleGroups: allMuscleGroups,
-                        onStart: onStart,
-                        onClose: { dismiss() }
-                    )
-                } else {
-                    ProgressView("Loading Generator...")
+        Group {
+            if FeatureAccessPolicy.isAccessible(
+                .smartWorkoutGeneration,
+                entitlementState: purchaseManager.entitlementState
+            ) {
+                NavigationStack {
+                    Group {
+                        if let viewModel {
+                            GeneratorFlowContainerView(
+                                viewModel: viewModel,
+                                allMuscleGroups: allMuscleGroups,
+                                onStart: onStart,
+                                onClose: { dismiss() }
+                            )
+                        } else {
+                            ProgressView("Loading Generator...")
+                        }
+                    }
                 }
-            }
-        }
-        .onAppear {
-            if viewModel == nil {
-                viewModel = SuggestMeSomeGeneratorFlowViewModel(context: modelContext)
+                .onAppear {
+                    if viewModel == nil {
+                        viewModel = SuggestMeSomeGeneratorFlowViewModel(context: modelContext)
+                    }
+                }
+            } else {
+                NavigationStack {
+                    PremiumGateView(feature: .smartWorkoutGeneration)
+                }
             }
         }
     }

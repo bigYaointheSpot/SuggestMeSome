@@ -84,7 +84,7 @@ struct WorkoutDetailView: View {
 
             if workout.sourceType == .loggedInApp {
                 HStack {
-                    Text("HealthKit Writeback")
+                    Text("Apple Health Writeback")
                     Spacer()
                     if let exportedAt = workout.healthKitExportedAt {
                         Text(exportedAt, format: .dateTime.month(.abbreviated).day().year().hour().minute())
@@ -98,7 +98,7 @@ struct WorkoutDetailView: View {
 
                 if let writebackID = workout.healthKitWritebackIdentifier, !writebackID.isEmpty {
                     HStack {
-                        Text("HealthKit ID")
+                        Text("Apple Health ID")
                         Spacer()
                         Text(writebackID)
                             .lineLimit(1)
@@ -121,7 +121,7 @@ struct WorkoutDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("No set-by-set details imported", systemImage: "info.circle")
                         .font(.headline)
-                    Text("This HealthKit workout was imported without native exercise or set structure.")
+                    Text("This Apple Health workout was imported without native exercise or set structure.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -141,7 +141,7 @@ struct WorkoutDetailView: View {
             HStack(spacing: 8) {
                 Image(systemName: "heart.text.square.fill")
                     .foregroundStyle(.pink)
-                Text("Imported from HealthKit")
+                Text("Imported from Apple Health")
                     .font(.headline)
                 Spacer()
                 if let badge = workout.sourceBadgeLabel {

@@ -12,6 +12,7 @@ import SwiftData
 
 struct SettingsTab: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(PurchaseManager.self) private var purchaseManager
     @Query(sort: \Workout.date) private var allWorkouts: [Workout]
     @Query private var allExerciseEntries: [ExerciseEntry]
 
@@ -73,6 +74,8 @@ struct SettingsTab: View {
                 preferencesSection
                 workoutSection
                 quickLinksSection
+                premiumSection
+                legalPrivacySection
                 dataManagementSection
                 footerSection
             }
@@ -170,9 +173,11 @@ struct SettingsTab: View {
             }
 
             NavigationLink {
-                HealthDataSettingsView()
+                PremiumFeatureDestination(feature: .healthData) {
+                    HealthDataSettingsView()
+                }
             } label: {
-                Label("Health Data", systemImage: "heart.text.square.fill")
+                Label("Apple Health", systemImage: "heart.text.square.fill")
                     .foregroundStyle(.red)
             }
 
@@ -182,6 +187,90 @@ struct SettingsTab: View {
                 Label("Manage Exercises", systemImage: "list.bullet.clipboard.fill")
                     .foregroundStyle(.blue)
             }
+        }
+    }
+
+    private var premiumSection: some View {
+        Section {
+            NavigationLink {
+                PaywallView()
+            } label: {
+                Label(
+                    purchaseManager.isPremiumUnlocked ? "Manage Premium" : "Unlock Premium",
+                    systemImage: purchaseManager.isPremiumUnlocked ? "checkmark.seal.fill" : "star.circle.fill"
+                )
+                .foregroundStyle(purchaseManager.isPremiumUnlocked ? .green : .indigo)
+            }
+
+            Button {
+                Task {
+                    _ = await purchaseManager.restorePurchases()
+                }
+            } label: {
+                Label("Restore Purchases", systemImage: "arrow.clockwise.circle")
+            }
+
+            if let statusMessage = purchaseManager.statusMessage {
+                Text(statusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let errorMessage = purchaseManager.lastErrorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+        } header: {
+            Text("Premium")
+        } footer: {
+            Text(ComplianceConfiguration.premiumUnlockDisclosure)
+        }
+    }
+
+    private var legalPrivacySection: some View {
+        Section {
+            NavigationLink {
+                LegalPrivacyCenterView()
+            } label: {
+                Label("Open Legal & Privacy Center", systemImage: "shield.lefthalf.filled")
+            }
+
+            NavigationLink {
+                LegalDocumentView(kind: .privacyPolicy)
+            } label: {
+                Label("Privacy Policy", systemImage: "lock.doc")
+            }
+
+            NavigationLink {
+                LegalDocumentView(kind: .termsOfUse)
+            } label: {
+                Label("Terms of Use", systemImage: "doc.text")
+            }
+
+            NavigationLink {
+                LegalDocumentView(kind: .consumerHealthNotice)
+            } label: {
+                Label("Consumer Health Data Notice", systemImage: "heart.text.square.fill")
+            }
+
+            NavigationLink {
+                LegalDocumentView(kind: .automationDisclosure)
+            } label: {
+                Label("Smart Guidance Disclosure", systemImage: "wand.and.stars")
+            }
+
+            NavigationLink {
+                LegalDocumentView(kind: .wellnessDisclaimer)
+            } label: {
+                Label("Wellness Disclaimer", systemImage: "cross.case")
+            }
+
+            NavigationLink {
+                SupportInfoView()
+            } label: {
+                Label("Support", systemImage: "questionmark.circle")
+            }
 
             NavigationLink {
                 DataExportView()
@@ -189,6 +278,14 @@ struct SettingsTab: View {
                 Label("Export Workout Data", systemImage: "square.and.arrow.up")
                     .foregroundStyle(.green)
             }
+
+            NavigationLink {
+                LocalDataInfoView()
+            } label: {
+                Label("Delete Local Data", systemImage: "trash")
+            }
+        } header: {
+            Text("Legal & Privacy")
         }
     }
 

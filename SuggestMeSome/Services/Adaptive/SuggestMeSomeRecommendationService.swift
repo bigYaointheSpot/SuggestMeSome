@@ -865,7 +865,7 @@ struct SuggestMeSomeRecommendationService {
 
         // HealthKit caution — medium signal, never overrides manual flags.
         if let hk = coachContext?.objectiveRecoveryInsight, hk.status == .caution {
-            parts.append("HealthKit recovery data suggests caution — intensity nudged down by one step.")
+            parts.append("Apple Health recovery data suggests caution — intensity nudged down by one step.")
         }
 
         if !blockedLifts.isEmpty {
@@ -962,7 +962,7 @@ struct SuggestMeSomeRecommendationService {
             }
 
             if let hk = ctx.objectiveRecoveryInsight, hk.status == .caution {
-                reasons.append("HealthKit recovery caution (\(hk.compactSummary)) — intensity nudged down 1 step.")
+                reasons.append("Apple Health recovery caution (\(hk.compactSummary)) — intensity nudged down 1 step.")
             }
 
             if !ctx.activeOverlaySummaries.isEmpty {
@@ -1042,7 +1042,7 @@ struct SuggestMeSomeRecommendationService {
             }
 
             if let hk = ctx.objectiveRecoveryInsight, hk.status == .caution {
-                chips.append("HealthKit nudge")
+                chips.append("Apple Health nudge")
             }
 
             if let prefs = ctx.exercisePreferences, !prefs.frequentlyUsedExercises.isEmpty {

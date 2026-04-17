@@ -1,0 +1,29 @@
+{
+  "identifier" : "6A53A768-98E5-4E0F-B4F0-57D2A4A6F14E",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "24.99",
+      "familyShareable" : false,
+      "internalID" : "E7F6A83B-26AF-4A84-B5E8-70B987A705AB",
+      "localizations" : [
+        {
+          "description" : "Unlock premium coaching, analytics, smart generation, Apple Health integration, and Apple Watch features.",
+          "displayName" : "Premium Unlock",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "premium_unlock",
+      "referenceName" : "Premium Unlock",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "E2BEB84C-9D48-4C06-A6C2-BCA67637E86A"
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

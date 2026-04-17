@@ -90,7 +90,7 @@ struct ProgramListRow: View {
         switch program.source {
         case .userCreated: return "Custom"
         case .template: return "Template"
-        case .aiGenerated: return "AI Generated"
+        case .aiGenerated: return "Smart Generated"
         }
     }
 

@@ -63,12 +63,16 @@ struct ContentView: View {
             }
 
             TabView(selection: $selectedTab) {
-                DailyCoachView()
+                PremiumFeatureGate(feature: .dailyCoach) {
+                    DailyCoachView()
+                }
                     .tabItem {
                         Label(MainTab.dailyCoach.label, systemImage: MainTab.dailyCoach.systemImage)
                     }
                     .tag(MainTab.dailyCoach.rawValue)
-                DashboardView(selectedTab: $selectedTab)
+                PremiumFeatureGate(feature: .dashboardAnalytics) {
+                    DashboardView(selectedTab: $selectedTab)
+                }
                     .tabItem {
                         Label(MainTab.dashboard.label, systemImage: MainTab.dashboard.systemImage)
                     }
@@ -78,7 +82,9 @@ struct ContentView: View {
                         Label(MainTab.workouts.label, systemImage: MainTab.workouts.systemImage)
                     }
                     .tag(MainTab.workouts.rawValue)
-                TrainingProgramsTab()
+                PremiumFeatureGate(feature: .trainingPrograms) {
+                    TrainingProgramsTab()
+                }
                     .tabItem {
                         Label(MainTab.programs.label, systemImage: MainTab.programs.systemImage)
                     }
@@ -166,6 +172,7 @@ struct ActiveWorkoutBanner: View {
 struct WorkoutsTab: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
+    @Environment(PurchaseManager.self) private var purchaseManager
     @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
     @Query(sort: \MuscleGroup.name) private var muscleGroups: [MuscleGroup]
     @Query(filter: #Predicate<ProgramRun> { run in run.isCompleted == false })
@@ -194,6 +201,7 @@ struct WorkoutsTab: View {
     @State private var pendingProgramWorkout: ProgramWorkoutContext?
     @State private var showingProgramWorkout = false
     @State private var pendingWorkoutStart: PendingWorkoutStart?
+    @State private var paywallFeature: PremiumFeature?
 
     private enum PendingWorkoutStart {
         case empty
@@ -266,6 +274,11 @@ struct WorkoutsTab: View {
                     selectedGroupNames: $selectedGroupNames,
                     selectedExerciseNames: $selectedExerciseNames
                 )
+            }
+            .sheet(item: $paywallFeature) { feature in
+                NavigationStack {
+                    PaywallView(feature: feature)
+                }
             }
             .sheet(isPresented: $showingGeneratorSheet, onDismiss: {
                 DeferredNavigationService.launchAfterSheetDismissIfNeeded(
@@ -374,10 +387,17 @@ struct WorkoutsTab: View {
             }
 
             Button {
+                guard FeatureAccessPolicy.isAccessible(
+                    .smartWorkoutGeneration,
+                    entitlementState: purchaseManager.entitlementState
+                ) else {
+                    paywallFeature = .smartWorkoutGeneration
+                    return
+                }
                 pendingGeneratedWorkout = nil
                 showingGeneratorSheet = true
             } label: {
-                Label("SuggestMeSome", systemImage: "wand.and.stars")
+                Label("Smart Session", systemImage: "wand.and.stars")
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -390,6 +410,13 @@ struct WorkoutsTab: View {
 
             if !activeProgramRuns.isEmpty {
                 Button {
+                    guard FeatureAccessPolicy.isAccessible(
+                        .trainingPrograms,
+                        entitlementState: purchaseManager.entitlementState
+                    ) else {
+                        paywallFeature = .trainingPrograms
+                        return
+                    }
                     pendingProgramWorkout = nil
                     showingCompleteProgramSheet = true
                 } label: {

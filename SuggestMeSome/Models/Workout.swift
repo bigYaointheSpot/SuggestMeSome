@@ -119,7 +119,7 @@ final class Workout {
     var sourceBadgeLabel: String? {
         guard isHealthKitImported else { return nil }
         let trimmed = sourceDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let trimmed, !trimmed.isEmpty else { return "HealthKit" }
+        guard let trimmed, !trimmed.isEmpty else { return "Apple Health" }
         return trimmed
     }
 
@@ -137,7 +137,7 @@ final class Workout {
         case .loggedInApp:
             return "Logged in SuggestMeSome"
         case .healthKitImported:
-            return "Imported from HealthKit"
+            return "Imported from Apple Health"
         }
     }
 

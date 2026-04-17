@@ -136,7 +136,7 @@ enum TodayPlanExplanationAssembler {
         }
 
         if objectiveRecoveryEvaluation.insight?.status == .caution {
-            parts.append("HealthKit objective recovery is cautious, so the recommendation includes only a medium conservative nudge.")
+            parts.append("Apple Health objective recovery is cautious, so the recommendation includes only a medium conservative nudge.")
         } else if let baselineNote = healthKitWhyTodayNote(for: objectiveRecoveryEvaluation) {
             parts.append(baselineNote)
         }
@@ -194,7 +194,7 @@ enum TodayPlanExplanationAssembler {
 
         if objectiveRecoveryEvaluation.insight?.status == .caution {
             hasRuntimeAdjustment = true
-            details.append("HealthKit recovery showed caution and added a medium conservative nudge.")
+            details.append("Apple Health recovery showed caution and added a medium conservative nudge.")
         }
 
         if let rescue = adherenceRescue, rescue.sessionsBehindCount > 0 {
@@ -252,38 +252,38 @@ enum TodayPlanExplanationAssembler {
         if let insight = evaluation.insight {
             switch insight.status {
             case .good:
-                return "HealthKit objective recovery: Good. Supported the recommendation without changing session shape."
+                return "Apple Health objective recovery: Good. Supported the recommendation without changing session shape."
             case .neutral:
-                return "HealthKit objective recovery: Neutral. Near baseline and did not materially change today's recommendation."
+                return "Apple Health objective recovery: Neutral. Near baseline and did not materially change today's recommendation."
             case .caution:
-                return "HealthKit objective recovery: Caution. Applied a medium conservative nudge only; it does not override manual readiness."
+                return "Apple Health objective recovery: Caution. Applied a medium conservative nudge only; it does not override manual readiness."
             }
         }
 
         switch evaluation.state {
         case .disabled:
-            return "HealthKit objective recovery is turned off. Daily Coach is running in baseline mode."
+            return "Apple Health objective recovery is turned off. Daily Coach is running in baseline mode."
         case .notYetSynced:
-            return "HealthKit permissions may be active, but recovery data has not synced into SuggestMeSome yet. Daily Coach is running in baseline mode."
+            return "Apple Health permissions may be active, but recovery data has not synced into SuggestMeSome yet. Daily Coach is running in baseline mode."
         case .insufficientBaseline:
-            return "Today's HealthKit data is present, but there is not enough baseline history yet to score objective recovery. Daily Coach is running in baseline mode."
+            return "Today's Apple Health data is present, but there is not enough baseline history yet to score objective recovery. Daily Coach is running in baseline mode."
         case .awaitingCurrentDayMetrics:
-            return "HealthKit recovery sync is up to date, but today's comparable recovery signals are not available yet. Daily Coach is running in baseline mode."
+            return "Apple Health recovery sync is up to date, but today's comparable recovery signals are not available yet. Daily Coach is running in baseline mode."
         case .ready:
-            return "HealthKit objective recovery is ready."
+            return "Apple Health objective recovery is ready."
         }
     }
 
     static func healthKitWhyTodayNote(for evaluation: ObjectiveRecoveryEvaluation) -> String? {
         switch evaluation.state {
         case .disabled:
-            return "Objective recovery is turned off, so no HealthKit nudge was applied."
+            return "Objective recovery is turned off, so no Apple Health nudge was applied."
         case .notYetSynced:
-            return "Objective recovery has not synced yet, so no HealthKit nudge was applied."
+            return "Objective recovery has not synced yet, so no Apple Health nudge was applied."
         case .insufficientBaseline:
-            return "Objective recovery does not have enough baseline history yet, so no HealthKit nudge was applied."
+            return "Objective recovery does not have enough baseline history yet, so no Apple Health nudge was applied."
         case .awaitingCurrentDayMetrics:
-            return "Today's HealthKit recovery signals are not comparable yet, so no HealthKit nudge was applied."
+            return "Today's Apple Health recovery signals are not comparable yet, so no Apple Health nudge was applied."
         case .ready:
             return nil
         }

@@ -16,6 +16,7 @@ struct DailyCoachView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
+    @Environment(PurchaseManager.self) private var purchaseManager
 
     // MARK: Queries
 
@@ -196,6 +197,7 @@ struct DailyCoachView: View {
     @State private var showingProposalReview = false
     @State private var stagedProposalDecision: StagedTodayPlanProposalDecision?
     @State private var proposalActionErrorMessage: String?
+    @State private var showingAboutGuidance = false
 
     // Watch continuity — lazily initialised on first launch broadcast to keep
     // `DefaultWatchCompanionBridge` off the view's init path.
@@ -243,6 +245,13 @@ struct DailyCoachView: View {
             }
             .navigationTitle("Daily Coach")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("About") {
+                        showingAboutGuidance = true
+                    }
+                }
+            }
             .navigationDestination(isPresented: $navigatingToWorkout) {
                 if let pw = pendingProgramWorkout {
                     WorkoutView(programWorkout: pw, preparedDraft: pendingDraft?.entries)
@@ -365,12 +374,19 @@ struct DailyCoachView: View {
         .sheet(isPresented: $showingNextBlockGenerator) {
             AIProgramGeneratorView(prefill: latestCompletedReviewSnapshot?.defaultNextBlockPrefill)
         }
+        .sheet(isPresented: $showingAboutGuidance) {
+            NavigationStack {
+                AboutThisGuidanceView()
+            }
+        }
         .onAppear {
-            Task {
-                _ = await HealthKitRecoveryAutoRefreshCoordinator.shared.refreshIfNeeded(
-                    trigger: .dailyCoachOpened,
-                    context: modelContext
-                )
+            if purchaseManager.isPremiumUnlocked {
+                Task {
+                    _ = await HealthKitRecoveryAutoRefreshCoordinator.shared.refreshIfNeeded(
+                        trigger: .dailyCoachOpened,
+                        context: modelContext
+                    )
+                }
             }
             publishTodayPlanToWatchIfNeeded(force: true)
         }
@@ -823,11 +839,11 @@ struct DailyCoachView: View {
     private func objectiveRecoveryBaselineSummary(for state: ObjectiveRecoveryEvaluationState) -> String {
         switch state {
         case .disabled:
-            return "HealthKit objective recovery is off."
+            return "Apple Health recovery support is off."
         case .notYetSynced:
             return "Recovery data has not synced into SuggestMeSome yet."
         case .insufficientBaseline:
-            return "More HealthKit history is needed before Daily Coach can score recovery."
+            return "More Apple Health history is needed before Daily Coach can score recovery."
         case .awaitingCurrentDayMetrics:
             return "Today's comparable recovery signals have not landed yet."
         case .ready:
@@ -896,7 +912,7 @@ struct DailyCoachView: View {
             attributionRow("Program / Session", attribution.programPrescriptionInfluence)
             attributionRow("Overlays / Proposals", attribution.adaptiveOverlayInfluence)
             attributionRow("Recent History", attribution.recentHistoryInfluence)
-            attributionRow("HealthKit", attribution.healthKitInfluence)
+            attributionRow("Apple Health", attribution.healthKitInfluence)
         }
     }
 

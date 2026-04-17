@@ -331,7 +331,7 @@ struct DashboardView: View {
             HStack(spacing: 6) {
                 Image(systemName: "brain.head.profile")
                     .foregroundStyle(.indigo)
-                Text("AI Coaching")
+                Text("Smart Coaching")
                     .font(.headline.weight(.bold))
                 Spacer()
                 if !viewModel.pendingProposals.isEmpty {

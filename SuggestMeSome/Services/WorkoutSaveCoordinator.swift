@@ -343,7 +343,7 @@ final class WorkoutSaveCoordinator {
     private func successMessage(for kind: WorkoutSaveSideEffectKind) -> String {
         switch kind {
         case .healthKitWriteback:
-            return "Scheduled HealthKit writeback."
+            return "Scheduled Apple Health writeback."
         case .outcomePersistence:
             return "Persisted inferred session outcomes."
         case .weeklyAnalysis:

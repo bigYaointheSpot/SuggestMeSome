@@ -1,0 +1,656 @@
+//
+//  ComplianceViews.swift
+//  SuggestMeSome
+//
+//  Feature 14 - Reusable onboarding, legal, paywall, and premium gate views.
+//
+
+import SwiftUI
+
+struct LegalDocumentView: View {
+    let document: LegalDocumentVersion
+
+    init(kind: LegalDocumentKind) {
+        self.document = ComplianceConfiguration.document(for: kind)
+    }
+
+    init(document: LegalDocumentVersion) {
+        self.document = document
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if document.containsPlaceholders {
+                    placeholderNotice
+                }
+
+                Text(document.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Text(.init(document.bodyMarkdown))
+                    .font(.body)
+                    .textSelection(.enabled)
+
+                if let hostedURL = document.hostedURL {
+                    Link("Open Hosted Version", destination: hostedURL)
+                        .font(.subheadline.weight(.semibold))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+        }
+        .navigationTitle(document.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var placeholderNotice: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Pre-launch placeholder content", systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.orange)
+            Text("Replace placeholder company, contact, and hosted URL values before public release.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .background(Color.orange.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+struct SupportInfoView: View {
+    private let supportDocument = ComplianceConfiguration.document(for: .support)
+
+    var body: some View {
+        List {
+            Section("Contact") {
+                Link(ComplianceConfiguration.placeholderSupportEmail, destination: URL(string: "mailto:\(ComplianceConfiguration.placeholderSupportEmail)")!)
+                Link(ComplianceConfiguration.placeholderPrivacyEmail, destination: URL(string: "mailto:\(ComplianceConfiguration.placeholderPrivacyEmail)")!)
+                Link(ComplianceConfiguration.placeholderWebsiteURL.absoluteString, destination: ComplianceConfiguration.placeholderWebsiteURL)
+            }
+
+            Section {
+                ForEach(ComplianceConfiguration.releaseGateChecklist, id: \.self) { item in
+                    Text(item)
+                }
+            } header: {
+                Text("Release Gates")
+            } footer: {
+                Text("These placeholder contact details and hosted URLs must be finalized before public release.")
+            }
+
+            Section("Document Preview") {
+                NavigationLink {
+                    LegalDocumentView(document: supportDocument)
+                } label: {
+                    Label("Open Support Document", systemImage: "doc.text")
+                }
+            }
+        }
+        .navigationTitle("Support")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct AboutThisGuidanceView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                guidanceCallout(
+                    title: "Wellness, not medical care",
+                    text: "SuggestMeSome provides fitness and wellness guidance only. It is not medical advice, diagnosis, or treatment, and it should not be used for emergency or medical decisions."
+                )
+                guidanceCallout(
+                    title: "Recovery and readiness are estimates",
+                    text: ComplianceConfiguration.dailyCoachGuidanceDisclosure
+                )
+                guidanceCallout(
+                    title: "Smart guidance should be reviewed",
+                    text: "Some workouts, programs, and coaching explanations are generated from your logged training data and app logic. Review recommendations before acting on them."
+                )
+                guidanceCallout(
+                    title: "Apple Health is optional",
+                    text: ComplianceConfiguration.appleHealthDisclosure
+                )
+            }
+            .padding()
+        }
+        .navigationTitle("About This Guidance")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func guidanceCallout(title: String, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+            Text(text)
+                .font(.body)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+struct LocalDataInfoView: View {
+    var body: some View {
+        List {
+            Section("Delete Local Data") {
+                Text(ComplianceConfiguration.deleteLocalDataDisclosure)
+            }
+
+            Section("What stays available for free") {
+                Text("Manual workout logging, history, editing, export, and deletion remain available without Premium Unlock.")
+            }
+
+            Section("Where to manage it") {
+                Text("Use the Data Management section in Settings to delete workouts by date range or delete all local workout data.")
+            }
+        }
+        .navigationTitle("Delete Local Data")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct LegalPrivacyCenterView: View {
+    var body: some View {
+        List {
+            Section("Legal Documents") {
+                ForEach(LegalDocumentKind.allCases.filter { $0 != .support }) { kind in
+                    NavigationLink {
+                        LegalDocumentView(kind: kind)
+                    } label: {
+                        Label(kind.title, systemImage: icon(for: kind))
+                    }
+                }
+            }
+
+            Section("Support") {
+                NavigationLink {
+                    SupportInfoView()
+                } label: {
+                    Label("Support", systemImage: "questionmark.circle")
+                }
+            }
+        }
+        .navigationTitle("Legal & Privacy")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func icon(for kind: LegalDocumentKind) -> String {
+        switch kind {
+        case .privacyPolicy:
+            return "lock.doc"
+        case .termsOfUse:
+            return "doc.text"
+        case .consumerHealthNotice:
+            return "heart.text.square.fill"
+        case .automationDisclosure:
+            return "wand.and.stars"
+        case .wellnessDisclaimer:
+            return "cross.case"
+        case .support:
+            return "questionmark.circle"
+        }
+    }
+}
+
+struct PaywallView: View {
+    let feature: PremiumFeature?
+
+    @Environment(PurchaseManager.self) private var purchaseManager
+    @State private var showingDocumentKind: LegalDocumentKind?
+    @State private var showingSupport = false
+    @State private var showingAboutGuidance = false
+
+    init(feature: PremiumFeature? = nil) {
+        self.feature = feature
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                heroCard
+                benefitsCard
+                disclosureCard
+                actionsCard
+            }
+            .padding()
+        }
+        .navigationTitle(feature?.title ?? "Premium Unlock")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await purchaseManager.refreshProducts()
+            await purchaseManager.refreshEntitlements()
+        }
+        .sheet(item: $showingDocumentKind) { kind in
+            NavigationStack {
+                LegalDocumentView(kind: kind)
+            }
+        }
+        .sheet(isPresented: $showingSupport) {
+            NavigationStack {
+                SupportInfoView()
+            }
+        }
+        .sheet(isPresented: $showingAboutGuidance) {
+            NavigationStack {
+                AboutThisGuidanceView()
+            }
+        }
+    }
+
+    private var heroCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Premium Unlock", systemImage: "star.circle.fill")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.indigo)
+
+            Text(feature?.headline ?? "Unlock coaching, analytics, smart generation, Apple Health integration, and Apple Watch features.")
+                .font(.title3.weight(.semibold))
+
+            Text(feature?.detail ?? "Premium keeps the manual workout logger free while unlocking the advanced training system.")
+                .foregroundStyle(.secondary)
+
+            Text("\(purchaseManager.premiumDisplayPrice) one-time purchase")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.indigo.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var benefitsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("What Premium Unlock includes")
+                .font(.headline)
+
+            ForEach(feature?.valueBullets ?? [
+                "Daily Coach and explainable premium guidance",
+                "Dashboard analytics and adaptive history",
+                "Smart workout and program generation",
+                "Apple Health and Apple Watch features"
+            ], id: \.self) { bullet in
+                Label(bullet, systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.primary)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var disclosureCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Disclosures")
+                .font(.headline)
+            Text(ComplianceConfiguration.premiumUnlockDisclosure)
+                .foregroundStyle(.secondary)
+            Text("Manual workout logging, history, editing, export, and delete tools remain free.")
+                .foregroundStyle(.secondary)
+            Button("About This Guidance") {
+                showingAboutGuidance = true
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var actionsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                Task {
+                    _ = await purchaseManager.purchasePremiumUnlock()
+                }
+            } label: {
+                HStack {
+                    if purchaseManager.isProcessingPurchase {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                    }
+                    Text(purchaseManager.isPremiumUnlocked ? "Premium Unlock Active" : "Unlock Premium")
+                        .font(.headline.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(purchaseManager.isPremiumUnlocked ? Color.green : Color.indigo)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .disabled(purchaseManager.isProcessingPurchase || purchaseManager.isPremiumUnlocked)
+
+            Button("Restore Purchases") {
+                Task {
+                    _ = await purchaseManager.restorePurchases()
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+
+            if let statusMessage = purchaseManager.statusMessage {
+                Text(statusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let errorMessage = purchaseManager.lastErrorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+
+            Divider()
+
+            HStack(spacing: 12) {
+                Button("Privacy Policy") {
+                    showingDocumentKind = .privacyPolicy
+                }
+                Button("Terms") {
+                    showingDocumentKind = .termsOfUse
+                }
+                Button("Support") {
+                    showingSupport = true
+                }
+            }
+            .font(.footnote.weight(.semibold))
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+struct PremiumGateView: View {
+    let feature: PremiumFeature
+
+    var body: some View {
+        PaywallView(feature: feature)
+    }
+}
+
+struct PremiumFeatureGate<Content: View>: View {
+    let feature: PremiumFeature
+    @ViewBuilder let content: () -> Content
+
+    @Environment(PurchaseManager.self) private var purchaseManager
+
+    var body: some View {
+        switch FeatureAccessPolicy.decision(
+            for: feature,
+            entitlementState: purchaseManager.entitlementState
+        ) {
+        case .granted:
+            content()
+        case .premiumRequired(let feature):
+            NavigationStack {
+                PremiumGateView(feature: feature)
+            }
+        }
+    }
+}
+
+struct PremiumFeatureDestination<Content: View>: View {
+    let feature: PremiumFeature
+    @ViewBuilder let content: () -> Content
+
+    @Environment(PurchaseManager.self) private var purchaseManager
+
+    var body: some View {
+        switch FeatureAccessPolicy.decision(
+            for: feature,
+            entitlementState: purchaseManager.entitlementState
+        ) {
+        case .granted:
+            content()
+        case .premiumRequired(let feature):
+            PremiumGateView(feature: feature)
+        }
+    }
+}
+
+struct HealthDataPreflightView: View {
+    let onContinue: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingDocumentKind: LegalDocumentKind?
+    @State private var showingAboutGuidance = false
+
+    var body: some View {
+        List {
+            Section("Before You Connect Apple Health") {
+                Text(ComplianceConfiguration.appleHealthDisclosure)
+                Text("Your workouts, readiness check-ins, recovery data, and coaching outputs can reveal health information. SuggestMeSome uses this data to provide the features you request and does not use Apple Health data for advertising.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Data Apple Health May Provide") {
+                Text("Sleep")
+                Text("Resting heart rate")
+                Text("Heart rate variability")
+                Text("Active energy")
+                Text("Step count")
+                Text("Body mass")
+                Text("Workouts")
+            }
+
+            Section("Learn More") {
+                Button("About This Guidance") {
+                    showingAboutGuidance = true
+                }
+                Button("Privacy Policy") {
+                    showingDocumentKind = .privacyPolicy
+                }
+                Button("Consumer Health Data Notice") {
+                    showingDocumentKind = .consumerHealthNotice
+                }
+            }
+
+            Section {
+                Button("Continue to Apple Health Permissions") {
+                    dismiss()
+                    onContinue()
+                }
+                .font(.headline.weight(.semibold))
+
+                Button("Not Now", role: .cancel) {
+                    dismiss()
+                }
+            }
+        }
+        .navigationTitle("Apple Health Access")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $showingDocumentKind) { kind in
+            NavigationStack {
+                LegalDocumentView(kind: kind)
+            }
+        }
+        .sheet(isPresented: $showingAboutGuidance) {
+            NavigationStack {
+                AboutThisGuidanceView()
+            }
+        }
+    }
+}
+
+struct ComplianceOnboardingFlow: View {
+    @Environment(ComplianceStateStore.self) private var complianceStateStore
+    @State private var stepIndex = 0
+    @State private var showingDocumentKind: LegalDocumentKind?
+    @State private var showingLegalCenter = false
+
+    private let orderedSteps: [ComplianceOnboardingStep] = [
+        .welcome,
+        .ageGate,
+        .wellness,
+        .automation,
+        .documents
+    ]
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 24) {
+                stepProgress
+
+                Spacer(minLength: 0)
+
+                switch orderedSteps[stepIndex] {
+                case .welcome:
+                    welcomeStep
+                case .ageGate:
+                    copyStep(
+                        title: "Adults 18+",
+                        body: "SuggestMeSome is intended for adults age 18 and older."
+                    )
+                case .wellness:
+                    copyStep(
+                        title: "Wellness, not medical care",
+                        body: "SuggestMeSome provides fitness and wellness guidance only. It is not medical advice, diagnosis, or treatment, and it should not be used for emergency or medical decisions."
+                    )
+                case .automation:
+                    copyStep(
+                        title: "Smart guidance disclosure",
+                        body: "Some workouts, programs, and coaching explanations are generated from your logged training data and app logic. Review recommendations before acting on them."
+                    )
+                case .documents:
+                    documentStep
+                }
+
+                Spacer(minLength: 0)
+
+                onboardingFooter
+            }
+            .padding()
+            .navigationTitle("Welcome")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .sheet(item: $showingDocumentKind) { kind in
+            NavigationStack {
+                LegalDocumentView(kind: kind)
+            }
+        }
+        .sheet(isPresented: $showingLegalCenter) {
+            NavigationStack {
+                LegalPrivacyCenterView()
+            }
+        }
+    }
+
+    private var stepProgress: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Before you start")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ProgressView(value: Double(stepIndex + 1), total: Double(orderedSteps.count))
+            Text("Step \(stepIndex + 1) of \(orderedSteps.count)")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var welcomeStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("SuggestMeSome helps you log workouts for free and unlock premium coaching when you are ready.")
+                .font(.title3.weight(.semibold))
+
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Manual workout logging stays free", systemImage: "checkmark.circle.fill")
+                Label("Premium Unlock is a one-time purchase", systemImage: "star.circle.fill")
+                Label("Apple Health and Apple Watch support are optional premium features", systemImage: "heart.text.square.fill")
+            }
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func copyStep(title: String, body: String) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title)
+                .font(.title3.weight(.semibold))
+            Text(body)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var documentStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Review key documents")
+                .font(.title3.weight(.semibold))
+            Text("These documents are available anytime from Settings.")
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Button("Privacy Policy") {
+                    showingDocumentKind = .privacyPolicy
+                }
+                Button("Terms of Use") {
+                    showingDocumentKind = .termsOfUse
+                }
+                Button("Consumer Health Data Notice") {
+                    showingDocumentKind = .consumerHealthNotice
+                }
+                Button("Open Legal & Privacy Center") {
+                    showingLegalCenter = true
+                }
+            }
+            .font(.headline)
+        }
+    }
+
+    private var onboardingFooter: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if stepIndex > 0 {
+                Button("Back") {
+                    stepIndex = max(0, stepIndex - 1)
+                }
+                .font(.subheadline.weight(.semibold))
+            }
+
+            Button(stepIndex == orderedSteps.count - 1 ? "Continue into the app" : "Continue") {
+                advance()
+            }
+            .font(.headline.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color.indigo)
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    private func advance() {
+        switch orderedSteps[stepIndex] {
+        case .welcome:
+            break
+        case .ageGate:
+            complianceStateStore.confirmAdult()
+        case .wellness:
+            complianceStateStore.acknowledgeWellnessDisclaimer()
+        case .automation:
+            complianceStateStore.acknowledgeAutomationDisclosure()
+        case .documents:
+            complianceStateStore.acceptRequiredDocuments()
+            complianceStateStore.markCompleted()
+        }
+
+        if stepIndex < orderedSteps.count - 1 {
+            stepIndex += 1
+        }
+    }
+}
+
+private enum ComplianceOnboardingStep {
+    case welcome
+    case ageGate
+    case wellness
+    case automation
+    case documents
+}

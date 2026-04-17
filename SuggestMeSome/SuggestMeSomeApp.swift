@@ -12,6 +12,8 @@ import SwiftData
 struct SuggestMeSomeApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var activeWorkoutSessionStore = ActiveWorkoutSessionStore()
+    @State private var purchaseManager = PurchaseManager.shared
+    @State private var complianceStateStore = ComplianceStateStore.shared
 
     private static let sharedSchema = Schema([
             MuscleGroup.self,
@@ -87,8 +89,16 @@ struct SuggestMeSomeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if complianceStateStore.hasCompletedRequiredOnboarding {
+                    ContentView()
+                } else {
+                    ComplianceOnboardingFlow()
+                }
+            }
                 .environment(activeWorkoutSessionStore)
+                .environment(purchaseManager)
+                .environment(complianceStateStore)
                 .onAppear {
                     _ = PersistenceMaintenanceCoordinator.runStartupMaintenance(
                         context: sharedModelContainer.mainContext
@@ -99,10 +109,15 @@ struct SuggestMeSomeApp: App {
                     WatchSessionCoordinator.shared.installExecutionActionHandler(
                         activeWorkoutSessionStore: activeWorkoutSessionStore
                     )
+                    Task { @MainActor in
+                        await purchaseManager.bootstrap()
+                    }
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     guard newPhase == .active else { return }
                     Task { @MainActor in
+                        await purchaseManager.refreshEntitlements()
+                        guard purchaseManager.isPremiumUnlocked else { return }
                         _ = await HealthKitRecoveryAutoRefreshCoordinator.shared.refreshIfNeeded(
                             trigger: .appDidBecomeActive,
                             context: sharedModelContainer.mainContext

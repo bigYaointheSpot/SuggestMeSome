@@ -13,6 +13,7 @@ import SwiftData
 struct AIProgramGeneratorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(PurchaseManager.self) private var purchaseManager
     @Query private var allPRs: [PersonalRecord]
     private let initialPrefill: MesocycleNextBlockPrefill?
 
@@ -104,55 +105,66 @@ struct AIProgramGeneratorView: View {
     // MARK: Body
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if isGenerating {
-                    loadingView
-                } else if let program = generatedProgram, let input = lastInput {
-                    ProgramReviewView(
-                        program: program,
-                        input: input,
-                        onStartProgram: { dismiss() },
-                        onRegenerate: {
-                            modelContext.delete(program)
-                            generatedProgram = nil
-                            isGenerating = true
-                            Task { @MainActor in
-                                await Task.yield()
-                                generatedProgram = service.regenerateProgram(input: input, context: modelContext)
-                                lastInput = input
-                                isGenerating = false
-                            }
+        Group {
+            if FeatureAccessPolicy.isAccessible(
+                .trainingPrograms,
+                entitlementState: purchaseManager.entitlementState
+            ) {
+                NavigationStack {
+                    Group {
+                        if isGenerating {
+                            loadingView
+                        } else if let program = generatedProgram, let input = lastInput {
+                            ProgramReviewView(
+                                program: program,
+                                input: input,
+                                onStartProgram: { dismiss() },
+                                onRegenerate: {
+                                    modelContext.delete(program)
+                                    generatedProgram = nil
+                                    isGenerating = true
+                                    Task { @MainActor in
+                                        await Task.yield()
+                                        generatedProgram = service.regenerateProgram(input: input, context: modelContext)
+                                        lastInput = input
+                                        isGenerating = false
+                                    }
+                                }
+                            )
+                        } else if step == 2 {
+                            oneRMView
+                        } else {
+                            configurationView
                         }
-                    )
-                } else if step == 2 {
-                    oneRMView
-                } else {
-                    configurationView
+                    }
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { cancelOrBackButton }
+                        ToolbarItem(placement: .principal) {
+                            Text(navigationTitle).font(.headline)
+                        }
+                    }
                 }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { cancelOrBackButton }
-                ToolbarItem(placement: .principal) {
-                    Text(navigationTitle).font(.headline)
+                .interactiveDismissDisabled(isGenerating)
+                .onAppear { restoreState() }
+                .onChange(of: selectedFocus) { _, new in
+                    savedFocusRaw = new?.rawValue ?? ""
+                    if let f = new {
+                        let minFreq = FocusTemplateLibrary.template(for: f).minimumFrequency
+                        if selectedFrequency > 0 && selectedFrequency < minFreq {
+                            selectedFrequency = 0
+                        }
+                    }
+                }
+                .onChange(of: selectedLevel)     { _, new in savedLevelRaw  = new?.rawValue ?? "" }
+                .onChange(of: selectedDuration)  { _, new in savedDuration  = new }
+                .onChange(of: selectedFrequency) { _, new in savedFrequency = new }
+            } else {
+                NavigationStack {
+                    PremiumGateView(feature: .trainingPrograms)
                 }
             }
         }
-        .interactiveDismissDisabled(isGenerating)
-        .onAppear { restoreState() }
-        .onChange(of: selectedFocus) { _, new in
-            savedFocusRaw = new?.rawValue ?? ""
-            if let f = new {
-                let minFreq = FocusTemplateLibrary.template(for: f).minimumFrequency
-                if selectedFrequency > 0 && selectedFrequency < minFreq {
-                    selectedFrequency = 0
-                }
-            }
-        }
-        .onChange(of: selectedLevel)     { _, new in savedLevelRaw  = new?.rawValue ?? "" }
-        .onChange(of: selectedDuration)  { _, new in savedDuration  = new }
-        .onChange(of: selectedFrequency) { _, new in savedFrequency = new }
     }
 
     private var cancelOrBackButton: some View {

@@ -15,71 +15,81 @@ struct MesocycleReviewView: View {
     let snapshot: MesocycleReviewSnapshot
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(PurchaseManager.self) private var purchaseManager
     @State private var isPhaseRecapExpanded = true
     @State private var showingAIGenerator = false
     @State private var selectedRecommendation: MesocycleNextBlockRecommendation?
     @State private var confirmedPrefill: MesocycleNextBlockPrefill?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                MesocycleReviewHeader(snapshot: snapshot)
-                MesocycleHeadlineMetricsSection(metrics: snapshot.headlineMetrics)
-                if !snapshot.performanceHighlights.isEmpty {
-                    MesocycleHighlightsSection(highlights: snapshot.performanceHighlights)
+        Group {
+            if FeatureAccessPolicy.isAccessible(
+                .nextBlockPlanning,
+                entitlementState: purchaseManager.entitlementState
+            ) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        MesocycleReviewHeader(snapshot: snapshot)
+                        MesocycleHeadlineMetricsSection(metrics: snapshot.headlineMetrics)
+                        if !snapshot.performanceHighlights.isEmpty {
+                            MesocycleHighlightsSection(highlights: snapshot.performanceHighlights)
+                        }
+                        if !snapshot.frictionSignals.isEmpty {
+                            MesocycleFrictionSection(signals: snapshot.frictionSignals)
+                        }
+                        if !snapshot.phaseRecap.isEmpty {
+                            MesocyclePhaseRecapSection(
+                                phases: snapshot.phaseRecap,
+                                isExpanded: $isPhaseRecapExpanded
+                            )
+                        }
+                        MesocycleNarrativeSection(text: snapshot.narrativeSummary)
+                        MesocycleNextBlockSection(
+                            recommendations: snapshot.rankedRecommendations,
+                            selectedStableID: selectedRecommendation?.stableID,
+                            onSelect: { selectedRecommendation = $0 }
+                        )
+                        Color.clear.frame(height: 88)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
                 }
-                if !snapshot.frictionSignals.isEmpty {
-                    MesocycleFrictionSection(signals: snapshot.frictionSignals)
-                }
-                if !snapshot.phaseRecap.isEmpty {
-                    MesocyclePhaseRecapSection(
-                        phases: snapshot.phaseRecap,
-                        isExpanded: $isPhaseRecapExpanded
+                .navigationTitle("Block Review")
+                .navigationBarTitleDisplayMode(.inline)
+                .safeAreaInset(edge: .bottom) {
+                    MesocycleReviewCTABar(
+                        onClose: { dismiss() },
+                        onViewNextBlock: { primaryCTATapped() }
                     )
                 }
-                MesocycleNarrativeSection(text: snapshot.narrativeSummary)
-                MesocycleNextBlockSection(
-                    recommendations: snapshot.rankedRecommendations,
-                    selectedStableID: selectedRecommendation?.stableID,
-                    onSelect: { selectedRecommendation = $0 }
-                )
-                Color.clear.frame(height: 88)
+                .sheet(item: $selectedRecommendation) { rec in
+                    NextBlockPrefillReviewSheet(
+                        recommendation: rec,
+                        onConfirm: { editedPrefill in
+                            persistDecision(
+                                recommendation: rec,
+                                decision: .accepted,
+                                editedPrefill: editedPrefill
+                            )
+                            confirmedPrefill = editedPrefill
+                            selectedRecommendation = nil
+                            showingAIGenerator = true
+                        },
+                        onDecline: {
+                            persistDecision(
+                                recommendation: rec,
+                                decision: .declined
+                            )
+                            selectedRecommendation = nil
+                        }
+                    )
+                }
+                .fullScreenCover(isPresented: $showingAIGenerator) {
+                    AIProgramGeneratorView(prefill: confirmedPrefill ?? snapshot.defaultNextBlockPrefill)
+                }
+            } else {
+                PremiumGateView(feature: .nextBlockPlanning)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
-        }
-        .navigationTitle("Block Review")
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            MesocycleReviewCTABar(
-                onClose: { dismiss() },
-                onViewNextBlock: { primaryCTATapped() }
-            )
-        }
-        .sheet(item: $selectedRecommendation) { rec in
-            NextBlockPrefillReviewSheet(
-                recommendation: rec,
-                onConfirm: { editedPrefill in
-                    persistDecision(
-                        recommendation: rec,
-                        decision: .accepted,
-                        editedPrefill: editedPrefill
-                    )
-                    confirmedPrefill = editedPrefill
-                    selectedRecommendation = nil
-                    showingAIGenerator = true
-                },
-                onDecline: {
-                    persistDecision(
-                        recommendation: rec,
-                        decision: .declined
-                    )
-                    selectedRecommendation = nil
-                }
-            )
-        }
-        .fullScreenCover(isPresented: $showingAIGenerator) {
-            AIProgramGeneratorView(prefill: confirmedPrefill ?? snapshot.defaultNextBlockPrefill)
         }
     }
 
@@ -693,7 +703,7 @@ extension MesocycleReviewSnapshot {
             reviewStableID: "mock-review-1",
             programRunStableID: "mock-run-1",
             trainingProgramStableID: "mock-program-1",
-            programName: "AI Powerlifting Block",
+            programName: "Smart Powerlifting Block",
             focus: .powerlifting,
             focusDisplayName: "Powerlifting",
             inferredCurrentLevel: .intermediate,

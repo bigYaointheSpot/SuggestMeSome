@@ -99,7 +99,7 @@ enum HealthKitWorkoutImportMapper {
         if !sourceName.isEmpty {
             return sourceName
         }
-        return "HealthKit"
+        return "Apple Health"
     }
 
     private static func activityDisplayLabel(for activityType: HKWorkoutActivityType) -> String {

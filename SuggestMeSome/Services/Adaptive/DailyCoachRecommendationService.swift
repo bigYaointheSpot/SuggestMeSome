@@ -205,18 +205,18 @@ struct DailyCoachRecommendationService {
             let primary = DailyCoachSuggestionItem(
                 type: .suggestManualVariationSwap,
                 compactText: "Pain flagged — review your session before training.",
-                expandedText: "You reported pain or discomfort today. No automatic changes are made. Review the session manually and consider swapping to a pain-free movement, reducing load significantly, or resting entirely if the discomfort is severe."
+                expandedText: "You reported pain or discomfort today. No automatic changes are made. Review the session manually and consider a lower-stress variation, a significant load reduction, or skipping the session if training does not feel appropriate."
             )
             let secondary = [DailyCoachSuggestionItem(
                 type: .trimAccessories,
                 compactText: "Consider skipping accessories and prioritising the primary lift only.",
-                expandedText: "If you decide to train, restrict yourself to the primary lift and skip accessories that may aggravate the issue."
+                expandedText: "If you decide to train, keep the session simple, limit it to the primary lift, and skip accessories that feel likely to add unnecessary stress."
             )]
             return (
                 primary,
                 secondary,
                 "Pain flagged. Manual review recommended before training.",
-                "You reported pain or discomfort. The recommendation engine will not auto-swap anything. Review your session, choose a safe movement, and prioritise keeping pain out of the session above all else."
+                "You reported pain or discomfort. The recommendation engine will not auto-swap anything. Review your session manually, choose a lower-stress option if needed, and prioritize comfort and control over intensity."
             )
         }
 
@@ -246,7 +246,7 @@ struct DailyCoachRecommendationService {
                 primary,
                 [],
                 "\(availableMinutes) min + elevated fatigue. Trim accessories, keep primary.",
-                "Moderate time pressure combined with elevated fatigue calls for a focused session. Run the main lift fully and one key accessory. Skipping lower-priority accessories now prevents digging a deeper fatigue hole."
+                "Moderate time pressure combined with elevated fatigue calls for a focused session. Run the main lift fully and one key accessory. Skipping lower-priority accessories now helps keep fatigue from building further."
             )
         }
 
@@ -453,13 +453,13 @@ struct DailyCoachRecommendationService {
             let primary = DailyCoachSuggestionItem(
                 type: .standaloneRecoverySession,
                 compactText: "Pain flagged. Light recovery session only today.",
-                expandedText: "You flagged pain or discomfort. Skip strength work today. A light recovery session — mobility, walking, or easy cardio — is the safest path forward."
+                expandedText: "You flagged pain or discomfort. Skip strength work today. A light recovery session — mobility, walking, or easy cardio — is the most conservative option."
             )
             return (
                 primary,
                 [],
                 "Pain flagged. Light recovery session recommended.",
-                "You reported discomfort today. No strength training is recommended. Consider mobility work, a light walk, or full rest depending on severity."
+                "You reported discomfort today. A light recovery option or full rest may fit better than strength training."
             )
         }
 

@@ -96,7 +96,12 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestCurrentSessionContext = nil
         latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
-        guard let session, canSendPayloads(on: session) else { return }
+        guard let session else { return }
+        guard hasPremiumWatchAccess else {
+            sendPremiumLockedStateIfPossible(on: session)
+            return
+        }
+        guard canSendPayloads(on: session) else { return }
         guard let message = Self.makeTransferMessage(kind: .workoutLaunch, payload: payload) else { return }
         sendTransferMessage(message, on: session)
 #else
@@ -108,7 +113,12 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestWorkoutProgressSnapshot = snapshot
         latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
-        guard let session, canSendPayloads(on: session) else { return }
+        guard let session else { return }
+        guard hasPremiumWatchAccess else {
+            sendPremiumLockedStateIfPossible(on: session)
+            return
+        }
+        guard canSendPayloads(on: session) else { return }
         guard let message = Self.makeTransferMessage(kind: .workoutProgress, payload: snapshot) else { return }
         sendTransferMessage(message, on: session)
 #else
@@ -119,7 +129,11 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     func sendTodayPlanSnapshot(_ snapshot: WatchTodayPlanSnapshot) async {
         latestTodayPlanSnapshot = snapshot
 #if canImport(WatchConnectivity)
-        sendLatestTodayPlanIfPossible()
+        if let session, hasPremiumWatchAccess == false {
+            sendPremiumLockedStateIfPossible(on: session)
+        } else {
+            sendLatestTodayPlanIfPossible()
+        }
 #else
         _ = snapshot
 #endif
@@ -129,7 +143,12 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestLiveWorkoutSnapshot = snapshot
         latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
-        guard let session, canSendPayloads(on: session) else { return }
+        guard let session else { return }
+        guard hasPremiumWatchAccess else {
+            sendPremiumLockedStateIfPossible(on: session)
+            return
+        }
+        guard canSendPayloads(on: session) else { return }
         guard let message = Self.makeContextMessage(kind: .liveWorkoutSnapshot, payload: snapshot) else { return }
         sendContextMessage(message, on: session)
 #else
@@ -141,7 +160,12 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestCurrentSessionContext = context
         latestSessionCompletionPayload = nil
 #if canImport(WatchConnectivity)
-        guard let session, canSendPayloads(on: session) else { return }
+        guard let session else { return }
+        guard hasPremiumWatchAccess else {
+            sendPremiumLockedStateIfPossible(on: session)
+            return
+        }
+        guard canSendPayloads(on: session) else { return }
         guard let message = Self.makeContextMessage(kind: .currentSessionContext, payload: context) else { return }
         sendContextMessage(message, on: session)
 #else
@@ -156,7 +180,12 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestLiveWorkoutSnapshot = nil
         latestCurrentSessionContext = nil
 #if canImport(WatchConnectivity)
-        guard let session, canSendPayloads(on: session) else { return }
+        guard let session else { return }
+        guard hasPremiumWatchAccess else {
+            sendPremiumLockedStateIfPossible(on: session)
+            return
+        }
+        guard canSendPayloads(on: session) else { return }
         guard let message = Self.makeContextMessage(kind: .sessionCompletion, payload: payload) else { return }
         sendContextMessage(
             message,
@@ -263,20 +292,51 @@ extension DefaultWatchCompanionBridge: WCSessionDelegate {
 }
 
 private extension DefaultWatchCompanionBridge {
+    var hasPremiumWatchAccess: Bool {
+        FeatureAccessPolicy.isAccessible(
+            .watchCompanion,
+            entitlementState: PurchaseManager.shared.entitlementState
+        )
+    }
+
     func refreshLatestStatus(from session: WCSession, checkedAt: Date) -> WatchCompanionStatus {
         let snapshot = Self.makeSessionSnapshot(from: session)
         if snapshot.activationState == .activated, snapshot.isWatchAppInstalled {
             watchEvidence.recordInstalledCompanion(at: checkedAt)
         }
-        latestStatus = WatchCompanionStatusResolver.makeStatus(
+        let resolved = WatchCompanionStatusResolver.makeStatus(
             from: snapshot,
             evidence: watchEvidence,
             checkedAt: checkedAt
         )
+        if hasPremiumWatchAccess == false, resolved.availability != .unsupported {
+            latestStatus = WatchCompanionStatus(
+                availability: resolved.availability,
+                activationState: resolved.activationState,
+                isPaired: resolved.isPaired,
+                isCompanionAppInstalled: resolved.isCompanionAppInstalled,
+                isReachable: resolved.isReachable,
+                message: "Premium Unlock is required to use Apple Watch features.",
+                checkedAt: resolved.checkedAt,
+                lastWatchContactAt: resolved.lastWatchContactAt,
+                lastPayloadReplayAt: resolved.lastPayloadReplayAt
+            )
+        } else {
+            latestStatus = resolved
+        }
         return latestStatus
     }
 
     func canSendPayloads(on session: WCSession, now: Date = Date()) -> Bool {
+        guard hasPremiumWatchAccess else { return false }
+        return WatchCompanionStatusResolver.canSendPayloads(
+            with: Self.makeSessionSnapshot(from: session),
+            evidence: watchEvidence,
+            now: now
+        )
+    }
+
+    func canSendLockedState(on session: WCSession, now: Date = Date()) -> Bool {
         WatchCompanionStatusResolver.canSendPayloads(
             with: Self.makeSessionSnapshot(from: session),
             evidence: watchEvidence,
@@ -337,6 +397,10 @@ private extension DefaultWatchCompanionBridge {
     }
 
     func replayLatestSnapshotsIfPossible() {
+        if let session, hasPremiumWatchAccess == false {
+            sendPremiumLockedStateIfPossible(on: session)
+            return
+        }
         sendLatestTodayPlanIfPossible()
         sendLatestSessionCompletionIfPossible()
         sendLatestActiveWorkoutIfPossible()
@@ -416,6 +480,9 @@ private extension DefaultWatchCompanionBridge {
             watchEvidence.recordWatchContact(at: max(message.sentAt, heartbeat.sentAt))
             if let session {
                 latestStatus = refreshLatestStatus(from: session, checkedAt: Date())
+                if hasPremiumWatchAccess == false {
+                    sendPremiumLockedStateIfPossible(on: session)
+                }
             } else {
                 latestStatus = .unsupported()
             }
@@ -447,6 +514,39 @@ private extension DefaultWatchCompanionBridge {
             isPaired: session.isPaired,
             isWatchAppInstalled: session.isWatchAppInstalled,
             isReachable: session.isReachable
+        )
+    }
+
+    func sendPremiumLockedStateIfPossible(on session: WCSession) {
+        guard canSendLockedState(on: session),
+              let message = Self.makeContextMessage(
+                kind: .todayPlanSnapshot,
+                payload: premiumLockedTodayPlanSnapshot()
+              ) else {
+            return
+        }
+        sendContextMessage(message, on: session)
+    }
+
+    func premiumLockedTodayPlanSnapshot(now: Date = Date()) -> WatchTodayPlanSnapshot {
+        WatchTodayPlanSnapshot(
+            confidence: "Locked",
+            compactSummary: "Unlock Premium on iPhone to use Apple Watch sync and coaching.",
+            primarySuggestionText: "Premium Unlock required on iPhone.",
+            readinessTier: "Unavailable",
+            hasPainFlag: false,
+            sessionLabel: "Premium Required",
+            programName: nil,
+            programRunStableID: nil,
+            programWeekNumber: nil,
+            programSessionNumber: nil,
+            activeSourceLabels: ["Premium Unlock"],
+            whatChangedToday: "Apple Watch features are part of Premium Unlock. Manual workout logging remains free on iPhone.",
+            adherenceHeadline: nil,
+            adherenceGuidanceType: nil,
+            sessionsBehindCount: 0,
+            pendingProposalCount: 0,
+            generatedAt: now
         )
     }
 }

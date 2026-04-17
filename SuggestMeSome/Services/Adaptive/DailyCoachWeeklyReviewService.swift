@@ -115,15 +115,15 @@ enum DailyCoachWeeklyReviewService {
         // ── Watchout ──────────────────────────────────────────────────────────
         let watchoutText: String
         if fatigue == .critical {
-            watchoutText = "Critical fatigue — continuing at this load risks injury and stalls progress."
+            watchoutText = "Critical fatigue is showing up clearly. A lighter week is likely to support better training quality."
         } else if fatigue == .high {
-            watchoutText = "Fatigue is high. Reduce next week's volume or loads to prevent a plateau."
+            watchoutText = "Fatigue is high. Reducing next week's volume or load is likely to help training quality rebound."
         } else if let decliningTrend = analysis.trendSnapshots.first(where: { $0.trendStatus == .declining }) {
             watchoutText = "\(decliningTrend.liftDisplayName) is declining — review load, sleep, and recovery quality."
         } else if adherence < 0.5 {
             watchoutText = "Missed sessions accumulate quickly. Missing two or more weeks compounds the cost."
         } else if fatigue == .elevated {
-            watchoutText = "Fatigue is elevated. One lighter session next week may prevent a bigger drop."
+            watchoutText = "Fatigue is elevated. One lighter session next week may help keep momentum steadier."
         } else {
             watchoutText = "Fatigue is manageable — stay on schedule and prioritise sleep."
         }

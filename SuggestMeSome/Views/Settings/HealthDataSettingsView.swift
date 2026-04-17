@@ -79,11 +79,11 @@ final class HealthDataSettingsViewModel: ObservableObject {
         } catch let error as HealthKitRecoverySyncError {
             switch error {
             case .healthDataUnavailable:
-                syncStatus = .failed("Health data is unavailable on this device.")
+                syncStatus = .failed("Apple Health data is unavailable on this device.")
             }
             return false
         } catch {
-            syncStatus = .failed("Recovery sync failed. Check Health permissions and try again.")
+            syncStatus = .failed("Recovery sync failed. Check Apple Health permissions and try again.")
             return false
         }
     }
@@ -103,7 +103,7 @@ final class HealthDataSettingsViewModel: ObservableObject {
         case .synced(dayCount: _, syncedAt: let syncedAt):
             syncStatus = .success(syncedAt)
         case .failed:
-            syncStatus = .failed("Automatic recovery refresh failed. Check Health permissions and try again.")
+            syncStatus = .failed("Automatic recovery refresh failed. Check Apple Health permissions and try again.")
         }
     }
 
@@ -120,13 +120,13 @@ final class HealthDataSettingsViewModel: ObservableObject {
         } catch let error as HealthKitWorkoutImportError {
             switch error {
             case .healthDataUnavailable:
-                workoutImportStatus = .failed("Health data is unavailable on this device.")
+                workoutImportStatus = .failed("Apple Health data is unavailable on this device.")
             case .workoutReadDenied:
-                workoutImportStatus = .failed("Workout read access is denied. Enable workout read permissions in Health settings.")
+                workoutImportStatus = .failed("Workout read access is denied. Enable workout read permissions in Apple Health settings.")
             }
             return false
         } catch {
-            workoutImportStatus = .failed("Workout import failed. Check Health permissions and try again.")
+            workoutImportStatus = .failed("Workout import failed. Check Apple Health permissions and try again.")
             return false
         }
     }
@@ -134,7 +134,10 @@ final class HealthDataSettingsViewModel: ObservableObject {
 
 struct HealthDataSettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(PurchaseManager.self) private var purchaseManager
     @StateObject private var viewModel = HealthDataSettingsViewModel()
+    @State private var showingPreflight = false
+    @State private var showingAboutGuidance = false
 
     @AppStorage("healthkit.enabled") private var healthKitEnabled = false
     @AppStorage("healthkit.dailyCoachEnabled") private var useHealthKitInDailyCoach = false
@@ -183,27 +186,59 @@ struct HealthDataSettingsView: View {
     }
 
     var body: some View {
-        List {
-            connectionStatusSection
-            appleWatchSection
-            dailyCoachUsageSection
-            workoutSyncSection
-            dataReadSection
-            dataWriteSection
-            privacyNotesSection
-        }
-        .listStyle(.insetGrouped)
-        .navigationTitle("Health Data")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await viewModel.refreshStatus(hasRequestedAuthorization: healthKitPermissionsRequested)
-            await viewModel.refreshWatchStatus()
+        Group {
+            if FeatureAccessPolicy.isAccessible(.healthData, entitlementState: purchaseManager.entitlementState) {
+                List {
+                    connectionStatusSection
+                    appleWatchSection
+                    dailyCoachUsageSection
+                    workoutSyncSection
+                    dataReadSection
+                    dataWriteSection
+                    privacyNotesSection
+                }
+                .listStyle(.insetGrouped)
+                .navigationTitle("Apple Health")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("About") {
+                            showingAboutGuidance = true
+                        }
+                    }
+                }
+                .task {
+                    await viewModel.refreshStatus(hasRequestedAuthorization: healthKitPermissionsRequested)
+                    await viewModel.refreshWatchStatus()
+                }
+                .sheet(isPresented: $showingPreflight) {
+                    NavigationStack {
+                        HealthDataPreflightView {
+                            Task {
+                                healthKitPermissionsRequested = true
+                                await viewModel.requestAuthorization(hasRequestedAuthorization: true)
+                                await viewModel.autoRefreshRecoveryIfNeeded(
+                                    context: modelContext,
+                                    trigger: .authorizationStatusUpdated
+                                )
+                            }
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingAboutGuidance) {
+                    NavigationStack {
+                        AboutThisGuidanceView()
+                    }
+                }
+            } else {
+                PremiumGateView(feature: .healthData)
+            }
         }
     }
 
     private var connectionStatusSection: some View {
         Section("Connection Status") {
-            Toggle("Enable HealthKit", isOn: $healthKitEnabled)
+            Toggle("Enable Apple Health", isOn: $healthKitEnabled)
                 .disabled(isUnavailable)
 
             HStack {
@@ -236,21 +271,20 @@ struct HealthDataSettingsView: View {
             }
 
             if viewModel.isLoading {
-                ProgressView("Checking HealthKit…")
+                ProgressView("Checking Apple Health…")
             }
 
             Button(connectButtonTitle) {
                 Task {
                     if viewModel.snapshot.canPresentAuthorizationPrompt {
-                        healthKitPermissionsRequested = true
-                        await viewModel.requestAuthorization(hasRequestedAuthorization: true)
+                        showingPreflight = true
                     } else {
                         await viewModel.refreshStatus(hasRequestedAuthorization: healthKitPermissionsRequested)
+                        await viewModel.autoRefreshRecoveryIfNeeded(
+                            context: modelContext,
+                            trigger: .authorizationStatusUpdated
+                        )
                     }
-                    await viewModel.autoRefreshRecoveryIfNeeded(
-                        context: modelContext,
-                        trigger: .authorizationStatusUpdated
-                    )
                 }
             }
             .disabled(!healthKitEnabled || isUnavailable || viewModel.isLoading)
@@ -279,14 +313,14 @@ struct HealthDataSettingsView: View {
 
     private var dailyCoachUsageSection: some View {
         Section("Daily Coach Usage") {
-            Toggle("Use HealthKit in Daily Coach", isOn: $useHealthKitInDailyCoach)
+            Toggle("Use Apple Health in Daily Coach", isOn: $useHealthKitInDailyCoach)
                 .disabled(!healthKitEnabled || isUnavailable)
 
-            Text("The app reads objective recovery data to lightly assist Daily Coach readiness decisions.")
+            Text("The app reads optional Apple Health recovery data to lightly assist Daily Coach readiness decisions.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Text("Daily Coach stays in baseline mode until recovery data has synced at least once and today's comparable HealthKit signals are available.")
+            Text("Daily Coach stays in baseline mode until recovery data has synced at least once and today's comparable Apple Health signals are available.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -392,10 +426,10 @@ struct HealthDataSettingsView: View {
 
     private var workoutSyncSection: some View {
         Section("Workout Sync") {
-            Toggle("Import HealthKit Workouts", isOn: $importHealthKitWorkouts)
+            Toggle("Import Apple Health Workouts", isOn: $importHealthKitWorkouts)
                 .disabled(!healthKitEnabled || isUnavailable)
 
-            Toggle("Write App Workouts to HealthKit", isOn: $writeAppWorkoutsToHealthKit)
+            Toggle("Write App Workouts to Apple Health", isOn: $writeAppWorkoutsToHealthKit)
                 .disabled(!healthKitEnabled || isUnavailable)
 
             Button("Import Workouts (Last 90 Days)") {
@@ -411,7 +445,7 @@ struct HealthDataSettingsView: View {
                 !importHealthKitWorkouts
             )
 
-            Text("Imported workouts are labeled as HealthKit imports so source attribution stays clear.")
+            Text("Imported workouts are labeled as Apple Health imports so source attribution stays clear.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
@@ -463,9 +497,11 @@ struct HealthDataSettingsView: View {
 
     private var privacyNotesSection: some View {
         Section("Privacy Notes") {
-            Text("Health data is optional and user-controlled.")
-            Text("SuggestMeSome still works fully without HealthKit.")
-            Text("You can change these permissions at any time in the Health app or in Settings > Privacy & Security > Health.")
+            Text("Apple Health access is optional and user-controlled.")
+            Text("SuggestMeSome still works fully without Apple Health.")
+            Text("You can change these permissions at any time in Apple Health or in Settings > Privacy & Security > Health.")
+            Text(ComplianceConfiguration.premiumUnlockDisclosure)
+            Text(ComplianceConfiguration.appleHealthDisclosure)
         }
         .font(.footnote)
         .foregroundStyle(.secondary)
@@ -486,25 +522,25 @@ struct HealthDataSettingsView: View {
 
     private var statusMessage: String? {
         if isUnavailable {
-            return "Health data is unavailable on this device."
+            return "Apple Health data is unavailable on this device."
         }
         if isDenied {
-            return "HealthKit access is denied. Enable access in the Health app or iOS Privacy settings."
+            return "Apple Health access is denied. Enable access in Apple Health or iOS Privacy settings."
         }
         if isConnected {
             if viewModel.snapshot.isWorkoutWriteDenied {
-                return "HealthKit permissions are configured. Workout writeback is off; enable workout write access in Health settings if you want SuggestMeSome to write saved workouts."
+                return "Apple Health permissions are configured. Workout writeback is off; enable workout write access in Apple Health settings if you want SuggestMeSome to write saved workouts."
             }
-            return "HealthKit permissions are active."
+            return "Apple Health permissions are active."
         }
-        return "HealthKit is not connected yet."
+        return "Apple Health is not connected yet."
     }
 
     private var connectButtonTitle: String {
         if !viewModel.snapshot.canPresentAuthorizationPrompt {
             return "Refresh Permission Status"
         }
-        return "Connect HealthKit"
+        return "Connect Apple Health"
     }
 
     private var watchStatusTitle: String {

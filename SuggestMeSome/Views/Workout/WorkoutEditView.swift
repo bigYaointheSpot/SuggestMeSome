@@ -145,7 +145,7 @@ struct WorkoutEditView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Limited editing for imported workouts", systemImage: "lock.fill")
                 .font(.headline)
-            Text("You can edit date, calories, and notes. Exercise/set structure is read-only for HealthKit imports.")
+            Text("You can edit date, calories, and notes. Exercise/set structure is read-only for Apple Health imports.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

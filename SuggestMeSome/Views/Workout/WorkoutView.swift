@@ -21,6 +21,7 @@ struct WorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
+    @Environment(PurchaseManager.self) private var purchaseManager
 
     @Query(sort: \MuscleGroup.name) private var muscleGroups: [MuscleGroup]
     @AppStorage("healthkit.enabled") private var healthKitEnabled = false
@@ -480,8 +481,8 @@ struct WorkoutView: View {
             comments: comments,
             exerciseEntries: exerciseEntries,
             programContext: saveProgramContext,
-            healthKitEnabled: healthKitEnabled,
-            healthKitWritebackEnabled: writeAppWorkoutsToHealthKit
+            healthKitEnabled: healthKitEnabled && purchaseManager.isPremiumUnlocked,
+            healthKitWritebackEnabled: writeAppWorkoutsToHealthKit && purchaseManager.isPremiumUnlocked
         )
         let savedWorkout = coordinator.saveWorkout(using: request)
         let prCount = savedWorkout.exerciseEntries.flatMap(\.sets).filter(\.isPR).count

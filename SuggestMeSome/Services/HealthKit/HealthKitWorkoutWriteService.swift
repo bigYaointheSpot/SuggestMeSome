@@ -166,7 +166,7 @@ struct WorkoutSaveHealthKitWritebackCoordinator {
             healthKitEnabled: healthKitEnabled,
             writebackEnabled: writebackEnabled
         ) else {
-            return .skipped(.healthKitWriteback, "HealthKit writeback is not eligible for this workout.")
+            return .skipped(.healthKitWriteback, "Apple Health writeback is not eligible for this workout.")
         }
 
         Task { @MainActor in
@@ -185,7 +185,7 @@ struct WorkoutSaveHealthKitWritebackCoordinator {
             }
         }
 
-        return .scheduled(.healthKitWriteback, "Queued HealthKit writeback.")
+        return .scheduled(.healthKitWriteback, "Queued Apple Health writeback.")
     }
 
     func performNonFatalWritebackIfEligible(

@@ -58,7 +58,7 @@ struct TrainingProgramsTab: View {
             }
 
             Button(action: { showingAIGenerator = true }) {
-                programButtonLabel("AI Generate", systemImage: "wand.and.stars")
+                programButtonLabel("Smart Generate", systemImage: "wand.and.stars")
             }
         }
         .padding(.horizontal)
@@ -191,7 +191,7 @@ struct ProgramRunExpandableRow: View {
         switch run.program?.source {
         case .userCreated: return "Custom Program"
         case .template: return "Template"
-        case .aiGenerated: return "AI Generated"
+        case .aiGenerated: return "Smart Generated"
         case nil: return "Unknown"
         }
     }
