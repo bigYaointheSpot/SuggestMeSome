@@ -655,16 +655,18 @@ struct WatchRestTimerPanel: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            .foregroundStyle(WatchPalette.primary)
+            .foregroundStyle(WatchPalette.positive)
 
             Text(countdownText)
-                .font(.largeTitle.monospacedDigit().weight(.bold))
+                .font(.system(size: 48, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(.primary)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             ProgressView(value: timer.progress, total: 1)
                 .progressViewStyle(.linear)
-                .tint(WatchPalette.primary)
+                .tint(WatchPalette.positive)
 
             Text(nextSetHint)
                 .font(.caption2)
