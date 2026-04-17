@@ -326,6 +326,57 @@ struct Feature6ValidationTests {
         #expect(outcome.notes?.contains("method=baseline") == true)
     }
 
+    @Test func standaloneBaselineIgnoresFutureWorkoutHistory() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        _ = insertWorkout(
+            date: day(0),
+            entries: [
+                EntrySpec(
+                    exerciseName: "Barbell Row",
+                    sets: [SetSpec(setNumber: 1, reps: 5, weight: 185)]
+                )
+            ],
+            context: context
+        )
+
+        let currentWorkout = insertWorkout(
+            date: day(7),
+            entries: [
+                EntrySpec(
+                    exerciseName: "Barbell Row",
+                    sets: [SetSpec(setNumber: 1, reps: 5, weight: 205)]
+                )
+            ],
+            context: context
+        )
+
+        _ = insertWorkout(
+            date: day(14),
+            entries: [
+                EntrySpec(
+                    exerciseName: "Barbell Row",
+                    sets: [SetSpec(setNumber: 1, reps: 5, weight: 315)]
+                )
+            ],
+            context: context
+        )
+
+        SessionOutcomeInferenceService.persistOutcomes(for: currentWorkout, context: context)
+        try context.save()
+
+        let outcomes = try fetchAll(ExercisePerformanceOutcome.self, context)
+            .filter { $0.workout?.id == currentWorkout.id }
+
+        #expect(outcomes.count == 1)
+        guard let outcome = outcomes.first else { return }
+
+        #expect(outcome.signalSource == .standalone)
+        #expect(outcome.performanceScore == .overperformance || outcome.performanceScore == .exceptionalPerformance)
+        #expect(outcome.notes?.contains("samples=1") == true)
+    }
+
     @Test func weeklyAnalysisAggregatesSignalsAndDedupesRepeatedProgramSessions() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
