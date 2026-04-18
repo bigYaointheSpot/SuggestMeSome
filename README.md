@@ -3294,6 +3294,28 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 9 [Full Local Backup & Restore] — 2026-04-17
+
+- Added a portable, versioned, single-file device backup and restore flow for full local migration:
+  - introduced `PortableBackupEnvelope`, manifest/count metadata, local-state payloads, and dedicated backup DTOs that cover the exercise library, workouts, PRs, full program graph, coach/adaptive history, HealthKit summary cache, preferences, compliance onboarding state, and local account/privacy state
+  - added `PortableBackupService` for JSON export, backup preview validation, and ordered replace-import restore plus `LocalDataResetService` for clearing restore-covered local SwiftData rows and supported `UserDefaults` state
+  - explicitly kept transient/device-owned state out of backups, including active workout session state, watch widget cache, StoreKit cache/debug overrides, and persistence seeding flags
+- Expanded the Settings export screen into a real migration surface while preserving the old CSV export:
+  - upgraded `DataExportView` into `Backup & Export` with a device-backup export action, `fileImporter`-based backup import, a pre-import preview sheet, destructive replace confirmation, and clearer status/error messaging
+  - added `PortableBackupViewModel` so the import/export screen has testable preview and restore state instead of burying the whole flow in the view
+  - kept the existing workout CSV share flow as a separate human-readable export path, and updated the Settings entry point from `Export Local Workout Data` to `Backup & Export Data`
+- Added focused Feature 15 Prompt 9 validation for:
+  - full round-trip export/import across SwiftData records plus local preferences/account/compliance state
+  - replace-import behavior that wipes destination data and restores the backup payload
+  - program-graph and adaptive-history relationship fidelity after restore
+  - unsupported backup version, malformed JSON, and missing-reference preview failures
+  - backup screen view-model preview, restore, and error-message behavior
+- Verification:
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator'`
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature15Prompt9PortableBackupTests`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
