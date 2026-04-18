@@ -3240,6 +3240,31 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 6 [Coach Voice Rewrite and Layered Presentation] — 2026-04-17
+
+- Reframed the app’s adaptive messaging around a shared coach-first presentation layer instead of stacked engine summaries:
+  - added `CoachPresentationService` with non-persisted `CoachPresentationCopy` and `CoachPresentationDetailSection` models so Daily Coach, generator, next-block, long-horizon, and watch surfaces can all map existing engine output into a consistent `headline`, `action`, `whyShort`, and drill-down structure
+  - kept the underlying adaptive and program-generation models intact while deduplicating copy selection and tightening rationale selection at the presentation boundary
+- Tightened Daily Coach into a stronger “coach with receipts” flow without removing explainability:
+  - replaced the stacked compact summary / what changed / next step blocks with a single `CoachPresentationSummaryCard`, moved attribution and confidence detail into the expanded state, and condensed the always-visible safety copy to an inline guidance note
+  - shortened `DailyCoachRecommendationService` scenario text across low-readiness, pain, time-pressure, strong-readiness, and standalone states so the first-read card stays practical instead of repetitive
+  - updated the watch Today Plan snapshot mapping to derive its summary and primary suggestion from the same coach presentation copy used on iPhone
+- Reused the same coach hierarchy across generator, next-block, and long-horizon surfaces:
+  - added coach-call summary cards to generator recommendation and build steps so each flow leads with one clear move before the technical explanation bundle
+  - compressed next-block and long-horizon cards into a tighter takeaway + limited support bullets format, while keeping deeper reasoning in review-oriented surfaces
+  - softened engine-speak on user-facing cards by renaming surfaces like `AdaptiveExplanationCard` and related titles toward “Coach Notes,” “What Changed,” “What Stayed Fixed,” and “Why”
+- Added focused Feature 15 Prompt 6 verification for:
+  - shared copy mapping across Daily Coach, generator recommendation, next-block, long-horizon, and watch parity
+  - SwiftUI render-smoke coverage for Daily Coach collapsed and expanded states, generator recommendation and build steps, and the next-block primary card
+- Verification:
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature7ValidationTests -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests -only-testing:SuggestMeSomeTests/Feature10Prompt8IntegrationHardeningTests -only-testing:SuggestMeSomeTests/Feature13Prompt5ContinuityAndLongHorizonTests -only-testing:SuggestMeSomeTests/Feature15Prompt5CoachVoicePresentationTests`
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature15Prompt5CoachVoicePresentationTests -only-testing:SuggestMeSomeTests/Feature15Prompt5CoachVoiceRenderTests -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests -only-testing:SuggestMeSomeTests/Feature10Prompt8IntegrationHardeningTests`
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+
+**Commits:** `refactor: tighten coach voice presentation`, `docs: document coach voice rewrite`
+
+---
+
 
 ## Project Setup
 
