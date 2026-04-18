@@ -3102,6 +3102,8 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ### Feature 15 — U.S. individual-seller launch compliance hardening
 
+**Status:** Complete
+
 #### Prompt 1 [U.S. Individual-Seller Launch Compliance Plan] — 2026-04-17
 
 - Replaced the old placeholder-heavy compliance configuration with a U.S.-focused launch shell:
@@ -3322,7 +3324,7 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 - **Framework:** SwiftUI + SwiftData
 - **Minimum Deployment:** iOS 17+
 - **Version Control:** Git
-- **AI Tooling:** Claude Code (Claude Pro)
+- **AI Tooling:** Claude Code (Claude Pro), Codex
 - **Session Persistence:** CLAUDE.md in project root
 
 ---
