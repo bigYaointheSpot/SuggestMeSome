@@ -3265,6 +3265,32 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+### Feature 16 — App Branding Refresh
+
+**Status:** Complete
+
+Updated the iPhone and Apple Watch app icons to use the new provided logo art.
+
+---
+
+#### Prompt 1 [iPhone + Apple Watch Icon Refresh] — 2026-04-17
+
+- Replaced the shared master app icon artwork in both asset catalogs:
+  - updated `SuggestMeSome/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`
+  - updated `SuggestMeSomeWatch/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`
+- Regenerated the required iPhone icon renditions from the same source image:
+  - rebuilt `AppIcon-180.png` for the 60pt @3x iPhone app icon slot
+  - rebuilt `AppIcon-120.png` for the 60pt @2x iPhone app icon slot
+- Kept the existing asset catalog definitions unchanged so iOS dark, tinted, and watch icon lookups continue to resolve through the current `Contents.json` entries
+
+- Verification:
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'generic/platform=watchOS Simulator'`
+
+**Commit:** `feat: refresh ios and watch app icons`
+
+---
+
 
 ## Project Setup
 
