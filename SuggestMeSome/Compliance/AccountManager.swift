@@ -225,7 +225,7 @@ protocol AuthService {
 }
 
 final class LocalContractAuthService: AuthService {
-    private static let persistenceKey = "compliance.account.backend.state.v1"
+    static let persistenceKey = "compliance.account.backend.state.v1"
 
     private let userDefaults: UserDefaults
     private let launchMode: AccountBackendLaunchMode
@@ -494,6 +494,12 @@ final class AccountManager {
             sessionState = currentUser == nil ? .signedOut : .signedIn
             lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? "Account deletion failed."
         }
+    }
+
+    func reloadFromPersistence() {
+        statusMessage = nil
+        lastErrorMessage = nil
+        apply(authService.restoreState())
     }
 
     private func apply(_ state: AccountBackendContractState) {

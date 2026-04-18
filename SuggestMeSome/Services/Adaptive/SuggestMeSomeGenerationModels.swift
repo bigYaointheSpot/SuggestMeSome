@@ -74,7 +74,7 @@ enum SuggestMeSomeSessionMode: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-enum SuggestMeSomeGenerationGoal: String, CaseIterable, Identifiable {
+enum SuggestMeSomeGenerationGoal: String, CaseIterable, Identifiable, Codable {
     case strength
     case hypertrophy
     case generalFitness
@@ -96,7 +96,7 @@ enum SuggestMeSomeGenerationGoal: String, CaseIterable, Identifiable {
     }
 }
 
-enum SuggestMeSomeEquipmentProfile: String, CaseIterable, Identifiable {
+enum SuggestMeSomeEquipmentProfile: String, CaseIterable, Identifiable, Codable {
     case fullGym
     case homeGym
     case dumbbellsOnly

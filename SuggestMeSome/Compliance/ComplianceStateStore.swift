@@ -51,7 +51,7 @@ struct ComplianceOnboardingState: Codable, Equatable {
 final class ComplianceStateStore {
     static let shared = ComplianceStateStore()
 
-    private static let persistenceKey = "compliance.onboarding.state.v1"
+    static let persistenceKey = "compliance.onboarding.state.v1"
 
     private let userDefaults: UserDefaults
 
@@ -106,6 +106,15 @@ final class ComplianceStateStore {
 
     func reset() {
         onboardingState = ComplianceOnboardingState()
+    }
+
+    func reloadFromPersistence() {
+        if let data = userDefaults.data(forKey: Self.persistenceKey),
+           let decoded = try? JSONDecoder().decode(ComplianceOnboardingState.self, from: data) {
+            onboardingState = decoded
+        } else {
+            onboardingState = ComplianceOnboardingState()
+        }
     }
 
     private func persist() {

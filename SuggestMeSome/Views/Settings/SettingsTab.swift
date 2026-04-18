@@ -315,7 +315,7 @@ struct SettingsTab: View {
             NavigationLink {
                 DataExportView()
             } label: {
-                Label("Export Local Workout Data", systemImage: "square.and.arrow.up")
+                Label("Backup & Export Data", systemImage: "externaldrive.badge.icloud")
                     .foregroundStyle(.green)
             }
 
