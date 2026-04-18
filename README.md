@@ -3347,6 +3347,26 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 2 [Daily Coach derived-state caching and query cleanup] — 2026-04-18
+
+- Replaced the heaviest `DailyCoachView` computed path with a cached derived-state refresh layer:
+  - introduced `DailyCoachDerivedState` to build one screen-state bundle containing the focus run, pending proposals, latest analysis/review, objective recovery evaluation, today plan, relevant proposal, overlay impact, latest completed review snapshot, and long-horizon summary
+  - the view now reads cheap cached proxies from `@State` instead of rebuilding `todayPlan` and its supporting filters repeatedly during body evaluation
+  - removed the unused `liftTrends` query from `DailyCoachView`
+- Added an explicit Daily Coach refresh token so the cached state recomputes only when relevant inputs change:
+  - queried runs, workouts, analyses, proposals, overlays, check-ins, weekly reviews, HealthKit summaries, completed runs, personal records, and the Daily Coach HealthKit settings keys now feed a lightweight hash token
+  - `DailyCoachView` refreshes its derived state from a single `.task(id:)` entry point while preserving the existing check-in ordering, proposal flows, and watch publishing behavior
+- Added targeted coverage for the new refresh path:
+  - `Feature10Prompt6TodayPlanEngineTests` now verifies the derived-state builder produces the expected program-scoped next-session/proposal/overlay snapshot
+  - added refresh-token tests to ensure workout-history and HealthKit-setting changes invalidate the cached state
+- Verification:
+  - attempted `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - the build is still blocked in this environment by the same out-of-date CoreSimulator framework and missing usable iOS 26.4 destination support, so the new Daily Coach tests were added but could not be executed locally
+
+**Commit:** `refactor: cache daily coach derived state`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

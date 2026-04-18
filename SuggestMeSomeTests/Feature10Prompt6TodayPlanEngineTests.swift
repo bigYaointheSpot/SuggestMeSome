@@ -946,6 +946,138 @@ struct Feature10Prompt6TodayPlanEngineTests {
         #expect(AdherenceStatus.slightlyBehind(sessionsBehind: 1) != AdherenceStatus.slightlyBehind(sessionsBehind: 2))
     }
 
+    @Test func dailyCoachDerivedStateBuildsProgramScopedPlanFromOneRefreshPass() {
+        let program = TrainingProgram(
+            name: "Coach Cache Test",
+            lengthInWeeks: 1,
+            sessionsPerWeek: 2,
+            createdDate: Date(),
+            source: .aiGenerated
+        )
+        let run = ProgramRun(startDate: daysAgo(2))
+        run.program = program
+        let completedWorkout = Workout(
+            date: daysAgo(1),
+            startTime: daysAgo(1),
+            durationSeconds: 3600
+        )
+        completedWorkout.programRun = run
+        completedWorkout.programWeekNumber = 1
+        completedWorkout.programSessionNumber = 1
+        let checkIn = makeCheckIn()
+        let analysis = WeeklyTrainingAnalysis(
+            weekStartDate: daysAgo(7),
+            weekEndDate: daysAgo(1),
+            programRun: run,
+            trainingProgram: program,
+            fatigueStatus: .elevated,
+            isFinalized: true
+        )
+        let review = DailyCoachWeeklyReview(
+            weekStart: daysAgo(7),
+            weekEnd: daysAgo(1),
+            isProgramWeek: true,
+            programRun: run,
+            headline: "Good week"
+        )
+        let proposal = makeProposal(
+            run: run,
+            type: .deload,
+            targetWeekStart: 1,
+            targetSessionNumber: 2,
+            summary: "Use the lighter approved version today"
+        )
+        let overlay = makeOverlay(run: run, weekStart: 1, sessionNumber: 2)
+
+        let state = DailyCoachDerivedState.build(
+            activeRuns: [run],
+            recentWorkouts: [completedWorkout],
+            weeklyAnalyses: [analysis],
+            allProposals: [proposal],
+            allOverlays: [overlay],
+            checkIns: [checkIn],
+            weeklyReviews: [review],
+            healthKitDailySummaries: [],
+            completedRuns: [],
+            personalRecords: [],
+            healthKitEnabled: false,
+            useHealthKitInDailyCoach: false,
+            recoveryLastSyncTimestamp: 0,
+            now: Date()
+        )
+
+        #expect(state.focusRun?.id == run.id)
+        #expect(state.pendingProposals.count == 1)
+        #expect(state.latestAnalysis?.id == analysis.id)
+        #expect(state.latestReview?.id == review.id)
+        #expect(state.todayCheckIn?.id == checkIn.id)
+        #expect(state.todayPlan.recommendation.nextProgramSession?.weekNumber == 1)
+        #expect(state.todayPlan.recommendation.nextProgramSession?.sessionNumber == 2)
+        #expect(state.relevantProposalForTodayPlan?.id == proposal.id)
+        #expect(state.overlaysAffectTodaySession)
+    }
+
+    @Test func dailyCoachDerivedStateRefreshTokenChangesWhenWorkoutAndHealthKitInputsChange() {
+        let referenceNow = Date(timeIntervalSince1970: 1_776_000_000)
+        let baseToken = DailyCoachDerivedState.refreshToken(
+            activeRuns: [],
+            recentWorkouts: [],
+            weeklyAnalyses: [],
+            allProposals: [],
+            allOverlays: [],
+            checkIns: [],
+            weeklyReviews: [],
+            healthKitDailySummaries: [],
+            completedRuns: [],
+            personalRecords: [],
+            healthKitEnabled: false,
+            useHealthKitInDailyCoach: false,
+            recoveryLastSyncTimestamp: 0,
+            now: referenceNow
+        )
+        let workout = Workout(
+            date: daysAgo(1),
+            startTime: daysAgo(1),
+            durationSeconds: 2700
+        )
+
+        let workoutChangeToken = DailyCoachDerivedState.refreshToken(
+            activeRuns: [],
+            recentWorkouts: [workout],
+            weeklyAnalyses: [],
+            allProposals: [],
+            allOverlays: [],
+            checkIns: [],
+            weeklyReviews: [],
+            healthKitDailySummaries: [],
+            completedRuns: [],
+            personalRecords: [],
+            healthKitEnabled: false,
+            useHealthKitInDailyCoach: false,
+            recoveryLastSyncTimestamp: 0,
+            now: referenceNow
+        )
+        let healthKitChangeToken = DailyCoachDerivedState.refreshToken(
+            activeRuns: [],
+            recentWorkouts: [],
+            weeklyAnalyses: [],
+            allProposals: [],
+            allOverlays: [],
+            checkIns: [],
+            weeklyReviews: [],
+            healthKitDailySummaries: [],
+            completedRuns: [],
+            personalRecords: [],
+            healthKitEnabled: true,
+            useHealthKitInDailyCoach: true,
+            recoveryLastSyncTimestamp: 123,
+            now: referenceNow
+        )
+
+        #expect(baseToken != workoutChangeToken)
+        #expect(baseToken != healthKitChangeToken)
+    }
+
     // MARK: - Helpers
 
     private func daysAgo(_ days: Int) -> Date {

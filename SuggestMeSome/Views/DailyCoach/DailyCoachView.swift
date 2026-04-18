@@ -10,6 +10,273 @@
 import SwiftUI
 import SwiftData
 
+struct DailyCoachDerivedState {
+    let focusRun: ProgramRun?
+    let pendingProposals: [AdaptationProposal]
+    let latestAnalysis: WeeklyTrainingAnalysis?
+    let latestReview: DailyCoachWeeklyReview?
+    let objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation
+    let todayCheckIn: DailyCoachCheckIn?
+    let todayPlan: TodayPlan
+    let relevantProposalForTodayPlan: AdaptationProposal?
+    let overlaysAffectTodaySession: Bool
+    let latestCompletedRun: ProgramRun?
+    let latestCompletedReviewSnapshot: MesocycleReviewSnapshot?
+    let longHorizonSummary: LongHorizonAdaptationSummary?
+
+    var isBetweenBlocks: Bool {
+        focusRun == nil && latestCompletedRun != nil
+    }
+
+    static let placeholder = build(
+        activeRuns: [],
+        recentWorkouts: [],
+        weeklyAnalyses: [],
+        allProposals: [],
+        allOverlays: [],
+        checkIns: [],
+        weeklyReviews: [],
+        healthKitDailySummaries: [],
+        completedRuns: [],
+        personalRecords: [],
+        healthKitEnabled: false,
+        useHealthKitInDailyCoach: false,
+        recoveryLastSyncTimestamp: 0,
+        now: .distantPast
+    )
+
+    static func build(
+        activeRuns: [ProgramRun],
+        recentWorkouts: [Workout],
+        weeklyAnalyses: [WeeklyTrainingAnalysis],
+        allProposals: [AdaptationProposal],
+        allOverlays: [AppliedProgramOverlay],
+        checkIns: [DailyCoachCheckIn],
+        weeklyReviews: [DailyCoachWeeklyReview],
+        healthKitDailySummaries: [HealthKitDailySummary],
+        completedRuns: [ProgramRun],
+        personalRecords: [PersonalRecord],
+        healthKitEnabled: Bool,
+        useHealthKitInDailyCoach: Bool,
+        recoveryLastSyncTimestamp: Double,
+        now: Date = .now
+    ) -> DailyCoachDerivedState {
+        let focusRun = TrainingContextQueryService.activeProgramRuns(from: activeRuns).first
+        let pendingProposals = TrainingContextQueryService.pendingUserProposals(
+            for: focusRun,
+            proposals: allProposals
+        )
+        .filter { AdaptationProposalConfirmationService.isPendingUserProposal($0) }
+        let latestAnalysis = TrainingContextQueryService.latestWeeklyAnalysis(
+            for: focusRun,
+            in: weeklyAnalyses
+        )
+        let latestReview = weeklyReviews.first
+        let objectiveRecoveryEvaluation = HealthKitRecoveryInsightService.evaluate(
+            from: Array(healthKitDailySummaries.prefix(90)),
+            healthKitEnabled: healthKitEnabled,
+            useHealthKitInDailyCoach: useHealthKitInDailyCoach,
+            hasSuccessfulRecoverySync: recoveryLastSyncTimestamp > 0
+        )
+        let today = Calendar.current.startOfDay(for: now)
+        let todayCheckIn = checkIns.first { Calendar.current.startOfDay(for: $0.date) == today }
+        let activeOverlaysForRun = focusRun.map { run in
+            allOverlays.filter { $0.programRun?.id == run.id && $0.overlayStatus == .active }
+        } ?? []
+        let completedWorkoutCountForRun = focusRun.map {
+            TrainingContextQueryService.completedWorkoutCount(for: $0, in: recentWorkouts)
+        } ?? 0
+        let completedSessionKeysForRun = focusRun.map { run in
+            Set(recentWorkouts.compactMap { workout -> ProgramSessionCompletionKey? in
+                guard workout.programRun?.id == run.id,
+                      let weekNumber = workout.programWeekNumber,
+                      let sessionNumber = workout.programSessionNumber else {
+                    return nil
+                }
+                return ProgramSessionCompletionKey(
+                    weekNumber: weekNumber,
+                    sessionNumber: sessionNumber
+                )
+            })
+        }
+        let todayPlan = TodayPlanEngine.buildPlan(
+            checkIn: todayCheckIn,
+            activeRun: focusRun,
+            latestAnalysis: latestAnalysis,
+            pendingProposalCount: pendingProposals.count,
+            pendingProposals: pendingProposals,
+            activeOverlays: activeOverlaysForRun,
+            recentWorkouts: TrainingContextQueryService.recentWorkouts(from: recentWorkouts, limit: 20),
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
+            completedSessions: completedSessionKeysForRun,
+            completedWorkoutCountForRun: completedWorkoutCountForRun
+        )
+        let relevantProposalForTodayPlan = TodayPlanActionCoordinator.relevantProposalForTodayPlan(
+            pendingProposals: pendingProposals,
+            plan: todayPlan
+        )
+        let overlaysAffectTodaySession: Bool = {
+            guard let session = todayPlan.recommendation.nextProgramSession else { return false }
+            let context = TodayPlanExplanationAssembler.overlayContext(
+                activeRun: focusRun,
+                activeOverlays: activeOverlaysForRun,
+                nextSession: session
+            )
+            return context.overlaysAffectingTodayCount > 0
+        }()
+        let latestCompletedRun = TrainingContextQueryService.latestCompletedRun(from: completedRuns)
+        let latestCompletedReviewSnapshot = TrainingContextQueryService.latestCompletedMesocycleReview(
+            from: completedRuns,
+            workouts: recentWorkouts,
+            personalRecords: personalRecords
+        )
+        let longHorizonSummary: LongHorizonAdaptationSummary? = {
+            guard let latestCompletedRun else { return nil }
+            let summary = TrainingContextQueryService.longHorizonAdaptationSummary(
+                endingWith: latestCompletedRun,
+                allRuns: completedRuns,
+                workouts: recentWorkouts,
+                personalRecords: personalRecords,
+                maxBlocks: 3
+            )
+            return summary.blockCount > 0 ? summary : nil
+        }()
+
+        return DailyCoachDerivedState(
+            focusRun: focusRun,
+            pendingProposals: pendingProposals,
+            latestAnalysis: latestAnalysis,
+            latestReview: latestReview,
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
+            todayCheckIn: todayCheckIn,
+            todayPlan: todayPlan,
+            relevantProposalForTodayPlan: relevantProposalForTodayPlan,
+            overlaysAffectTodaySession: overlaysAffectTodaySession,
+            latestCompletedRun: latestCompletedRun,
+            latestCompletedReviewSnapshot: latestCompletedReviewSnapshot,
+            longHorizonSummary: longHorizonSummary
+        )
+    }
+
+    static func refreshToken(
+        activeRuns: [ProgramRun],
+        recentWorkouts: [Workout],
+        weeklyAnalyses: [WeeklyTrainingAnalysis],
+        allProposals: [AdaptationProposal],
+        allOverlays: [AppliedProgramOverlay],
+        checkIns: [DailyCoachCheckIn],
+        weeklyReviews: [DailyCoachWeeklyReview],
+        healthKitDailySummaries: [HealthKitDailySummary],
+        completedRuns: [ProgramRun],
+        personalRecords: [PersonalRecord],
+        healthKitEnabled: Bool,
+        useHealthKitInDailyCoach: Bool,
+        recoveryLastSyncTimestamp: Double,
+        now: Date = .now
+    ) -> Int {
+        var hasher = Hasher()
+        hasher.combine(Calendar.current.startOfDay(for: now))
+        hasher.combine(healthKitEnabled)
+        hasher.combine(useHealthKitInDailyCoach)
+        hasher.combine(recoveryLastSyncTimestamp)
+        combine(activeRuns, into: &hasher) { run, hasher in
+            hasher.combine(run.id)
+            hasher.combine(run.syncVersion)
+            hasher.combine(run.syncLastModifiedAt)
+            hasher.combine(run.isCompleted)
+            hasher.combine(run.startDate)
+        }
+        combine(recentWorkouts, into: &hasher) { workout, hasher in
+            hasher.combine(workout.id)
+            hasher.combine(workout.syncVersion)
+            hasher.combine(workout.syncLastModifiedAt)
+            hasher.combine(workout.date)
+            hasher.combine(workout.programWeekNumber)
+            hasher.combine(workout.programSessionNumber)
+        }
+        combine(weeklyAnalyses, into: &hasher) { analysis, hasher in
+            hasher.combine(analysis.id)
+            hasher.combine(analysis.createdAt)
+            hasher.combine(analysis.weekStartDate)
+            hasher.combine(analysis.finalizedAt)
+            hasher.combine(analysis.fatigueStatus.rawValue)
+            hasher.combine(analysis.isFinalized)
+            hasher.combine(analysis.programRun?.id)
+        }
+        combine(allProposals, into: &hasher) { proposal, hasher in
+            hasher.combine(proposal.id)
+            hasher.combine(proposal.syncVersion)
+            hasher.combine(proposal.syncLastModifiedAt)
+            hasher.combine(proposal.priority)
+            hasher.combine(proposal.proposalStatus.rawValue)
+            hasher.combine(proposal.programRun?.id)
+        }
+        combine(allOverlays, into: &hasher) { overlay, hasher in
+            hasher.combine(overlay.id)
+            hasher.combine(overlay.syncVersion)
+            hasher.combine(overlay.syncLastModifiedAt)
+            hasher.combine(overlay.overlayStatus.rawValue)
+            hasher.combine(overlay.programRun?.id)
+            hasher.combine(overlay.appliedAt)
+        }
+        combine(checkIns, into: &hasher) { checkIn, hasher in
+            hasher.combine(checkIn.id)
+            hasher.combine(checkIn.syncVersion)
+            hasher.combine(checkIn.syncLastModifiedAt)
+            hasher.combine(checkIn.date)
+            hasher.combine(checkIn.sleepQuality)
+            hasher.combine(checkIn.soreness)
+            hasher.combine(checkIn.energy)
+            hasher.combine(checkIn.stress)
+            hasher.combine(checkIn.availableTimeMinutes)
+            hasher.combine(checkIn.hasPainOrDiscomfort)
+        }
+        combine(weeklyReviews, into: &hasher) { review, hasher in
+            hasher.combine(review.id)
+            hasher.combine(review.syncVersion)
+            hasher.combine(review.syncLastModifiedAt)
+            hasher.combine(review.weekStart)
+            hasher.combine(review.hasBeenSeen)
+        }
+        combine(healthKitDailySummaries, into: &hasher) { summary, hasher in
+            hasher.combine(summary.id)
+            hasher.combine(summary.syncVersion)
+            hasher.combine(summary.syncLastModifiedAt)
+            hasher.combine(summary.dayStart)
+            hasher.combine(summary.sourceUpdatedAt)
+            hasher.combine(summary.updatedAt)
+        }
+        combine(completedRuns, into: &hasher) { run, hasher in
+            hasher.combine(run.id)
+            hasher.combine(run.syncVersion)
+            hasher.combine(run.syncLastModifiedAt)
+            hasher.combine(run.isCompleted)
+            hasher.combine(run.endDate)
+        }
+        combine(personalRecords, into: &hasher) { record, hasher in
+            hasher.combine(record.id)
+            hasher.combine(record.syncVersion)
+            hasher.combine(record.syncLastModifiedAt)
+            hasher.combine(record.dateAchieved)
+            hasher.combine(record.exerciseName)
+            hasher.combine(record.repCount)
+            hasher.combine(record.weight)
+        }
+        return hasher.finalize()
+    }
+
+    private static func combine<Row>(
+        _ rows: [Row],
+        into hasher: inout Hasher,
+        rowHasher: (Row, inout Hasher) -> Void
+    ) {
+        hasher.combine(rows.count)
+        for row in rows {
+            rowHasher(row, &hasher)
+        }
+    }
+}
+
 // MARK: - DailyCoachView
 
 struct DailyCoachView: View {
@@ -42,9 +309,6 @@ struct DailyCoachView: View {
     @Query(sort: \DailyCoachWeeklyReview.weekStart, order: .reverse)
     private var weeklyReviews: [DailyCoachWeeklyReview]
 
-    @Query(sort: \LiftPerformanceTrend.updatedAt, order: .reverse)
-    private var liftTrends: [LiftPerformanceTrend]
-
     @Query(sort: \HealthKitDailySummary.dayStart, order: .reverse)
     private var healthKitDailySummaries: [HealthKitDailySummary]
 
@@ -60,119 +324,38 @@ struct DailyCoachView: View {
     @AppStorage(HealthKitSettingsStorage.recoveryLastSyncTimestampKey)
     private var recoveryLastSyncTimestamp: Double = 0
 
-    // MARK: Computed helpers
+    @State private var derivedState = DailyCoachDerivedState.placeholder
+    @State private var hasPublishedInitialTodayPlan = false
 
-    private var focusRun: ProgramRun? {
-        TrainingContextQueryService.activeProgramRuns(from: activeRuns).first
-    }
-
-    private var pendingProposals: [AdaptationProposal] {
-        TrainingContextQueryService.pendingUserProposals(
-            for: focusRun,
-            proposals: allProposals
-        )
-        .filter { AdaptationProposalConfirmationService.isPendingUserProposal($0) }
-    }
-
-    private var latestAnalysis: WeeklyTrainingAnalysis? {
-        TrainingContextQueryService.latestWeeklyAnalysis(
-            for: focusRun,
-            in: Array(weeklyAnalyses)
-        )
-    }
-
-    private var latestReview: DailyCoachWeeklyReview? { weeklyReviews.first }
-
-    private var activeOverlaysForRun: [AppliedProgramOverlay] {
-        guard let run = focusRun else { return [] }
-        return allOverlays.filter { $0.programRun?.id == run.id && $0.overlayStatus == .active }
-    }
-
-    private var completedWorkoutCountForRun: Int {
-        guard let run = focusRun else { return 0 }
-        return TrainingContextQueryService.completedWorkoutCount(for: run, in: Array(recentWorkouts))
-    }
-
-    private var completedSessionKeysForRun: Set<ProgramSessionCompletionKey>? {
-        guard let run = focusRun else { return nil }
-        return TrainingContextQueryService.completedSessionKeys(
-            for: run,
-            context: modelContext
-        )
-    }
-
-    private var todayPlan: TodayPlan {
-        TodayPlanEngine.buildPlan(
-            checkIn: todayCheckIn,
-            activeRun: focusRun,
-            latestAnalysis: latestAnalysis,
-            pendingProposalCount: pendingProposals.count,
-            pendingProposals: pendingProposals,
-            activeOverlays: activeOverlaysForRun,
-            recentWorkouts: TrainingContextQueryService.recentWorkouts(from: recentWorkouts, limit: 20),
-            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
-            completedSessions: completedSessionKeysForRun,
-            completedWorkoutCountForRun: completedWorkoutCountForRun
-        )
-    }
-
-    private var relevantProposalForTodayPlan: AdaptationProposal? {
-        TodayPlanActionCoordinator.relevantProposalForTodayPlan(
-            pendingProposals: pendingProposals,
-            plan: todayPlan
-        )
-    }
-
-    private var overlaysAffectTodaySession: Bool {
-        guard let session = todayPlan.recommendation.nextProgramSession else { return false }
-        let context = TodayPlanExplanationAssembler.overlayContext(
-            activeRun: focusRun,
-            activeOverlays: activeOverlaysForRun,
-            nextSession: session
-        )
-        return context.overlaysAffectingTodayCount > 0
-    }
-
-    private var objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation {
-        HealthKitRecoveryInsightService.evaluate(
-            from: Array(healthKitDailySummaries.prefix(90)),
+    private var focusRun: ProgramRun? { derivedState.focusRun }
+    private var pendingProposals: [AdaptationProposal] { derivedState.pendingProposals }
+    private var latestAnalysis: WeeklyTrainingAnalysis? { derivedState.latestAnalysis }
+    private var latestReview: DailyCoachWeeklyReview? { derivedState.latestReview }
+    private var objectiveRecoveryEvaluation: ObjectiveRecoveryEvaluation { derivedState.objectiveRecoveryEvaluation }
+    private var todayCheckIn: DailyCoachCheckIn? { derivedState.todayCheckIn }
+    private var todayPlan: TodayPlan { derivedState.todayPlan }
+    private var relevantProposalForTodayPlan: AdaptationProposal? { derivedState.relevantProposalForTodayPlan }
+    private var overlaysAffectTodaySession: Bool { derivedState.overlaysAffectTodaySession }
+    private var latestCompletedRun: ProgramRun? { derivedState.latestCompletedRun }
+    private var latestCompletedReviewSnapshot: MesocycleReviewSnapshot? { derivedState.latestCompletedReviewSnapshot }
+    private var isBetweenBlocks: Bool { derivedState.isBetweenBlocks }
+    private var longHorizonSummary: LongHorizonAdaptationSummary? { derivedState.longHorizonSummary }
+    private var derivedStateRefreshToken: Int {
+        DailyCoachDerivedState.refreshToken(
+            activeRuns: activeRuns,
+            recentWorkouts: recentWorkouts,
+            weeklyAnalyses: weeklyAnalyses,
+            allProposals: allProposals,
+            allOverlays: allOverlays,
+            checkIns: checkIns,
+            weeklyReviews: weeklyReviews,
+            healthKitDailySummaries: healthKitDailySummaries,
+            completedRuns: completedRuns,
+            personalRecords: personalRecords,
             healthKitEnabled: healthKitEnabled,
             useHealthKitInDailyCoach: useHealthKitInDailyCoach,
-            hasSuccessfulRecoverySync: recoveryLastSyncTimestamp > 0
+            recoveryLastSyncTimestamp: recoveryLastSyncTimestamp
         )
-    }
-
-    private var todayCheckIn: DailyCoachCheckIn? {
-        let today = Calendar.current.startOfDay(for: Date())
-        return checkIns.first { Calendar.current.startOfDay(for: $0.date) == today }
-    }
-
-    private var latestCompletedRun: ProgramRun? {
-        TrainingContextQueryService.latestCompletedRun(from: completedRuns)
-    }
-
-    private var latestCompletedReviewSnapshot: MesocycleReviewSnapshot? {
-        TrainingContextQueryService.latestCompletedMesocycleReview(
-            from: completedRuns,
-            workouts: Array(recentWorkouts),
-            personalRecords: Array(personalRecords)
-        )
-    }
-
-    private var isBetweenBlocks: Bool {
-        focusRun == nil && latestCompletedRun != nil
-    }
-
-    private var longHorizonSummary: LongHorizonAdaptationSummary? {
-        guard latestCompletedRun != nil else { return nil }
-        let summary = TrainingContextQueryService.longHorizonAdaptationSummary(
-            endingWith: latestCompletedRun,
-            allRuns: Array(completedRuns),
-            workouts: Array(recentWorkouts),
-            personalRecords: Array(personalRecords),
-            maxBlocks: 3
-        )
-        return summary.blockCount > 0 ? summary : nil
     }
 
     // MARK: Sheet / navigation state
@@ -388,6 +571,9 @@ struct DailyCoachView: View {
                 AboutThisGuidanceView()
             }
         }
+        .task(id: derivedStateRefreshToken) {
+            refreshDerivedState()
+        }
         .onAppear {
             if purchaseManager.isPremiumUnlocked {
                 Task {
@@ -397,9 +583,9 @@ struct DailyCoachView: View {
                     )
                 }
             }
-            publishTodayPlanToWatchIfNeeded(force: true)
         }
         .onChange(of: watchTodayPlanSignature) { _, _ in
+            guard hasPublishedInitialTodayPlan else { return }
             publishTodayPlanToWatchIfNeeded()
         }
     }
@@ -1450,13 +1636,41 @@ struct DailyCoachView: View {
 
     // MARK: - Session Launch Helpers
 
+    private func refreshDerivedState(now: Date = .now) {
+        let refreshedState = DailyCoachDerivedState.build(
+            activeRuns: activeRuns,
+            recentWorkouts: recentWorkouts,
+            weeklyAnalyses: weeklyAnalyses,
+            allProposals: allProposals,
+            allOverlays: allOverlays,
+            checkIns: checkIns,
+            weeklyReviews: weeklyReviews,
+            healthKitDailySummaries: healthKitDailySummaries,
+            completedRuns: completedRuns,
+            personalRecords: personalRecords,
+            healthKitEnabled: healthKitEnabled,
+            useHealthKitInDailyCoach: useHealthKitInDailyCoach,
+            recoveryLastSyncTimestamp: recoveryLastSyncTimestamp,
+            now: now
+        )
+        derivedState = refreshedState
+        if !hasPublishedInitialTodayPlan {
+            hasPublishedInitialTodayPlan = true
+            publishTodayPlanToWatchIfNeeded(force: true, using: refreshedState)
+        }
+    }
+
     private var watchTodayPlanSignature: String {
-        let plan = todayPlan
+        watchTodayPlanSignature(for: derivedState)
+    }
+
+    private func watchTodayPlanSignature(for state: DailyCoachDerivedState) -> String {
+        let plan = state.todayPlan
         let session = plan.recommendation.nextProgramSession
         let coachCopy = CoachPresentationService.dailyPlan(for: plan)
         return [
-            focusRun?.syncStableID ?? "standalone",
-            focusRun?.program?.name ?? "",
+            state.focusRun?.syncStableID ?? "standalone",
+            state.focusRun?.program?.name ?? "",
             "\(session?.weekNumber ?? 0)",
             "\(session?.sessionNumber ?? 0)",
             plan.confidence.rawValue,
@@ -1474,16 +1688,20 @@ struct DailyCoachView: View {
         ].joined(separator: "|")
     }
 
-    private func publishTodayPlanToWatchIfNeeded(force: Bool = false) {
-        let signature = watchTodayPlanSignature
+    private func publishTodayPlanToWatchIfNeeded(
+        force: Bool = false,
+        using state: DailyCoachDerivedState? = nil
+    ) {
+        let state = state ?? derivedState
+        let signature = watchTodayPlanSignature(for: state)
         guard force || signature != lastPublishedWatchTodayPlanSignature else { return }
 
         lastPublishedWatchTodayPlanSignature = signature
         let coordinator = watchSessionCoordinator ?? WatchSessionCoordinator()
         watchSessionCoordinator = coordinator
-        let plan = todayPlan
-        let programName = focusRun?.program?.name
-        let programRunStableID = focusRun?.syncStableID
+        let plan = state.todayPlan
+        let programName = state.focusRun?.program?.name
+        let programRunStableID = state.focusRun?.syncStableID
 
         Task { @MainActor in
             await coordinator.broadcastTodayPlan(
