@@ -6,6 +6,20 @@ struct TrainingHistoryReadSnapshot {
     let personalRecords: [PersonalRecord]
 }
 
+struct WorkoutDateRangeReadSnapshot {
+    static let empty = WorkoutDateRangeReadSnapshot(
+        workouts: [],
+        count: 0,
+        earliestDate: nil,
+        latestDate: nil
+    )
+
+    let workouts: [Workout]
+    let count: Int
+    let earliestDate: Date?
+    let latestDate: Date?
+}
+
 struct ProgramRunIndexReadSnapshot {
     let activeRuns: [ProgramRun]
     let completedRuns: [ProgramRun]
@@ -83,6 +97,20 @@ enum TrainingReadRepository {
             workouts: workouts,
             completedWorkoutCount: workouts.count,
             completedSessionKeys: completedSessionKeys
+        )
+    }
+
+    static func workoutDateRangeSnapshot(
+        from startDate: Date,
+        to endDate: Date,
+        context: ModelContext
+    ) -> WorkoutDateRangeReadSnapshot {
+        let workouts = fetchWorkouts(from: startDate, to: endDate, context: context)
+        return WorkoutDateRangeReadSnapshot(
+            workouts: workouts,
+            count: workouts.count,
+            earliestDate: workouts.first?.date,
+            latestDate: workouts.last?.date
         )
     }
 
@@ -272,6 +300,20 @@ enum TrainingReadRepository {
         if let limit {
             descriptor.fetchLimit = max(1, limit)
         }
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func fetchWorkouts(
+        from startDate: Date,
+        to endDate: Date,
+        context: ModelContext
+    ) -> [Workout] {
+        let descriptor = FetchDescriptor<Workout>(
+            predicate: #Predicate<Workout> {
+                $0.date >= startDate && $0.date <= endDate
+            },
+            sortBy: [SortDescriptor(\Workout.date, order: .forward)]
+        )
         return (try? context.fetch(descriptor)) ?? []
     }
 

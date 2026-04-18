@@ -3320,7 +3320,7 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ### Feature 16 — Performance, read-path cleanup, and stale-surface refresh
 
-**Status:** Complete
+**Status:** In Progress
 
 #### Prompt 1 [Launch, audit cadence, and workout draft persistence hardening] — 2026-04-18
 
@@ -3406,6 +3406,31 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - this environment is still blocked before compilation by the same CoreSimulator/Xcode destination mismatch, so Feature 16 finishes with documentation and cleanup changes in place but without a locally runnable simulator build
 
 **Commit:** `refactor: remove stale repo artifacts and version hardcodes`
+
+---
+
+#### Prompt 5 [Workouts history data-flow cleanup and shell decomposition] — 2026-04-18
+
+- Extracted the Workouts history feature out of `ContentView` so the root shell stops owning feature logic:
+  - moved `WorkoutsTab`, `ExerciseFilterSheet`, and `WorkoutRow` into dedicated `Views/WorkoutHistory` files
+  - left `ContentView` responsible only for the root tab shell and active-workout banner
+- Replaced the in-view workout filtering path with a cached derived-state bundle:
+  - added `WorkoutHistoryDerivedState` plus filter-summary/date-bound helpers to precompute the muscle-group exercise lookup, normalized date bounds, PR-only flag, and filtered workout list from explicit inputs
+  - `WorkoutsTab` now refreshes that bundle from a single `.task(id:)` token instead of filtering the full workout history directly inside `body`
+  - preserved all existing behavior for starting workouts, launching Smart Session / Program Session, delete flow, paywalls, and navigation destinations
+- Reworked the delete-by-range flow to use targeted repository reads:
+  - added `TrainingReadRepository.workoutDateRangeSnapshot(...)` and a date-range fetch helper so preview counts/bounds and delete actions only read workouts inside the selected window
+  - `DeleteByRangeSheet` now refreshes a targeted preview snapshot instead of repeatedly filtering `allWorkouts` in view state
+  - `SettingsTab.deleteWorkoutsInRange(...)` now deletes the repository-scoped snapshot rather than filtering the full history array in the view
+- Added focused Prompt 5 coverage in `Feature16Prompt5WorkoutHistoryTests.swift`:
+  - cached workout-history filtering for date range, exercise selection, muscle-group derived matches, and PR-only mode
+  - delete-range snapshot parity for count and date bounds against the expected filtered window
+- Verification:
+  - attempted `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - attempted fallback compile with `-sdk iphoneos CODE_SIGNING_ALLOWED=NO`
+  - both build attempts are still blocked on this machine before compilation by the same CoreSimulator/Xcode mismatch plus missing iOS 26.4 platform support, so Prompt 5 verification remains source-reviewed but not locally runnable in this environment
+
+**Commit:** `refactor: cache workout history flow and extract shell logic`
 
 ---
 

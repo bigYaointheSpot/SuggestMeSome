@@ -103,7 +103,7 @@ struct SettingsTab: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
             .sheet(isPresented: $showingDeleteRangeSheet) {
-                DeleteByRangeSheet(allWorkouts: allWorkouts) { start, end in
+                DeleteByRangeSheet { start, end in
                     deleteWorkoutsInRange(from: start, to: end)
                 }
             }
@@ -453,9 +453,12 @@ struct SettingsTab: View {
     private func deleteWorkoutsInRange(from start: Date, to end: Date) {
         let dayStart = Calendar.current.startOfDay(for: start)
         let dayEnd   = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: end)!
-
-        let targets = allWorkouts.filter { $0.date >= dayStart && $0.date <= dayEnd }
-        try? PersonalRecordMaintenanceService.deleteWorkouts(targets, context: modelContext)
+        let snapshot = TrainingReadRepository.workoutDateRangeSnapshot(
+            from: dayStart,
+            to: dayEnd,
+            context: modelContext
+        )
+        try? PersonalRecordMaintenanceService.deleteWorkouts(snapshot.workouts, context: modelContext)
     }
 }
 
@@ -511,23 +514,27 @@ private struct CoachScheduleView: View {
 // MARK: - DeleteByRangeSheet
 
 struct DeleteByRangeSheet: View {
-    let allWorkouts: [Workout]
     let onDelete: (Date, Date) -> Void
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var startDate = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @State private var endDate = Date()
     @State private var showingConfirm = false
+    @State private var snapshot = WorkoutDateRangeReadSnapshot.empty
 
-    private var workoutsInRange: [Workout] {
+    private var previewToken: Int {
         let dayStart = Calendar.current.startOfDay(for: startDate)
         let dayEnd   = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
-        return allWorkouts.filter { $0.date >= dayStart && $0.date <= dayEnd }
+        var hasher = Hasher()
+        hasher.combine(dayStart)
+        hasher.combine(dayEnd)
+        return hasher.finalize()
     }
 
-    private var rangeCount: Int { workoutsInRange.count }
-    private var earliestInRange: Date? { workoutsInRange.map(\.date).min() }
-    private var latestInRange: Date? { workoutsInRange.map(\.date).max() }
+    private var rangeCount: Int { snapshot.count }
+    private var earliestInRange: Date? { snapshot.earliestDate }
+    private var latestInRange: Date? { snapshot.latestDate }
 
     private var deleteButtonLabel: String {
         rangeCount == 0 ? "No Workouts in Range" : "Delete \(rangeCount) Workout\(rangeCount == 1 ? "" : "s")"
@@ -573,6 +580,9 @@ struct DeleteByRangeSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+            .task(id: previewToken) {
+                refreshPreview()
+            }
             .confirmationDialog(confirmDialogTitle,
                                 isPresented: $showingConfirm,
                                 titleVisibility: .visible) {
@@ -585,6 +595,21 @@ struct DeleteByRangeSheet: View {
                 Text("These workouts will be permanently deleted and personal records will be recalculated.")
             }
         }
+    }
+
+    private func refreshPreview() {
+        let dayStart = Calendar.current.startOfDay(for: startDate)
+        let dayEnd = Calendar.current.date(
+            bySettingHour: 23,
+            minute: 59,
+            second: 59,
+            of: endDate
+        ) ?? endDate
+        snapshot = TrainingReadRepository.workoutDateRangeSnapshot(
+            from: dayStart,
+            to: dayEnd,
+            context: modelContext
+        )
     }
 
     private var previewCountRow: some View {
