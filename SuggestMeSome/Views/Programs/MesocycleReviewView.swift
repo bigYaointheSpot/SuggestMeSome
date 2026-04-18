@@ -2,8 +2,8 @@
 //  MesocycleReviewView.swift
 //  SuggestMeSome
 //
-//  Feature 13 — Post-block payoff layer. Accepts an injected MesocycleReviewSnapshot;
-//  falls back to .mock if the backend is not yet wired.
+//  Post-block review and next-block planning surface driven by an injected
+//  MesocycleReviewSnapshot.
 //
 
 import SwiftData

@@ -66,6 +66,25 @@ struct SettingsTab: View {
         }
     }
 
+    private var appVersionLabel: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let shortVersion = (info["CFBundleShortVersionString"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let buildNumber = (info["CFBundleVersion"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch (shortVersion, buildNumber) {
+        case let (short?, build?) where !short.isEmpty && !build.isEmpty:
+            return "Version \(short) (\(build))"
+        case let (short?, _) where !short.isEmpty:
+            return "Version \(short)"
+        case let (_, build?) where !build.isEmpty:
+            return "Build \(build)"
+        default:
+            return "Version unavailable"
+        }
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -369,7 +388,7 @@ struct SettingsTab: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("SuggestMeSome")
                         .font(.subheadline.weight(.semibold))
-                    Text("Version 1.0")
+                    Text(appVersionLabel)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text("Built by Alex Yao assisted by Codex and Claude")

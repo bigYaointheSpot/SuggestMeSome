@@ -2,9 +2,8 @@
 //  DailyCoachView.swift
 //  SuggestMeSome
 //
-//  Feature 7 — Daily Coach first-tab shell.
-//  Presentational skeleton only; readiness form and recommendation engine
-//  are deferred to later prompts.
+//  Daily Coach tab with cached today-plan state, proposal review,
+//  watch publishing, and workout launch flows.
 //
 
 import SwiftUI

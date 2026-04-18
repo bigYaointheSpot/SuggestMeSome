@@ -3320,7 +3320,7 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ### Feature 16 — Performance, read-path cleanup, and stale-surface refresh
 
-**Status:** In Progress
+**Status:** Complete
 
 #### Prompt 1 [Launch, audit cadence, and workout draft persistence hardening] — 2026-04-18
 
@@ -3388,6 +3388,24 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - the build remains blocked locally by the same CoreSimulator/Xcode destination mismatch (`CoreSimulator 1051.49.0` vs Xcode build `1051.50.0`, with no usable iOS 26.4 destination), so the new dashboard tests were added but could not be executed in this environment
 
 **Commit:** `refactor: optimize dashboard analytics and refresh workouts tab`
+
+---
+
+#### Prompt 4 [Repo drift cleanup and versioning polish] — 2026-04-18
+
+- Removed stale migrated leftovers that no longer belong in the repo:
+  - deleted the empty `SuggestMeSome/Item.swift`
+  - deleted the empty `SuggestMeSome/Views/Settings/SettingsView.swift`
+- Updated stale file headers/comments so they describe the current shipped surfaces instead of placeholder-era behavior:
+  - `DailyCoachView.swift` now reflects the live cached coach surface with proposal/watch/workout-launch flows
+  - `MesocycleReviewView.swift` now describes the real post-block review and next-block planning screen instead of the old mock fallback note
+- Replaced the hardcoded Settings footer version string with bundle-derived metadata:
+  - `SettingsTab` now formats `CFBundleShortVersionString` and `CFBundleVersion` at runtime, with a safe fallback if either key is unavailable
+- Verification:
+  - attempted `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - this environment is still blocked before compilation by the same CoreSimulator/Xcode destination mismatch, so Feature 16 finishes with documentation and cleanup changes in place but without a locally runnable simulator build
+
+**Commit:** `refactor: remove stale repo artifacts and version hardcodes`
 
 ---
 
