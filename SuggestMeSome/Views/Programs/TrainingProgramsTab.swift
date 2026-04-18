@@ -1,29 +1,28 @@
-//
-//  TrainingProgramsTab.swift
-//  SuggestMeSome
-//
-//  Created by Alex Yao on 4/6/26.
-//
-
-import SwiftUI
 import SwiftData
-
-// MARK: - TrainingProgramsTab
+import SwiftUI
 
 struct TrainingProgramsTab: View {
+    @Environment(\.modelContext) private var modelContext
     @Query private var programRuns: [ProgramRun]
-    @Query(sort: \Workout.date, order: .reverse)
-    private var allWorkouts: [Workout]
-    @Query(sort: \PersonalRecord.dateAchieved, order: .reverse)
-    private var personalRecords: [PersonalRecord]
+    @Query(sort: \Workout.date, order: .reverse) private var allWorkouts: [Workout]
+    @Query(sort: \PersonalRecord.dateAchieved, order: .reverse) private var personalRecords: [PersonalRecord]
+    @Query private var allProposals: [AdaptationProposal]
+    @Query private var allEvents: [AdaptationEventHistory]
+    @Query(sort: \AppliedProgramOverlay.appliedAt, order: .reverse) private var allOverlays: [AppliedProgramOverlay]
     @State private var showingAIGenerator = false
+    @State private var listSnapshot = ProgramRunListSnapshot.placeholder
+    @State private var plannedSessionPreviewCache: [ProgramRunSessionPreviewKey: ProgramSessionPreviewSnapshot] = [:]
+    @State private var loadingSessionPreviewKeys: Set<ProgramRunSessionPreviewKey> = []
 
-    var sortedRuns: [ProgramRun] {
-        let active = TrainingContextQueryService.activeProgramRuns(from: programRuns)
-        let completed = programRuns
-            .filter { $0.isCompleted }
-            .sorted { ($0.endDate ?? $0.startDate) > ($1.endDate ?? $1.startDate) }
-        return active + completed
+    private var programsRefreshToken: Int {
+        ProgramRunListSnapshot.refreshToken(
+            programRuns: programRuns,
+            workouts: allWorkouts,
+            personalRecords: personalRecords,
+            proposals: allProposals,
+            events: allEvents,
+            overlays: allOverlays
+        )
     }
 
     var body: some View {
@@ -38,10 +37,11 @@ struct TrainingProgramsTab: View {
             .fullScreenCover(isPresented: $showingAIGenerator) {
                 AIProgramGeneratorView()
             }
+            .task(id: programsRefreshToken) {
+                refreshListSnapshot()
+            }
         }
     }
-
-    // MARK: - Sub-views
 
     private var programButtonRow: some View {
         HStack(spacing: 8) {
@@ -86,21 +86,34 @@ struct TrainingProgramsTab: View {
 
     @ViewBuilder
     private var programRunList: some View {
-        if sortedRuns.isEmpty {
-            ContentUnavailableView(
-                "No Programs Yet",
-                systemImage: "list.clipboard",
-                description: Text("Create or start a program above to track your progress.")
-            )
-            .frame(maxHeight: .infinity)
+        if listSnapshot.orderedRuns.isEmpty {
+            if programRuns.isEmpty {
+                ContentUnavailableView(
+                    "No Programs Yet",
+                    systemImage: "list.clipboard",
+                    description: Text("Create or start a program above to track your progress.")
+                )
+                .frame(maxHeight: .infinity)
+            } else {
+                ProgressView("Loading Programs...")
+                    .frame(maxHeight: .infinity)
+            }
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(sortedRuns) { run in
+                    ForEach(listSnapshot.orderedRuns) { run in
                         ProgramRunExpandableRow(
                             run: run,
-                            allWorkouts: allWorkouts,
-                            personalRecords: personalRecords
+                            snapshot: listSnapshot.snapshot(for: run),
+                            plannedSessionPreview: { key in
+                                plannedSessionPreviewCache[key]
+                            },
+                            isLoadingSessionPreview: { key in
+                                loadingSessionPreviewKeys.contains(key)
+                            },
+                            loadSessionPreview: { key in
+                                loadSessionPreviewIfNeeded(for: key, run: run)
+                            }
                         )
                         Divider()
                     }
@@ -108,22 +121,40 @@ struct TrainingProgramsTab: View {
             }
         }
     }
-}
 
-// MARK: - ProgramRunRow
+    private func refreshListSnapshot() {
+        listSnapshot = ProgramRunListSnapshot.build(
+            programRuns: programRuns,
+            workouts: allWorkouts,
+            personalRecords: personalRecords,
+            proposals: allProposals,
+            events: allEvents
+        )
+        plannedSessionPreviewCache = [:]
+        loadingSessionPreviewKeys = []
+    }
+
+    private func loadSessionPreviewIfNeeded(
+        for key: ProgramRunSessionPreviewKey,
+        run: ProgramRun
+    ) {
+        guard plannedSessionPreviewCache[key] == nil else { return }
+        guard !loadingSessionPreviewKeys.contains(key) else { return }
+
+        loadingSessionPreviewKeys.insert(key)
+        plannedSessionPreviewCache[key] = ProgramSessionPreviewSnapshot.load(
+            for: run,
+            weekNumber: key.weekNumber,
+            sessionNumber: key.sessionNumber,
+            context: modelContext
+        )
+        loadingSessionPreviewKeys.remove(key)
+    }
+}
 
 struct ProgramRunRow: View {
     let run: ProgramRun
-    let allWorkouts: [Workout]
-
-    var completedWorkouts: Int {
-        TrainingContextQueryService.completedWorkoutCount(for: run, in: allWorkouts)
-    }
-
-    var totalWorkouts: Int {
-        guard let program = run.program else { return 0 }
-        return program.lengthInWeeks * program.sessionsPerWeek
-    }
+    let snapshot: ProgramRunRowSnapshot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -140,10 +171,11 @@ struct ProgramRunRow: View {
                     .clipShape(Capsule())
             }
             HStack(spacing: 6) {
-                Image(systemName: "calendar").font(.caption)
+                Image(systemName: "calendar")
+                    .font(.caption)
                 Text(run.startDate.formatted(date: .abbreviated, time: .omitted))
                 Text("·")
-                Text("\(completedWorkouts)/\(totalWorkouts) workouts")
+                Text("\(snapshot.completedWorkoutCount)/\(snapshot.totalWorkoutCount) workouts")
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)
@@ -152,57 +184,19 @@ struct ProgramRunRow: View {
     }
 }
 
-// MARK: - ProgramRunExpandableRow
-
 struct ProgramRunExpandableRow: View {
     @Bindable var run: ProgramRun
-    let allWorkouts: [Workout]
-    let personalRecords: [PersonalRecord]
-    @Environment(\.modelContext) private var modelContext
-    @Query private var allProposals: [AdaptationProposal]
-    @Query private var allEvents: [AdaptationEventHistory]
+    let snapshot: ProgramRunRowSnapshot
+    let plannedSessionPreview: (ProgramRunSessionPreviewKey) -> ProgramSessionPreviewSnapshot?
+    let isLoadingSessionPreview: (ProgramRunSessionPreviewKey) -> Bool
+    let loadSessionPreview: (ProgramRunSessionPreviewKey) -> Void
 
+    @Environment(\.modelContext) private var modelContext
     @State private var isExpanded = false
     @State private var selectedWeek = 1
     @State private var expandedSessions: Set<Int> = []
     @State private var showingEndConfirmation = false
     @State private var showingDeleteHistoryConfirmation = false
-
-    private var runWorkouts: [Workout] {
-        TrainingContextQueryService.runScopedWorkouts(for: run, in: allWorkouts)
-    }
-
-    private var completedCount: Int { runWorkouts.count }
-
-    private var totalWorkouts: Int {
-        guard let p = run.program else { return 0 }
-        return p.lengthInWeeks * p.sessionsPerWeek
-    }
-
-    private var pendingProposalCount: Int {
-        TrainingContextQueryService.pendingUserProposals(for: run, proposals: allProposals).count
-    }
-
-    private var adaptationEventCount: Int {
-        TrainingContextQueryService.adaptationEventCount(for: run, events: allEvents)
-    }
-
-    private var sourceLabel: String {
-        switch run.program?.source {
-        case .userCreated: return "Custom Program"
-        case .template: return "Template"
-        case .aiGenerated: return "Smart Generated"
-        case nil: return "Unknown"
-        }
-    }
-
-    private var blockReviewSnapshot: MesocycleReviewSnapshot? {
-        TrainingContextQueryService.mesocycleReview(
-            for: run,
-            workouts: allWorkouts,
-            personalRecords: personalRecords
-        )
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -232,8 +226,6 @@ struct ProgramRunExpandableRow: View {
         }
     }
 
-    // MARK: Row Header
-
     private var rowHeader: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -241,7 +233,7 @@ struct ProgramRunExpandableRow: View {
             }
         } label: {
             HStack(alignment: .center, spacing: 8) {
-                ProgramRunRow(run: run, allWorkouts: allWorkouts)
+                ProgramRunRow(run: run, snapshot: snapshot)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.tertiary)
@@ -254,8 +246,6 @@ struct ProgramRunExpandableRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
     }
-
-    // MARK: Expanded Content
 
     @ViewBuilder
     private var expandedContent: some View {
@@ -283,11 +273,9 @@ struct ProgramRunExpandableRow: View {
         }
     }
 
-    // MARK: Info Section
-
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(sourceLabel)
+            Text(snapshot.sourceLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
@@ -317,7 +305,7 @@ struct ProgramRunExpandableRow: View {
                     Text("\(run.program?.lengthInWeeks ?? 0) weeks")
                 }
                 infoRow(label: "Progress") {
-                    Text("\(completedCount) of \(totalWorkouts) workouts completed")
+                    Text("\(snapshot.completedWorkoutCount) of \(snapshot.totalWorkoutCount) workouts completed")
                 }
             }
         }
@@ -325,8 +313,6 @@ struct ProgramRunExpandableRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground))
     }
-
-    // MARK: Adaptation History Row
 
     private var adaptationHistoryRow: some View {
         NavigationLink {
@@ -341,9 +327,11 @@ struct ProgramRunExpandableRow: View {
                     Text("Adaptation History")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text(adaptationEventCount == 0
-                         ? "No adaptation events yet"
-                         : "\(adaptationEventCount) recorded event\(adaptationEventCount == 1 ? "" : "s")")
+                    Text(
+                        snapshot.adaptationEventCount == 0
+                            ? "No adaptation events yet"
+                            : "\(snapshot.adaptationEventCount) recorded event\(snapshot.adaptationEventCount == 1 ? "" : "s")"
+                    )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
@@ -361,8 +349,6 @@ struct ProgramRunExpandableRow: View {
         .background(Color(.secondarySystemBackground))
     }
 
-    // MARK: Adaptive Proposal Row
-
     private var adaptiveProposalRow: some View {
         NavigationLink {
             AdaptationProposalReviewView(run: run)
@@ -376,11 +362,13 @@ struct ProgramRunExpandableRow: View {
                     Text("Adaptive Proposals")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text(pendingProposalCount == 0
-                         ? "No pending confirmations"
-                         : "\(pendingProposalCount) pending confirmation\(pendingProposalCount == 1 ? "" : "s")")
+                    Text(
+                        snapshot.pendingProposalCount == 0
+                            ? "No pending confirmations"
+                            : "\(snapshot.pendingProposalCount) pending confirmation\(snapshot.pendingProposalCount == 1 ? "" : "s")"
+                    )
                     .font(.caption)
-                    .foregroundStyle(pendingProposalCount == 0 ? Color.secondary : Color.orange)
+                    .foregroundStyle(snapshot.pendingProposalCount == 0 ? Color.secondary : Color.orange)
                 }
 
                 Spacer()
@@ -407,11 +395,9 @@ struct ProgramRunExpandableRow: View {
         .font(.subheadline)
     }
 
-    // MARK: Block Review Row
-
     private var blockReviewRow: some View {
         Group {
-            if let blockReviewSnapshot {
+            if let blockReviewSnapshot = snapshot.blockReviewSnapshot {
                 NavigationLink {
                     MesocycleReviewView(snapshot: blockReviewSnapshot)
                 } label: {
@@ -449,8 +435,6 @@ struct ProgramRunExpandableRow: View {
         .contentShape(Rectangle())
     }
 
-    // MARK: End Program Row
-
     private var endProgramRow: some View {
         Button {
             showingEndConfirmation = true
@@ -466,8 +450,6 @@ struct ProgramRunExpandableRow: View {
         .background(Color(.secondarySystemBackground))
     }
 
-    // MARK: Delete History Row
-
     private var deleteHistoryRow: some View {
         Button {
             showingDeleteHistoryConfirmation = true
@@ -482,8 +464,6 @@ struct ProgramRunExpandableRow: View {
         .buttonStyle(.plain)
         .background(Color(.secondarySystemBackground))
     }
-
-    // MARK: Week Picker
 
     private var weekPickerSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -511,8 +491,6 @@ struct ProgramRunExpandableRow: View {
         .background(Color(.secondarySystemBackground))
     }
 
-    // MARK: Session Section
-
     @ViewBuilder
     private var sessionSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -527,13 +505,18 @@ struct ProgramRunExpandableRow: View {
         .background(Color(.systemGroupedBackground))
     }
 
-    // MARK: Session Card
-
     @ViewBuilder
     private func sessionCard(sessionNumber: Int) -> some View {
-        let workout = runWorkouts.first {
-            $0.programWeekNumber == selectedWeek && $0.programSessionNumber == sessionNumber
-        }
+        let previewKey = ProgramRunSessionPreviewKey(
+            runID: run.id,
+            weekNumber: selectedWeek,
+            sessionNumber: sessionNumber
+        )
+        let workout = snapshot.completedWorkout(
+            weekNumber: selectedWeek,
+            sessionNumber: sessionNumber,
+            runID: run.id
+        )
         let isCompleted = workout != nil
         let isSessionExpanded = expandedSessions.contains(sessionNumber)
 
@@ -574,10 +557,10 @@ struct ProgramRunExpandableRow: View {
 
             if isSessionExpanded {
                 Divider().padding(.leading, 14)
-                if let w = workout {
-                    sessionWorkoutDetail(workout: w)
+                if let workout {
+                    sessionWorkoutDetail(workout: workout)
                 } else {
-                    sessionPlannedDetail(sessionNumber: sessionNumber)
+                    sessionPlannedDetail(previewKey: previewKey)
                 }
             }
         }
@@ -585,8 +568,6 @@ struct ProgramRunExpandableRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(.separator), lineWidth: 0.5))
     }
-
-    // MARK: Completed Session Detail
 
     @ViewBuilder
     private func sessionWorkoutDetail(workout: Workout) -> some View {
@@ -621,100 +602,53 @@ struct ProgramRunExpandableRow: View {
         .padding(12)
     }
 
-    // MARK: Planned Session Detail
-
     @ViewBuilder
-    private func sessionPlannedDetail(sessionNumber: Int) -> some View {
-        let allExercises = ProgramOverlayResolutionService.resolvedExercises(
-            for: run,
-            week: selectedWeek,
-            session: sessionNumber,
-            context: modelContext
-        )
-        let workingSets = allExercises.filter { !$0.isWarmup }
-        let warmupsByName = Dictionary(grouping: allExercises.filter { $0.isWarmup }, by: \.exerciseName)
-
-        if workingSets.isEmpty {
-            Text("No exercises planned for this session.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(14)
-        } else {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(workingSets) { exercise in
-                    let warmupCount = warmupsByName[exercise.exerciseName]?.count ?? 0
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(exercise.exerciseName)
-                                .font(.subheadline)
-                            Text(plannedExerciseDetail(exercise))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+    private func sessionPlannedDetail(previewKey: ProgramRunSessionPreviewKey) -> some View {
+        if let preview = plannedSessionPreview(previewKey) {
+            if preview.isEmpty {
+                Text("No exercises planned for this session.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(14)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(preview.workingExercises) { exercise in
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(exercise.exerciseName)
+                                    .font(.subheadline)
+                                Text(exercise.detailText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if exercise.warmupCount > 0 {
+                                Text("\(exercise.warmupCount) warmup sets")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                                    .padding(.top, 2)
+                            }
                         }
-                        Spacer()
-                        if warmupCount > 0 {
-                            Text("\(warmupCount) warmup sets")
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
-                                .padding(.top, 2)
-                        }
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
 
-                    if exercise.id != workingSets.last?.id {
-                        Divider().padding(.leading, 14)
+                        if exercise.id != preview.workingExercises.last?.id {
+                            Divider().padding(.leading, 14)
+                        }
                     }
                 }
             }
-        }
-    }
-}
-
-// MARK: - Planned Exercise Detail Helper
-
-private func plannedExerciseDetail(_ exercise: ProgramSessionExercise) -> String {
-    let stylePrefix: String = {
-        switch exercise.workingSetStyle {
-        case .topSet: return "Top Set · "
-        case .backoff: return "Backoff · "
-        case .straight, .none: return "Straight Sets · "
-        }
-    }()
-
-    // Cardio: targetSets is nil, targetReps holds duration in minutes
-    if exercise.targetSets == nil, let mins = exercise.targetReps {
-        return "\(mins) min"
-    }
-
-    let sStr = exercise.targetSets.map(String.init) ?? "—"
-    let rStr = exercise.targetReps.map(String.init) ?? "—"
-
-    if let pct = exercise.targetPercentage1RM {
-        let pctInt = Int((pct * 100).rounded())
-        if let w = exercise.prescribedWeight, let unit = exercise.prescribedWeightUnit {
-            let wStr = w == w.rounded(.towardZero)
-                ? "\(Int(w)) \(unit)"
-                : String(format: "%.1f \(unit)", w)
-            var detail = "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
-            if let drop = exercise.backoffPercentageDrop {
-                detail += String(format: " · -%.0f%%", drop * 100.0)
+        } else {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text(isLoadingSessionPreview(previewKey) ? "Loading session preview..." : "Preparing session preview...")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            return stylePrefix + detail
+            .padding(14)
+            .task(id: previewKey) {
+                loadSessionPreview(previewKey)
+            }
         }
-        var detail = "\(sStr)×\(rStr) @ \(pctInt)%"
-        if let drop = exercise.backoffPercentageDrop {
-            detail += String(format: " · -%.0f%%", drop * 100.0)
-        }
-        return stylePrefix + detail
     }
-
-    if let rpe = exercise.targetRPE {
-        let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
-            ? String(Int(rpe))
-            : String(format: "%.1f", rpe)
-        return stylePrefix + "\(sStr)×\(rStr) @ RPE \(rpeStr)"
-    }
-
-    return stylePrefix + "\(sStr)×\(rStr)"
 }

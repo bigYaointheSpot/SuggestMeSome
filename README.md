@@ -3434,6 +3434,29 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 6 [Programs surface snapshotting and query fan-out reduction] — 2026-04-18
+
+- Reworked the Programs tab around cached list and session-preview snapshots instead of broad per-render recomputation:
+  - added `ProgramRunListSnapshot`, `ProgramRunRowSnapshot`, and `ProgramSessionPreviewSnapshot` to precompute active/completed ordering, completed workout counts, pending proposal counts, adaptation event counts, source labels, completed-block review availability, and completed workout lookup by `(run, week, session)`
+  - `TrainingProgramsTab` now refreshes one list snapshot from a single `.task(id:)` token keyed off runs, workouts, personal records, proposals, events, and overlays rather than deriving those metrics repeatedly inside the view tree
+  - planned-session previews now load lazily into a keyed cache per expanded `(runID, week, session)` instead of resolving overlays on every render pass
+- Removed the biggest query fan-out in the Programs surface while preserving the existing UX:
+  - the top-level tab keeps one shared query set for runs, workouts, personal records, proposals, events, and overlays
+  - `ProgramRunExpandableRow` no longer owns per-row `@Query` collections for proposals and adaptation events
+  - existing create/template/smart-generate entry points, adaptation history navigation, adaptive proposal review navigation, end-program flow, delete-history flow, and completed-workout drill-in behavior all remain intact
+- Added focused Prompt 6 coverage in `Feature16Prompt6TrainingProgramsSnapshotTests.swift`:
+  - list ordering and row-metric snapshot correctness for active vs completed runs
+  - overlay-sensitive refresh-token invalidation
+  - planned-session preview loading for warmup/working exercise grouping
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -sdk iphoneos CODE_SIGNING_ALLOWED=NO build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt6TrainingProgramsSnapshotTests`
+
+**Commit:** `refactor: cache training programs tab snapshots`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
