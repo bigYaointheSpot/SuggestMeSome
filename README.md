@@ -3189,6 +3189,33 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 4 [Watch Workout Lifecycle + Prescribed Target Fixes] — 2026-04-17
+
+- Unified live workout lifecycle across iPhone, Apple Watch, and the linked watch HealthKit session:
+  - extended `ActiveWorkoutSession` with explicit running/paused state, pause-safe elapsed tracking, and linked-watch-session ownership so elapsed time excludes pauses in the UI, watch payloads, persisted active-session restore, and final saved workouts
+  - upgraded `WorkoutView` from start/end only to start, pause, resume, and end while broadcasting a real watch workout launch when a session starts or is restored
+  - expanded the watch payload contract with lifecycle and linked-session metadata plus new reverse-direction metrics and HealthKit summary payloads
+- Made the watch mirror phone-first lifecycle and HealthKit ownership while keeping the rest timer useful:
+  - upgraded the watch HealthKit controller to support start, pause, resume, and stop, with live heart-rate and active-energy streaming back to iPhone plus a terminal HealthKit workout summary acknowledgment
+  - taught `WatchCompanionSessionStore` to apply lifecycle changes from live/current session payloads instead of inventing watch-local workout state
+  - added pause/resume handling and local notification fallback to the watch rest timer so rest completion still cues the user when a linked HealthKit workout is unavailable
+- Fixed live workout logging details that were drifting between phone and watch:
+  - `WorkoutView` now shows linked watch heart rate and active energy during the session and prefers live watch calories on save only when the user did not manually enter calories
+  - linked watch-owned workouts now skip the iPhone HealthKit writeback path and stamp the saved workout with the watch HealthKit export acknowledgment to avoid duplicate Apple Health workouts
+  - watch crown logging now seeds each set from the phone-provided prescribed reps and weight instead of carrying forward the last completed set unless no prescription exists
+- Added focused validation for:
+  - pause/resume elapsed-time accounting and active-session persistence behavior
+  - linked watch metrics and HealthKit summary writeback coordination
+  - lifecycle and linked-session flags in broadcast payloads
+  - same-set prescribed target refreshes and next-set optimistic presentation on watch
+- Verification:
+  - `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature10Prompt7WatchFoundationTests -only-testing:SuggestMeSomeTests/Feature11Prompt5WatchContinuityTests -only-testing:SuggestMeSomeTests/Feature12Prompt4WatchActionsTests -only-testing:SuggestMeSomeTests/Feature12Prompt6WatchSmartStackHardeningTests -only-testing:SuggestMeSomeTests/Feature12Prompt7WatchWorkoutLifecycleTests`
+  - `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+
+**Commits:** `feat: sync workout lifecycle across phone watch and healthkit`, `docs: document watch workout lifecycle fixes`
+
+---
+
 
 ## Project Setup
 
