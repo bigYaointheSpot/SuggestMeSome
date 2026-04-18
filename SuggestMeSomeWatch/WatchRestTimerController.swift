@@ -11,6 +11,9 @@
 
 import Combine
 import Foundation
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
 #if canImport(WatchKit)
 import WatchKit
 #endif
@@ -37,9 +40,12 @@ final class WatchRestTimerController: ObservableObject {
     @Published private(set) var remainingSeconds: Int = 0
     @Published private(set) var totalSeconds: Int = 0
     @Published private(set) var isRunning: Bool = false
+    @Published private(set) var isPaused: Bool = false
 
     private var tickTask: Task<Void, Never>?
     private var hasFiredHalfwayCue: Bool = false
+    private var backgroundNotificationFallbackEnabled = false
+    private var pendingNotificationIdentifier: String?
 
     var progress: Double {
         guard totalSeconds > 0 else { return 0 }
@@ -47,15 +53,18 @@ final class WatchRestTimerController: ObservableObject {
         return min(1, max(0, Double(elapsed) / Double(totalSeconds)))
     }
 
-    func start(duration: Int) {
+    func start(duration: Int, allowsBackgroundNotificationFallback: Bool = false) {
         let clamped = max(0, duration)
         stop(resetVisible: false)
         guard clamped > 0 else { return }
         totalSeconds = clamped
         remainingSeconds = clamped
         hasFiredHalfwayCue = false
+        backgroundNotificationFallbackEnabled = allowsBackgroundNotificationFallback
         isRunning = true
+        isPaused = false
         playHaptic(.start)
+        scheduleBackgroundNotificationIfNeeded(secondsFromNow: clamped)
 
         tickTask = Task { @MainActor [weak self] in
             while true {
@@ -63,6 +72,7 @@ final class WatchRestTimerController: ObservableObject {
                 guard let self else { return }
                 if Task.isCancelled { return }
                 guard self.isRunning else { return }
+                guard !self.isPaused else { continue }
                 self.tick()
                 if self.remainingSeconds == 0 { return }
             }
@@ -73,6 +83,9 @@ final class WatchRestTimerController: ObservableObject {
         tickTask?.cancel()
         tickTask = nil
         isRunning = false
+        isPaused = false
+        backgroundNotificationFallbackEnabled = false
+        cancelBackgroundNotification()
         if resetVisible {
             remainingSeconds = 0
             totalSeconds = 0
@@ -82,6 +95,18 @@ final class WatchRestTimerController: ObservableObject {
     func skip() {
         stop(resetVisible: true)
         playHaptic(.skip)
+    }
+
+    func pause() {
+        guard isRunning, !isPaused else { return }
+        isPaused = true
+        cancelBackgroundNotification()
+    }
+
+    func resume() {
+        guard isRunning, isPaused else { return }
+        isPaused = false
+        scheduleBackgroundNotificationIfNeeded(secondsFromNow: remainingSeconds)
     }
 
     private func tick() {
@@ -112,7 +137,72 @@ final class WatchRestTimerController: ObservableObject {
         tickTask?.cancel()
         tickTask = nil
         isRunning = false
+        isPaused = false
+        cancelBackgroundNotification()
         playHaptic(.complete)
+    }
+
+    private func scheduleBackgroundNotificationIfNeeded(secondsFromNow: Int) {
+#if canImport(UserNotifications)
+        guard backgroundNotificationFallbackEnabled else { return }
+        guard secondsFromNow > 0 else { return }
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { [weak self] settings in
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                Task { @MainActor in
+                    self?.scheduleBackgroundNotification(in: center, secondsFromNow: secondsFromNow)
+                }
+            case .notDetermined:
+                center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                    guard granted else { return }
+                    Task { @MainActor in
+                        self?.scheduleBackgroundNotification(in: center, secondsFromNow: secondsFromNow)
+                    }
+                }
+            case .denied:
+                return
+            @unknown default:
+                return
+            }
+        }
+#else
+        _ = secondsFromNow
+#endif
+    }
+
+    private func scheduleBackgroundNotification(in center: UNUserNotificationCenter, secondsFromNow: Int) {
+#if canImport(UserNotifications)
+        let identifier = "suggestmesome.rest.\(UUID().uuidString)"
+        let content = UNMutableNotificationContent()
+        content.title = "Rest Complete"
+        content.body = "Time for your next set."
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: TimeInterval(max(1, secondsFromNow)),
+            repeats: false
+        )
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        cancelBackgroundNotification(in: center)
+        center.add(request)
+        pendingNotificationIdentifier = identifier
+#else
+        _ = center
+        _ = secondsFromNow
+#endif
+    }
+
+    private func cancelBackgroundNotification() {
+#if canImport(UserNotifications)
+        cancelBackgroundNotification(in: UNUserNotificationCenter.current())
+#endif
+    }
+
+    private func cancelBackgroundNotification(in center: UNUserNotificationCenter) {
+        guard let pendingNotificationIdentifier else { return }
+        center.removePendingNotificationRequests(withIdentifiers: [pendingNotificationIdentifier])
+        self.pendingNotificationIdentifier = nil
     }
 
     private func playHaptic(_ cue: WatchRestHapticCue) {

@@ -108,8 +108,9 @@ struct SuggestMeSomeApp: App {
                     HealthKitSettingsStorage.migrateLegacyRecoverySyncTimestampIfNeeded(
                         context: sharedModelContainer.mainContext
                     )
-                    WatchSessionCoordinator.shared.installExecutionActionHandler(
-                        activeWorkoutSessionStore: activeWorkoutSessionStore
+                    WatchSessionCoordinator.shared.installCompanionHandlers(
+                        activeWorkoutSessionStore: activeWorkoutSessionStore,
+                        modelContext: sharedModelContainer.mainContext
                     )
                     Task { @MainActor in
                         await purchaseManager.bootstrap()

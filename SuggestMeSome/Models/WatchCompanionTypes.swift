@@ -14,6 +14,8 @@ struct WatchWorkoutLaunchPayload: Codable, Equatable {
     let programWeekNumber: Int?
     let programSessionNumber: Int?
     let sessionPlanKind: WatchSessionPlanKind?
+    let lifecycleState: WatchWorkoutLifecycleState?
+    let usesLinkedWatchHealthSession: Bool?
     let sessionSourceLabels: [String]?
     let sessionVersionStableID: String?
 
@@ -24,6 +26,8 @@ struct WatchWorkoutLaunchPayload: Codable, Equatable {
         programWeekNumber: Int? = nil,
         programSessionNumber: Int? = nil,
         sessionPlanKind: WatchSessionPlanKind? = nil,
+        lifecycleState: WatchWorkoutLifecycleState? = nil,
+        usesLinkedWatchHealthSession: Bool? = nil,
         sessionSourceLabels: [String]? = nil,
         sessionVersionStableID: String? = nil
     ) {
@@ -33,6 +37,8 @@ struct WatchWorkoutLaunchPayload: Codable, Equatable {
         self.programWeekNumber = programWeekNumber
         self.programSessionNumber = programSessionNumber
         self.sessionPlanKind = sessionPlanKind
+        self.lifecycleState = lifecycleState
+        self.usesLinkedWatchHealthSession = usesLinkedWatchHealthSession
         self.sessionSourceLabels = sessionSourceLabels
         self.sessionVersionStableID = sessionVersionStableID
     }

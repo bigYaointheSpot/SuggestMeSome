@@ -24,6 +24,8 @@ struct WatchRootView: View {
                         liveWorkout: store.liveWorkout,
                         progressSnapshot: store.progressSnapshot,
                         currentContext: store.currentContext,
+                        watchMetrics: store.latestWatchMetrics,
+                        isLinkedHealthSessionActive: store.latestWatchMetrics?.isLinkedHealthSessionActive == true,
                         sessionStatus: store.sessionStatus,
                         onExecutionAction: store.sendExecutionAction
                     )

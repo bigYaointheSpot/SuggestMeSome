@@ -56,11 +56,13 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     @Published private(set) var liveWorkout: WatchLiveWorkoutSnapshot?
     @Published private(set) var currentContext: WatchCurrentSessionContext?
     @Published private(set) var completion: WatchSessionCompletionPayload?
+    @Published private(set) var latestWatchMetrics: WatchWorkoutMetricsPayload?
     @Published private(set) var sessionStatus = WatchCompanionSessionStatus.unsupported()
     @Published private(set) var queuedUserInfoEventCount = 0
 
     let workoutSessionController = WatchWorkoutSessionController()
 
+    private var cancellables: Set<AnyCancellable> = []
     private var session: WCSession?
     private var queuedUserInfoEvents: [WatchBridgeMessage] = []
     private var latestAppliedSentAtByKind: [WatchPayloadKind: Date] = [:]
@@ -70,6 +72,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        bindWorkoutSessionController()
 
         guard WCSession.isSupported() else {
             sessionStatus = .unsupported()
@@ -175,7 +178,8 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 self.terminalWorkoutID = nil
                 self.workoutLaunch = launch
                 self.completion = nil
-                self.workoutSessionController.start(launch: launch)
+                self.latestWatchMetrics = nil
+                self.applyLinkedWorkoutLaunch(launch)
                 return true
             }
         case .workoutProgress:
@@ -196,6 +200,11 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 ) else { return false }
                 self.liveWorkout = liveWorkout
                 self.completion = nil
+                self.applyLinkedWorkoutLifecycle(
+                    workoutID: liveWorkout.workoutID,
+                    lifecycleState: liveWorkout.lifecycleState,
+                    usesLinkedWatchHealthSession: liveWorkout.usesLinkedWatchHealthSession
+                )
                 self.updateWidgetSnapshot { existing in
                     WatchWidgetSnapshot.mergingLiveWorkout(
                         liveWorkout,
@@ -213,6 +222,11 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 ) else { return false }
                 self.currentContext = context
                 self.completion = nil
+                self.applyLinkedWorkoutLifecycle(
+                    workoutID: context.workoutID,
+                    lifecycleState: context.lifecycleState,
+                    usesLinkedWatchHealthSession: context.usesLinkedWatchHealthSession
+                )
                 self.updateWidgetSnapshot { existing in
                     existing.updatingCurrentContext(context)
                 }
@@ -226,6 +240,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 self.progressSnapshot = nil
                 self.liveWorkout = nil
                 self.currentContext = nil
+                self.latestWatchMetrics = nil
                 self.workoutSessionController.stop()
                 self.updateWidgetSnapshot { existing in
                     existing.clearingActiveWorkout()
@@ -235,6 +250,8 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         case .watchPresenceHeartbeat:
             return
         case .workoutExecutionAction:
+            return
+        case .workoutMetrics, .workoutHealthSummary:
             return
         }
     }
@@ -317,6 +334,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         progressSnapshot = nil
         liveWorkout = nil
         currentContext = nil
+        latestWatchMetrics = nil
     }
 
     private var activeWorkoutID: UUID? {
@@ -372,6 +390,110 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
 
         refreshSessionStatus(message: "Action queued for iPhone.")
     }
+
+    private func bindWorkoutSessionController() {
+        workoutSessionController.$latestMetricsPayload
+            .compactMap { $0 }
+            .sink { [weak self] payload in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.latestWatchMetrics = payload
+                    self.sendMetricsUpdate(payload)
+                }
+            }
+            .store(in: &cancellables)
+
+        workoutSessionController.$latestHealthSummaryPayload
+            .compactMap { $0 }
+            .sink { [weak self] payload in
+                Task { @MainActor in
+                    self?.sendHealthSummary(payload)
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func applyLinkedWorkoutLaunch(_ launch: WatchWorkoutLaunchPayload) {
+        guard launch.usesLinkedWatchHealthSession == true else {
+            workoutSessionController.stop(sendHealthSummary: false)
+            return
+        }
+        workoutSessionController.start(launch: launch)
+    }
+
+    private func applyLinkedWorkoutLifecycle(
+        workoutID: UUID,
+        lifecycleState: WatchWorkoutLifecycleState?,
+        usesLinkedWatchHealthSession: Bool?
+    ) {
+        guard usesLinkedWatchHealthSession == true else {
+            return
+        }
+        guard let workoutLaunch, workoutLaunch.workoutID == workoutID else {
+            return
+        }
+        if workoutSessionController.latestMetricsPayload?.workoutID != workoutID {
+            workoutSessionController.start(
+                launch: WatchWorkoutLaunchPayload(
+                    workoutID: workoutLaunch.workoutID,
+                    startedAt: workoutLaunch.startedAt,
+                    programRunID: workoutLaunch.programRunID,
+                    programWeekNumber: workoutLaunch.programWeekNumber,
+                    programSessionNumber: workoutLaunch.programSessionNumber,
+                    sessionPlanKind: workoutLaunch.sessionPlanKind,
+                    lifecycleState: lifecycleState ?? workoutLaunch.lifecycleState,
+                    usesLinkedWatchHealthSession: workoutLaunch.usesLinkedWatchHealthSession,
+                    sessionSourceLabels: workoutLaunch.sessionSourceLabels,
+                    sessionVersionStableID: workoutLaunch.sessionVersionStableID
+                )
+            )
+            return
+        }
+        if let lifecycleState {
+            workoutSessionController.apply(lifecycleState: lifecycleState)
+        }
+    }
+
+    private func sendMetricsUpdate(_ payload: WatchWorkoutMetricsPayload) {
+        guard let session,
+              session.activationState == .activated,
+              let message = WatchBridgeMessageCodec.makeMessageIfPossible(
+                kind: .workoutMetrics,
+                payload: payload
+              ) else {
+            return
+        }
+        guard session.isReachable else { return }
+        session.sendMessage(message, replyHandler: nil) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshSessionStatus(message: "Metrics queued for iPhone.")
+            }
+        }
+    }
+
+    private func sendHealthSummary(_ payload: WatchWorkoutHealthSummaryPayload) {
+        guard let session,
+              session.activationState == .activated,
+              let message = WatchBridgeMessageCodec.makeMessageIfPossible(
+                kind: .workoutHealthSummary,
+                payload: payload
+              ) else {
+            return
+        }
+
+        session.transferUserInfo(message)
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil) { [weak self] _ in
+                Task { @MainActor in
+                    self?.refreshSessionStatus(message: "Workout summary queued for iPhone.")
+                }
+            }
+            refreshSessionStatus(message: "Workout summary sent to iPhone.")
+            return
+        }
+
+        refreshSessionStatus(message: "Workout summary queued for iPhone.")
+    }
 }
 
 private extension WatchPayloadKind {
@@ -379,7 +501,7 @@ private extension WatchPayloadKind {
         switch self {
         case .workoutLaunch, .workoutProgress, .liveWorkoutSnapshot, .currentSessionContext:
             return true
-        case .todayPlanSnapshot, .sessionCompletion, .workoutExecutionAction, .watchPresenceHeartbeat:
+        case .todayPlanSnapshot, .sessionCompletion, .workoutExecutionAction, .watchPresenceHeartbeat, .workoutMetrics, .workoutHealthSummary:
             return false
         }
     }

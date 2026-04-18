@@ -18,6 +18,7 @@
 //
 
 import Foundation
+import SwiftData
 
 struct WatchSetCompletionAdvanceResult {
     var updatedEntries: [DraftExerciseEntry]
@@ -128,6 +129,8 @@ enum WatchPayloadMapper {
         programWeekNumber: Int? = nil,
         programSessionNumber: Int? = nil,
         sessionPlanKind: WatchSessionPlanKind? = nil,
+        lifecycleState: WatchWorkoutLifecycleState? = nil,
+        usesLinkedWatchHealthSession: Bool? = nil,
         sessionSourceLabels: [String]? = nil,
         sessionVersionStableID: String? = nil
     ) -> WatchWorkoutLaunchPayload {
@@ -138,6 +141,8 @@ enum WatchPayloadMapper {
             programWeekNumber: programWeekNumber,
             programSessionNumber: programSessionNumber,
             sessionPlanKind: sessionPlanKind,
+            lifecycleState: lifecycleState,
+            usesLinkedWatchHealthSession: usesLinkedWatchHealthSession,
             sessionSourceLabels: normalizeSourceLabels(sessionSourceLabels),
             sessionVersionStableID: sessionVersionStableID
         )
@@ -154,6 +159,8 @@ enum WatchPayloadMapper {
         entries: [DraftExerciseEntry],
         cursor: Int? = nil,
         sessionPlanKind: WatchSessionPlanKind? = nil,
+        lifecycleState: WatchWorkoutLifecycleState? = nil,
+        usesLinkedWatchHealthSession: Bool? = nil,
         sessionSourceLabels: [String]? = nil,
         sessionVersionStableID: String? = nil,
         crownWeightStepOverride: Double? = nil,
@@ -208,6 +215,8 @@ enum WatchPayloadMapper {
             quickCompleteEnabled: entry.isCardio ? nil : nextSetIdx != nil,
             preferredInteractionModel: entry.isCardio ? nil : .digitalCrownFirst,
             sessionPlanKind: sessionPlanKind,
+            lifecycleState: lifecycleState,
+            usesLinkedWatchHealthSession: usesLinkedWatchHealthSession,
             sessionSourceLabels: normalizeSourceLabels(sessionSourceLabels),
             sessionVersionStableID: sessionVersionStableID,
             capturedAt: capturedAt
@@ -228,6 +237,8 @@ enum WatchPayloadMapper {
         programWeekNumber: Int? = nil,
         programSessionNumber: Int? = nil,
         sessionPlanKind: WatchSessionPlanKind? = nil,
+        lifecycleState: WatchWorkoutLifecycleState? = nil,
+        usesLinkedWatchHealthSession: Bool? = nil,
         sessionSourceLabels: [String]? = nil,
         sessionVersionStableID: String? = nil,
         capturedAt: Date = Date()
@@ -252,6 +263,8 @@ enum WatchPayloadMapper {
             programWeekNumber: programWeekNumber,
             programSessionNumber: programSessionNumber,
             sessionPlanKind: sessionPlanKind,
+            lifecycleState: lifecycleState,
+            usesLinkedWatchHealthSession: usesLinkedWatchHealthSession,
             sessionSourceLabels: normalizeSourceLabels(sessionSourceLabels),
             sessionVersionStableID: sessionVersionStableID,
             capturedAt: capturedAt
@@ -647,6 +660,32 @@ final class WatchSessionCoordinator {
         }
     }
 
+    func installCompanionHandlers(
+        activeWorkoutSessionStore: ActiveWorkoutSessionStore,
+        modelContext: ModelContext
+    ) {
+        installExecutionActionHandler(activeWorkoutSessionStore: activeWorkoutSessionStore)
+        bridge.metricsUpdateHandler = { [weak activeWorkoutSessionStore] payload in
+            activeWorkoutSessionStore?.updateLatestWatchMetrics(payload)
+        }
+        bridge.workoutHealthSummaryHandler = { [weak activeWorkoutSessionStore] payload in
+            activeWorkoutSessionStore?.updateLatestWatchHealthSummary(payload)
+            Self.applyWatchHealthSummary(payload, in: modelContext)
+        }
+    }
+
+    func shouldUseLinkedWatchHealthSession(healthKitEnabled: Bool) -> Bool {
+        guard healthKitEnabled else { return false }
+        let status = bridge.latestStatus
+        guard status.isCompanionAppInstalled else { return false }
+        switch status.availability {
+        case .reachable, .companionInstalled:
+            return true
+        case .unsupported, .statusPending, .notPaired, .pairedNoCompanionApp:
+            return false
+        }
+    }
+
     // MARK: Today Plan
 
     func broadcastTodayPlan(
@@ -673,6 +712,8 @@ final class WatchSessionCoordinator {
         programWeekNumber: Int? = nil,
         programSessionNumber: Int? = nil,
         sessionPlanKind: WatchSessionPlanKind? = nil,
+        lifecycleState: WatchWorkoutLifecycleState? = nil,
+        usesLinkedWatchHealthSession: Bool? = nil,
         sessionSourceLabels: [String]? = nil,
         sessionVersionStableID: String? = nil
     ) async {
@@ -683,6 +724,8 @@ final class WatchSessionCoordinator {
             programWeekNumber: programWeekNumber,
             programSessionNumber: programSessionNumber,
             sessionPlanKind: sessionPlanKind,
+            lifecycleState: lifecycleState,
+            usesLinkedWatchHealthSession: usesLinkedWatchHealthSession,
             sessionSourceLabels: sessionSourceLabels,
             sessionVersionStableID: sessionVersionStableID
         )
@@ -700,6 +743,8 @@ final class WatchSessionCoordinator {
         programWeekNumber: Int? = nil,
         programSessionNumber: Int? = nil,
         sessionPlanKind: WatchSessionPlanKind? = nil,
+        lifecycleState: WatchWorkoutLifecycleState? = nil,
+        usesLinkedWatchHealthSession: Bool? = nil,
         sessionSourceLabels: [String]? = nil,
         sessionVersionStableID: String? = nil,
         capturedAt: Date = Date()
@@ -721,6 +766,8 @@ final class WatchSessionCoordinator {
             programWeekNumber: programWeekNumber,
             programSessionNumber: programSessionNumber,
             sessionPlanKind: sessionPlanKind,
+            lifecycleState: lifecycleState,
+            usesLinkedWatchHealthSession: usesLinkedWatchHealthSession,
             sessionSourceLabels: sessionSourceLabels,
             sessionVersionStableID: sessionVersionStableID,
             capturedAt: capturedAt
@@ -735,6 +782,8 @@ final class WatchSessionCoordinator {
         entries: [DraftExerciseEntry],
         cursor: Int? = nil,
         sessionPlanKind: WatchSessionPlanKind? = nil,
+        lifecycleState: WatchWorkoutLifecycleState? = nil,
+        usesLinkedWatchHealthSession: Bool? = nil,
         sessionSourceLabels: [String]? = nil,
         sessionVersionStableID: String? = nil,
         capturedAt: Date = Date()
@@ -744,6 +793,8 @@ final class WatchSessionCoordinator {
             entries: entries,
             cursor: cursor,
             sessionPlanKind: sessionPlanKind,
+            lifecycleState: lifecycleState,
+            usesLinkedWatchHealthSession: usesLinkedWatchHealthSession,
             sessionSourceLabels: sessionSourceLabels,
             sessionVersionStableID: sessionVersionStableID,
             capturedAt: capturedAt
@@ -753,10 +804,25 @@ final class WatchSessionCoordinator {
 
     func broadcastActiveSessionState(
         _ session: ActiveWorkoutSession,
+        includeLaunch: Bool = false,
         capturedAt: Date = Date()
     ) async {
-        let elapsedSeconds = Int(capturedAt.timeIntervalSince(session.startTime))
+        let elapsedSeconds = session.elapsedSeconds(at: capturedAt)
         let label = activeSessionLabel(for: session)
+        if includeLaunch {
+            await broadcastWorkoutLaunch(
+                workoutID: session.id,
+                startedAt: session.startTime,
+                programRunID: session.programContext?.programRunID,
+                programWeekNumber: session.programContext?.weekNumber,
+                programSessionNumber: session.programContext?.sessionNumber,
+                sessionPlanKind: session.sessionPlanKind,
+                lifecycleState: session.lifecycleState,
+                usesLinkedWatchHealthSession: session.usesLinkedWatchHealthSession,
+                sessionSourceLabels: session.sessionSourceLabels,
+                sessionVersionStableID: session.sessionVersionStableID
+            )
+        }
         await broadcastLiveWorkout(
             workoutID: session.id,
             elapsedSeconds: elapsedSeconds,
@@ -766,6 +832,8 @@ final class WatchSessionCoordinator {
             programWeekNumber: session.programContext?.weekNumber,
             programSessionNumber: session.programContext?.sessionNumber,
             sessionPlanKind: session.sessionPlanKind,
+            lifecycleState: session.lifecycleState,
+            usesLinkedWatchHealthSession: session.usesLinkedWatchHealthSession,
             sessionSourceLabels: session.sessionSourceLabels,
             sessionVersionStableID: session.sessionVersionStableID,
             capturedAt: capturedAt
@@ -774,6 +842,8 @@ final class WatchSessionCoordinator {
             workoutID: session.id,
             entries: session.exerciseEntries,
             sessionPlanKind: session.sessionPlanKind,
+            lifecycleState: session.lifecycleState,
+            usesLinkedWatchHealthSession: session.usesLinkedWatchHealthSession,
             sessionSourceLabels: session.sessionSourceLabels,
             sessionVersionStableID: session.sessionVersionStableID,
             capturedAt: capturedAt
@@ -818,6 +888,26 @@ final class WatchSessionCoordinator {
             return "Suggested workout"
         }
         return "Active workout"
+    }
+
+    private static func applyWatchHealthSummary(
+        _ payload: WatchWorkoutHealthSummaryPayload,
+        in modelContext: ModelContext
+    ) {
+        var descriptor = FetchDescriptor<Workout>(
+            predicate: #Predicate<Workout> { workout in
+                workout.id == payload.workoutID
+            }
+        )
+        descriptor.fetchLimit = 1
+        guard let workout = try? modelContext.fetch(descriptor).first else { return }
+        workout.healthKitWritebackIdentifier = payload.healthKitWorkoutUUID
+        workout.healthKitExportedAt = payload.exportedAt
+        if workout.caloriesBurned == nil,
+           let totalActiveEnergy = payload.totalActiveEnergyKilocalories {
+            workout.caloriesBurned = Int(totalActiveEnergy.rounded())
+        }
+        try? modelContext.save()
     }
 }
 

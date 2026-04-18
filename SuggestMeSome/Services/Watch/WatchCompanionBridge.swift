@@ -12,10 +12,14 @@ import WatchConnectivity
 #endif
 
 typealias WatchExecutionActionHandler = @MainActor (WatchWorkoutExecutionActionDTO) -> Void
+typealias WatchMetricsUpdateHandler = @MainActor (WatchWorkoutMetricsPayload) -> Void
+typealias WatchHealthSummaryHandler = @MainActor (WatchWorkoutHealthSummaryPayload) -> Void
 
 protocol WatchCompanionBridge {
     var latestStatus: WatchCompanionStatus { get }
     var executionActionHandler: WatchExecutionActionHandler? { get set }
+    var metricsUpdateHandler: WatchMetricsUpdateHandler? { get set }
+    var workoutHealthSummaryHandler: WatchHealthSummaryHandler? { get set }
     func refreshStatus() async -> WatchCompanionStatus
     func sendWorkoutLaunch(_ payload: WatchWorkoutLaunchPayload) async
     func sendWorkoutProgress(_ snapshot: WatchWorkoutProgressSnapshot) async
@@ -31,6 +35,8 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
 
     private(set) var latestStatus: WatchCompanionStatus
     var executionActionHandler: WatchExecutionActionHandler?
+    var metricsUpdateHandler: WatchMetricsUpdateHandler?
+    var workoutHealthSummaryHandler: WatchHealthSummaryHandler?
     private var watchEvidence = WatchCompanionEvidence()
     private var latestTodayPlanSnapshot: WatchTodayPlanSnapshot?
     private var latestWorkoutLaunchPayload: WatchWorkoutLaunchPayload?
@@ -513,6 +519,24 @@ private extension DefaultWatchCompanionBridge {
                 return
             }
             executionActionHandler?(action)
+
+        case .workoutMetrics:
+            guard let payload = try? WatchBridgeMessageCodec.decodePayload(
+                WatchWorkoutMetricsPayload.self,
+                from: message
+            ) else {
+                return
+            }
+            metricsUpdateHandler?(payload)
+
+        case .workoutHealthSummary:
+            guard let payload = try? WatchBridgeMessageCodec.decodePayload(
+                WatchWorkoutHealthSummaryPayload.self,
+                from: message
+            ) else {
+                return
+            }
+            workoutHealthSummaryHandler?(payload)
 
         case .workoutLaunch,
              .workoutProgress,

@@ -21,9 +21,13 @@ struct ActiveWorkoutSession: Identifiable, Codable, Equatable {
     var caloriesText: String
     var comments: String
     var programContext: ActiveWorkoutProgramContext?
+    var lifecycleState: WatchWorkoutLifecycleState
+    var accumulatedElapsedSeconds: Int
+    var stateChangedAt: Date
     var sessionPlanKind: WatchSessionPlanKind?
     var sessionSourceLabels: [String]?
     var sessionVersionStableID: String?
+    var usesLinkedWatchHealthSession: Bool
 
     init(
         id: UUID = UUID(),
@@ -32,9 +36,13 @@ struct ActiveWorkoutSession: Identifiable, Codable, Equatable {
         caloriesText: String = "",
         comments: String = "",
         programContext: ActiveWorkoutProgramContext? = nil,
+        lifecycleState: WatchWorkoutLifecycleState = .running,
+        accumulatedElapsedSeconds: Int = 0,
+        stateChangedAt: Date? = nil,
         sessionPlanKind: WatchSessionPlanKind? = nil,
         sessionSourceLabels: [String]? = nil,
-        sessionVersionStableID: String? = nil
+        sessionVersionStableID: String? = nil,
+        usesLinkedWatchHealthSession: Bool = false
     ) {
         self.id = id
         self.startTime = startTime
@@ -42,9 +50,76 @@ struct ActiveWorkoutSession: Identifiable, Codable, Equatable {
         self.caloriesText = caloriesText
         self.comments = comments
         self.programContext = programContext
+        self.lifecycleState = lifecycleState
+        self.accumulatedElapsedSeconds = max(0, accumulatedElapsedSeconds)
+        self.stateChangedAt = stateChangedAt ?? startTime
         self.sessionPlanKind = sessionPlanKind
         self.sessionSourceLabels = sessionSourceLabels
         self.sessionVersionStableID = sessionVersionStableID
+        self.usesLinkedWatchHealthSession = usesLinkedWatchHealthSession
+    }
+
+    func elapsedSeconds(at date: Date = .now) -> Int {
+        switch lifecycleState {
+        case .running:
+            return max(0, accumulatedElapsedSeconds + Int(date.timeIntervalSince(stateChangedAt)))
+        case .paused:
+            return max(0, accumulatedElapsedSeconds)
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case startTime
+        case exerciseEntries
+        case caloriesText
+        case comments
+        case programContext
+        case lifecycleState
+        case accumulatedElapsedSeconds
+        case stateChangedAt
+        case sessionPlanKind
+        case sessionSourceLabels
+        case sessionVersionStableID
+        case usesLinkedWatchHealthSession
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let startTime = try container.decode(Date.self, forKey: .startTime)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.startTime = startTime
+        self.exerciseEntries = try container.decodeIfPresent([DraftExerciseEntry].self, forKey: .exerciseEntries) ?? []
+        self.caloriesText = try container.decodeIfPresent(String.self, forKey: .caloriesText) ?? ""
+        self.comments = try container.decodeIfPresent(String.self, forKey: .comments) ?? ""
+        self.programContext = try container.decodeIfPresent(ActiveWorkoutProgramContext.self, forKey: .programContext)
+        self.lifecycleState = try container.decodeIfPresent(WatchWorkoutLifecycleState.self, forKey: .lifecycleState) ?? .running
+        self.accumulatedElapsedSeconds = max(
+            0,
+            try container.decodeIfPresent(Int.self, forKey: .accumulatedElapsedSeconds) ?? 0
+        )
+        self.stateChangedAt = try container.decodeIfPresent(Date.self, forKey: .stateChangedAt) ?? startTime
+        self.sessionPlanKind = try container.decodeIfPresent(WatchSessionPlanKind.self, forKey: .sessionPlanKind)
+        self.sessionSourceLabels = try container.decodeIfPresent([String].self, forKey: .sessionSourceLabels)
+        self.sessionVersionStableID = try container.decodeIfPresent(String.self, forKey: .sessionVersionStableID)
+        self.usesLinkedWatchHealthSession = try container.decodeIfPresent(Bool.self, forKey: .usesLinkedWatchHealthSession) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(startTime, forKey: .startTime)
+        try container.encode(exerciseEntries, forKey: .exerciseEntries)
+        try container.encode(caloriesText, forKey: .caloriesText)
+        try container.encode(comments, forKey: .comments)
+        try container.encodeIfPresent(programContext, forKey: .programContext)
+        try container.encode(lifecycleState, forKey: .lifecycleState)
+        try container.encode(accumulatedElapsedSeconds, forKey: .accumulatedElapsedSeconds)
+        try container.encode(stateChangedAt, forKey: .stateChangedAt)
+        try container.encodeIfPresent(sessionPlanKind, forKey: .sessionPlanKind)
+        try container.encodeIfPresent(sessionSourceLabels, forKey: .sessionSourceLabels)
+        try container.encodeIfPresent(sessionVersionStableID, forKey: .sessionVersionStableID)
+        try container.encode(usesLinkedWatchHealthSession, forKey: .usesLinkedWatchHealthSession)
     }
 }
 
@@ -53,6 +128,9 @@ struct ActiveWorkoutSession: Identifiable, Codable, Equatable {
 final class ActiveWorkoutSessionStore {
     private let persistenceStore: ActiveWorkoutSessionPersistenceStore
     private var appliedWatchActionIDs: Set<UUID> = []
+
+    var latestWatchMetrics: WatchWorkoutMetricsPayload?
+    var latestWatchHealthSummary: WatchWorkoutHealthSummaryPayload?
 
     var session: ActiveWorkoutSession? {
         didSet {
@@ -82,7 +160,8 @@ final class ActiveWorkoutSessionStore {
         programContext: ActiveWorkoutProgramContext? = nil,
         sessionPlanKind: WatchSessionPlanKind? = nil,
         sessionSourceLabels: [String]? = nil,
-        sessionVersionStableID: String? = nil
+        sessionVersionStableID: String? = nil,
+        usesLinkedWatchHealthSession: Bool = false
     ) {
         let metadata = resolvedWatchMetadata(
             workoutID: id,
@@ -96,10 +175,16 @@ final class ActiveWorkoutSessionStore {
             startTime: startTime,
             exerciseEntries: exerciseEntries,
             programContext: programContext,
+            lifecycleState: .running,
+            accumulatedElapsedSeconds: 0,
+            stateChangedAt: startTime,
             sessionPlanKind: metadata.kind,
             sessionSourceLabels: metadata.sourceLabels,
-            sessionVersionStableID: metadata.versionID
+            sessionVersionStableID: metadata.versionID,
+            usesLinkedWatchHealthSession: usesLinkedWatchHealthSession
         )
+        latestWatchMetrics = nil
+        latestWatchHealthSummary = nil
     }
 
     func updateSession(
@@ -128,6 +213,9 @@ final class ActiveWorkoutSessionStore {
                 caloriesText: caloriesText,
                 comments: comments,
                 programContext: programContext,
+                lifecycleState: .running,
+                accumulatedElapsedSeconds: 0,
+                stateChangedAt: startTime,
                 sessionPlanKind: metadata.kind,
                 sessionSourceLabels: metadata.sourceLabels,
                 sessionVersionStableID: metadata.versionID
@@ -154,9 +242,48 @@ final class ActiveWorkoutSessionStore {
         session = current
     }
 
+    func pauseSession(at date: Date = .now) {
+        guard var current = session, current.lifecycleState == .running else { return }
+        current.accumulatedElapsedSeconds = current.elapsedSeconds(at: date)
+        current.lifecycleState = .paused
+        current.stateChangedAt = date
+        session = current
+    }
+
+    func resumeSession(at date: Date = .now) {
+        guard var current = session, current.lifecycleState == .paused else { return }
+        current.lifecycleState = .running
+        current.stateChangedAt = date
+        session = current
+    }
+
+    func markLinkedWatchHealthSessionActive(_ isActive: Bool, for workoutID: UUID) {
+        guard var current = session, current.id == workoutID else { return }
+        current.usesLinkedWatchHealthSession = isActive
+        session = current
+    }
+
+    func updateLatestWatchMetrics(_ payload: WatchWorkoutMetricsPayload) {
+        guard let current = session, current.id == payload.workoutID else { return }
+        latestWatchMetrics = payload
+        markLinkedWatchHealthSessionActive(payload.isLinkedHealthSessionActive, for: payload.workoutID)
+    }
+
+    func updateLatestWatchHealthSummary(_ payload: WatchWorkoutHealthSummaryPayload) {
+        guard let current = session, current.id == payload.workoutID else { return }
+        latestWatchHealthSummary = payload
+        markLinkedWatchHealthSessionActive(true, for: payload.workoutID)
+    }
+
+    func resolvedElapsedSeconds(at date: Date = .now) -> Int {
+        session?.elapsedSeconds(at: date) ?? 0
+    }
+
     func discardSession() {
         session = nil
         appliedWatchActionIDs.removeAll()
+        latestWatchMetrics = nil
+        latestWatchHealthSummary = nil
     }
 
     @discardableResult

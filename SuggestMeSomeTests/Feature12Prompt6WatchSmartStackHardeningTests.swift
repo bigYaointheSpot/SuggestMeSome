@@ -142,7 +142,7 @@ struct Feature12Prompt6WatchSmartStackHardeningTests {
         )
     }
 
-    @Test func currentSetPresentationPolicyIgnoresSameSetRefreshesAndAcceptsAdvance() {
+    @Test func currentSetPresentationPolicyAcceptsSameSetTargetRefreshesAndAdvance() {
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         let current = makeCurrentContext(capturedAt: now, versionID: "run-1::w1s1::planned")
         var sameSetRefresh = current
@@ -159,7 +159,7 @@ struct Feature12Prompt6WatchSmartStackHardeningTests {
             WatchCurrentSetPresentationPolicy.shouldReplaceDisplayedContext(
                 existing: current,
                 incoming: sameSetRefresh
-            ) == false
+            )
         )
         #expect(
             WatchCurrentSetPresentationPolicy.shouldReplaceDisplayedContext(
@@ -185,7 +185,8 @@ struct Feature12Prompt6WatchSmartStackHardeningTests {
 
         #expect(optimistic.currentSetNumber == 2)
         #expect(optimistic.loggedSetsInExercise == 1)
-        #expect(optimistic.nextPrescribedWeight == nil)
+        #expect(optimistic.nextPrescribedWeight == 185)
+        #expect(optimistic.currentSetCompletedWeight == nil)
         #expect(
             WatchCurrentSetPresentationPolicy.shouldReplaceDisplayedContext(
                 existing: optimistic,

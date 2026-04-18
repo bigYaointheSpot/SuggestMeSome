@@ -16,14 +16,43 @@ struct WorkoutSaveProgramContext {
 }
 
 struct WorkoutSaveRequest {
+    let workoutID: UUID?
     let startTime: Date
     let endTime: Date
+    let durationSeconds: Int?
     let caloriesText: String
     let comments: String
     let exerciseEntries: [DraftExerciseEntry]
     let programContext: WorkoutSaveProgramContext?
     let healthKitEnabled: Bool
     let healthKitWritebackEnabled: Bool
+    let skipHealthKitWriteback: Bool
+
+    init(
+        workoutID: UUID? = nil,
+        startTime: Date,
+        endTime: Date,
+        durationSeconds: Int? = nil,
+        caloriesText: String,
+        comments: String,
+        exerciseEntries: [DraftExerciseEntry],
+        programContext: WorkoutSaveProgramContext?,
+        healthKitEnabled: Bool,
+        healthKitWritebackEnabled: Bool,
+        skipHealthKitWriteback: Bool = false
+    ) {
+        self.workoutID = workoutID
+        self.startTime = startTime
+        self.endTime = endTime
+        self.durationSeconds = durationSeconds
+        self.caloriesText = caloriesText
+        self.comments = comments
+        self.exerciseEntries = exerciseEntries
+        self.programContext = programContext
+        self.healthKitEnabled = healthKitEnabled
+        self.healthKitWritebackEnabled = healthKitWritebackEnabled
+        self.skipHealthKitWriteback = skipHealthKitWriteback
+    }
 }
 
 enum WorkoutSaveTransactionStatus: Equatable {
@@ -175,9 +204,10 @@ final class WorkoutSaveCoordinator {
 
     private func buildWorkout(using request: WorkoutSaveRequest) -> Workout {
         let workout = Workout(
+            id: request.workoutID ?? UUID(),
             date: request.endTime,
             startTime: request.startTime,
-            durationSeconds: Int(request.endTime.timeIntervalSince(request.startTime)),
+            durationSeconds: request.durationSeconds ?? Int(request.endTime.timeIntervalSince(request.startTime)),
             caloriesBurned: Int(request.caloriesText),
             comments: request.comments.isEmpty ? nil : request.comments,
             programRun: request.programContext?.run,
@@ -273,7 +303,13 @@ final class WorkoutSaveCoordinator {
         for workout: Workout,
         request: WorkoutSaveRequest
     ) -> WorkoutSaveSideEffectReport {
-        writebackCoordinator.scheduleNonFatalWritebackIfEligible(
+        if request.skipHealthKitWriteback {
+            return .skipped(
+                .healthKitWriteback,
+                "Linked Apple Watch HealthKit workout will stamp this workout instead of iPhone summary writeback."
+            )
+        }
+        return writebackCoordinator.scheduleNonFatalWritebackIfEligible(
             for: workout,
             healthKitEnabled: request.healthKitEnabled,
             writebackEnabled: request.healthKitWritebackEnabled,

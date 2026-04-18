@@ -22,6 +22,8 @@ struct WatchActiveWorkoutView: View {
     let liveWorkout: WatchLiveWorkoutSnapshot?
     let progressSnapshot: WatchWorkoutProgressSnapshot?
     let currentContext: WatchCurrentSessionContext?
+    let watchMetrics: WatchWorkoutMetricsPayload?
+    let isLinkedHealthSessionActive: Bool
     let sessionStatus: WatchCompanionSessionStatus
     var onExecutionAction: (WatchWorkoutExecutionActionDTO) -> Void = { _ in }
 
@@ -66,7 +68,7 @@ struct WatchActiveWorkoutView: View {
             synchronizeDisplayedContext()
         }
         .onChange(of: restTimerSessionIdentity) { oldIdentity, newIdentity in
-            guard restTimer.isRunning else { return }
+            guard restTimer.isRunning || restTimer.isPaused else { return }
             guard oldIdentity != newIdentity else { return }
             if oldIdentity != nil {
                 restTimer.stop()
@@ -79,6 +81,18 @@ struct WatchActiveWorkoutView: View {
                 } else if selectedTab == .rest {
                     selectedTab = .currentSet
                 }
+            }
+        }
+        .onChange(of: activeLifecycleState) { _, state in
+            switch state {
+            case .paused:
+                restTimer.pause()
+            case .running:
+                if restTimer.isPaused {
+                    restTimer.resume()
+                }
+            case .none:
+                break
             }
         }
     }
@@ -147,6 +161,8 @@ struct WatchActiveWorkoutView: View {
 
                 if isAwaitingPhoneCommitForCurrentSet {
                     syncingCurrentSetPanel(context)
+                } else if context.lifecycleState == .paused {
+                    pausedCurrentSetPanel(context)
                 } else if context.isCardio {
                     cardioTarget(context)
                 } else {
@@ -175,6 +191,13 @@ struct WatchActiveWorkoutView: View {
                         onSkip: { restTimer.skip() }
                     )
                     .watchCard(emphasized: true, tint: WatchPalette.positive)
+                } else if restTimer.isPaused {
+                    WatchRestTimerPanel(
+                        timer: restTimer,
+                        nextSetHint: nextSetHint(for: context),
+                        onSkip: { restTimer.skip() }
+                    )
+                    .watchCard(emphasized: true, tint: WatchPalette.positive)
                 } else {
                     restIdleCard(context)
                 }
@@ -188,13 +211,13 @@ struct WatchActiveWorkoutView: View {
 
     private var restBackgroundGradient: some View {
         LinearGradient(
-            colors: restTimer.isRunning
+            colors: (restTimer.isRunning || restTimer.isPaused)
                 ? [WatchPalette.positive.opacity(0.24), .clear]
                 : [.clear, .clear],
             startPoint: .top,
             endPoint: .bottom
         )
-        .animation(.easeInOut(duration: 0.3), value: restTimer.isRunning)
+        .animation(.easeInOut(duration: 0.3), value: restTimer.isRunning || restTimer.isPaused)
         .ignoresSafeArea()
     }
 
@@ -241,6 +264,11 @@ struct WatchActiveWorkoutView: View {
                 .font(.headline)
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)
+            if activeLifecycleState == .paused {
+                Label("Paused", systemImage: "pause.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.orange)
+            }
         }
         .padding(.horizontal, 2)
     }
@@ -256,7 +284,12 @@ struct WatchActiveWorkoutView: View {
 
         return VStack(alignment: .leading, spacing: 6) {
             TimelineView(.periodic(from: .now, by: 1)) { timelineContext in
-                let ticked = liveTickedElapsed(base: baseElapsed, capturedAt: capturedAt, now: timelineContext.date)
+                let ticked = liveTickedElapsed(
+                    base: baseElapsed,
+                    capturedAt: capturedAt,
+                    now: timelineContext.date,
+                    lifecycleState: activeLifecycleState
+                )
                 HStack(alignment: .firstTextBaseline) {
                     Text(WatchDurationFormatter.format(ticked))
                         .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
@@ -276,12 +309,31 @@ struct WatchActiveWorkoutView: View {
             Text("\(completed) of \(total) exercises done")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+            if let watchMetrics {
+                HStack(spacing: 10) {
+                    if let heartRate = watchMetrics.heartRateBPM {
+                        Label("\(Int(heartRate.rounded()))", systemImage: "heart.fill")
+                            .foregroundStyle(.red)
+                    }
+                    if let activeEnergy = watchMetrics.activeEnergyKilocalories {
+                        Label("\(Int(activeEnergy.rounded())) kcal", systemImage: "flame.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .font(.caption2.weight(.semibold))
+            }
         }
         .watchCard(emphasized: true)
     }
 
-    private func liveTickedElapsed(base: Int, capturedAt: Date?, now: Date) -> Int {
+    private func liveTickedElapsed(
+        base: Int,
+        capturedAt: Date?,
+        now: Date,
+        lifecycleState: WatchWorkoutLifecycleState?
+    ) -> Int {
         guard let capturedAt else { return base }
+        guard lifecycleState != .paused else { return base }
         let drift = max(0, now.timeIntervalSince(capturedAt))
         return base + Int(drift.rounded())
     }
@@ -349,6 +401,37 @@ struct WatchActiveWorkoutView: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func pausedCurrentSetPanel(_ context: WatchCurrentSessionContext) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "pause.circle.fill")
+                    .font(.caption.weight(.semibold))
+                Text("Paused")
+                    .font(.caption2.weight(.semibold))
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+            }
+            .foregroundStyle(.orange)
+
+            Text(setProgressSummary(for: context))
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+
+            if let summary = context.currentSetTargetSummary, !summary.isEmpty {
+                Text(summary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+
+            Text("Resume the workout on iPhone to keep logging sets here.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(4)
+        }
+        .watchCard()
+    }
+
     private func cardioTarget(_ context: WatchCurrentSessionContext) -> some View {
         let targetText = context.cardioTargetSeconds.map { WatchDurationFormatter.format($0) } ?? "Open on iPhone"
         return VStack(alignment: .leading, spacing: 4) {
@@ -396,6 +479,10 @@ struct WatchActiveWorkoutView: View {
 
     private var currentSetSignature: String {
         WatchCurrentSetPresentationPolicy.setSignature(for: activeContext) ?? "nil"
+    }
+
+    private var activeLifecycleState: WatchWorkoutLifecycleState? {
+        activeContext?.lifecycleState ?? liveWorkout?.lifecycleState ?? currentContext?.lifecycleState
     }
 
     private var restTimerSessionIdentity: String? {
@@ -460,7 +547,10 @@ struct WatchActiveWorkoutView: View {
         }
         onExecutionAction(action)
         if action.actionKind == .completeCurrentSet {
-            restTimer.start(duration: WatchRestTimerDefaults.strengthSeconds)
+            restTimer.start(
+                duration: WatchRestTimerDefaults.strengthSeconds,
+                allowsBackgroundNotificationFallback: !isLinkedHealthSessionActive
+            )
         }
     }
 
@@ -712,8 +802,8 @@ struct WatchCrownSetLoggingControls: View {
     ) {
         self.context = context
         self.onExecutionAction = onExecutionAction
-        let initialReps = context.currentSetCompletedReps ?? context.nextPrescribedReps ?? 0
-        let initialWeight = context.currentSetCompletedWeight ?? context.nextPrescribedWeight ?? 0
+        let initialReps = context.nextPrescribedReps ?? context.currentSetCompletedReps ?? 0
+        let initialWeight = context.nextPrescribedWeight ?? context.currentSetCompletedWeight ?? 0
         _repsValue = State(initialValue: Double(initialReps))
         _weightValue = State(initialValue: initialWeight)
     }
@@ -849,6 +939,8 @@ struct WatchCrownSetLoggingControls: View {
         liveWorkout: WatchPreviewFixtures.activeLiveWorkout,
         progressSnapshot: WatchPreviewFixtures.activeProgressSnapshot,
         currentContext: WatchPreviewFixtures.activeCurrentContext,
+        watchMetrics: WatchPreviewFixtures.activeWatchMetrics,
+        isLinkedHealthSessionActive: true,
         sessionStatus: WatchPreviewFixtures.reachableStatus
     )
 }
@@ -858,6 +950,8 @@ struct WatchCrownSetLoggingControls: View {
         liveWorkout: WatchPreviewFixtures.activeLiveWorkout,
         progressSnapshot: WatchPreviewFixtures.activeProgressSnapshot,
         currentContext: WatchPreviewFixtures.cardioCurrentContext,
+        watchMetrics: WatchPreviewFixtures.activeWatchMetrics,
+        isLinkedHealthSessionActive: true,
         sessionStatus: WatchPreviewFixtures.reachableStatus
     )
 }
@@ -867,6 +961,8 @@ struct WatchCrownSetLoggingControls: View {
         liveWorkout: WatchPreviewFixtures.adjustedLiveWorkout,
         progressSnapshot: WatchPreviewFixtures.activeProgressSnapshot,
         currentContext: WatchPreviewFixtures.adjustedCurrentContext,
+        watchMetrics: WatchPreviewFixtures.activeWatchMetrics,
+        isLinkedHealthSessionActive: true,
         sessionStatus: WatchPreviewFixtures.reachableStatus
     )
 }
@@ -876,6 +972,8 @@ struct WatchCrownSetLoggingControls: View {
         liveWorkout: WatchPreviewFixtures.activeLiveWorkout,
         progressSnapshot: WatchPreviewFixtures.activeProgressSnapshot,
         currentContext: nil,
+        watchMetrics: WatchPreviewFixtures.activeWatchMetrics,
+        isLinkedHealthSessionActive: true,
         sessionStatus: WatchPreviewFixtures.reachableStatus
     )
 }
@@ -885,6 +983,8 @@ struct WatchCrownSetLoggingControls: View {
         liveWorkout: WatchPreviewFixtures.activeLiveWorkout,
         progressSnapshot: WatchPreviewFixtures.activeProgressSnapshot,
         currentContext: WatchPreviewFixtures.activeCurrentContext,
+        watchMetrics: WatchPreviewFixtures.activeWatchMetrics,
+        isLinkedHealthSessionActive: false,
         sessionStatus: WatchPreviewFixtures.idleStatus
     )
 }

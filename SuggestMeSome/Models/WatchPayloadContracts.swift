@@ -24,7 +24,8 @@ import Foundation
 
 enum WatchPayloadContractVersion {
     static let v1 = 1
-    static let current = v1
+    static let v2 = 2
+    static let current = v2
 }
 
 // MARK: - Payload Kind
@@ -40,6 +41,8 @@ enum WatchPayloadKind: String, Codable {
     case sessionCompletion
     case workoutExecutionAction
     case watchPresenceHeartbeat
+    case workoutMetrics
+    case workoutHealthSummary
 }
 
 // MARK: - Execution Interaction Types
@@ -57,6 +60,13 @@ enum WatchSessionPlanKind: String, Codable, Equatable {
     case planned
     case overlayAdjusted
     case runtimeAdjusted
+}
+
+/// Shared running / paused state carried across iPhone, watch UI, and the
+/// linked watch-side HealthKit workout session.
+enum WatchWorkoutLifecycleState: String, Codable, Equatable {
+    case running
+    case paused
 }
 
 /// Narrow, watch-originated live workout controls. These are intentionally
@@ -187,6 +197,8 @@ struct WatchCurrentSessionContext: Codable, Equatable {
     var quickCompleteEnabled: Bool? = nil
     var preferredInteractionModel: WatchExecutionInteractionModel? = nil
     var sessionPlanKind: WatchSessionPlanKind? = nil
+    var lifecycleState: WatchWorkoutLifecycleState? = nil
+    var usesLinkedWatchHealthSession: Bool? = nil
     /// Flat, ordered list of active source labels (e.g. "Manual Check-In",
     /// "Program", "Adaptive Overlay") so watch rendering can surface source
     /// provenance without re-deriving attribution.
@@ -233,6 +245,26 @@ enum WatchCurrentSetPresentationPolicy {
         return context.currentSetNumber ?? context.nextSetNumber ?? (context.totalSetsInExercise + 1)
     }
 
+    private static func targetSignature(for context: WatchCurrentSessionContext) -> String {
+        let reps = context.nextPrescribedReps.map(String.init) ?? "nil"
+        let weight: String
+        if let weightValue = context.nextPrescribedWeight {
+            if weightValue.truncatingRemainder(dividingBy: 1) == 0 {
+                weight = String(Int(weightValue))
+            } else {
+                weight = String(format: "%.1f", weightValue)
+            }
+        } else {
+            weight = "nil"
+        }
+        return [
+            reps,
+            weight,
+            context.nextPrescribedWeightUnit ?? "nil",
+            context.currentSetTargetSummary ?? "nil"
+        ].joined(separator: "|")
+    }
+
     private static func compareProgress(
         _ lhs: WatchCurrentSessionContext,
         _ rhs: WatchCurrentSessionContext
@@ -256,7 +288,13 @@ enum WatchCurrentSetPresentationPolicy {
     static func setSignature(for context: WatchCurrentSessionContext?) -> String? {
         guard let context, !context.isCardio else { return nil }
         let setNumber = context.currentSetNumber ?? context.nextSetNumber ?? -1
-        return "\(context.exerciseIndex)-\(setNumber)-\(context.loggedSetsInExercise)"
+        return [
+            "\(context.exerciseIndex)",
+            "\(setNumber)",
+            "\(context.loggedSetsInExercise)",
+            targetSignature(for: context),
+            context.lifecycleState?.rawValue ?? "running"
+        ].joined(separator: "-")
     }
 
     static func shouldReplaceDisplayedContext(
@@ -276,7 +314,18 @@ enum WatchCurrentSetPresentationPolicy {
             return incoming.exerciseIndex > existing.exerciseIndex
         }
 
-        return setOrdinal(for: incoming) > setOrdinal(for: existing)
+        let existingOrdinal = setOrdinal(for: existing)
+        let incomingOrdinal = setOrdinal(for: incoming)
+        if existingOrdinal == incomingOrdinal {
+            if targetSignature(for: existing) != targetSignature(for: incoming) {
+                return incoming.capturedAt >= existing.capturedAt
+            }
+            if existing.lifecycleState != incoming.lifecycleState {
+                return incoming.capturedAt >= existing.capturedAt
+            }
+        }
+
+        return incomingOrdinal > existingOrdinal
     }
 
     static func isAheadOfPhone(
@@ -389,11 +438,15 @@ enum WatchCurrentSetPresentationPolicy {
         updated.loggedSetsInExercise = min(context.totalSetsInExercise, context.loggedSetsInExercise + 1)
         updated.currentSetNumber = nextSetNumber
         updated.nextSetNumber = nextSetNumber
-        updated.nextPrescribedReps = nil
-        updated.nextPrescribedWeight = nil
-        updated.currentSetTargetSummary = nil
-        updated.currentSetCompletedReps = completedReps ?? context.currentSetCompletedReps ?? context.nextPrescribedReps
-        updated.currentSetCompletedWeight = completedWeight ?? context.currentSetCompletedWeight ?? context.nextPrescribedWeight
+        // Preserve the next prescribed target until the phone confirms the new
+        // set-specific prescription. This avoids falling back to the just
+        // completed set's values as the optimistic default on watch.
+        updated.nextPrescribedReps = context.nextPrescribedReps
+        updated.nextPrescribedWeight = context.nextPrescribedWeight
+        updated.nextPrescribedWeightUnit = context.nextPrescribedWeightUnit
+        updated.currentSetTargetSummary = context.currentSetTargetSummary
+        updated.currentSetCompletedReps = nil
+        updated.currentSetCompletedWeight = nil
         updated.capturedAt = capturedAt
         return updated
     }
@@ -418,9 +471,36 @@ struct WatchLiveWorkoutSnapshot: Codable, Equatable {
     var programWeekNumber: Int?
     var programSessionNumber: Int?
     var sessionPlanKind: WatchSessionPlanKind? = nil
+    var lifecycleState: WatchWorkoutLifecycleState? = nil
+    var usesLinkedWatchHealthSession: Bool? = nil
     var sessionSourceLabels: [String]? = nil
     var sessionVersionStableID: String? = nil
     var capturedAt: Date
+}
+
+/// Live watch-side HealthKit workout metrics mirrored back to the phone so the
+/// iPhone workout screen can surface wrist-derived heart rate and active
+/// energy while a session is active.
+struct WatchWorkoutMetricsPayload: Codable, Equatable {
+    var workoutID: UUID
+    var sessionVersionStableID: String?
+    var lifecycleState: WatchWorkoutLifecycleState
+    var isLinkedHealthSessionActive: Bool
+    var heartRateBPM: Double?
+    var activeEnergyKilocalories: Double?
+    var capturedAt: Date
+}
+
+/// Terminal watch-side HealthKit summary returned after the linked workout
+/// finishes on Apple Watch. Used by iPhone to avoid duplicate summary
+/// writeback and to stamp the persisted workout with the HealthKit UUID.
+struct WatchWorkoutHealthSummaryPayload: Codable, Equatable {
+    var workoutID: UUID
+    var sessionVersionStableID: String?
+    var healthKitWorkoutUUID: String
+    var exportedAt: Date
+    var totalActiveEnergyKilocalories: Double?
+    var finalHeartRateBPM: Double?
 }
 
 // MARK: - Session Completion Handoff

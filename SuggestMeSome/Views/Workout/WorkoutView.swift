@@ -31,6 +31,7 @@ struct WorkoutView: View {
     @State private var isActive = false
     @State private var startTime: Date?
     @State private var elapsedSeconds: Int = 0
+    @State private var lifecycleState: WatchWorkoutLifecycleState = .running
 
     // Workout data
     @State private var exerciseEntries: [DraftExerciseEntry] = []
@@ -74,8 +75,13 @@ struct WorkoutView: View {
         .navigationTitle("Log Workout")
         .navigationBarTitleDisplayMode(.inline)
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            guard isActive, let start = startTime else { return }
-            elapsedSeconds = Int(Date.now.timeIntervalSince(start))
+            guard isActive else { return }
+            guard lifecycleState == .running else { return }
+            if let session = activeWorkoutSessionStore.session {
+                elapsedSeconds = session.elapsedSeconds(at: .now)
+            } else if let start = startTime {
+                elapsedSeconds = Int(Date.now.timeIntervalSince(start))
+            }
         }
         .sheet(isPresented: $showingExercisePicker) {
             ExercisePickerSheet(muscleGroups: muscleGroups) { name, isCardio, setCount in
@@ -109,12 +115,14 @@ struct WorkoutView: View {
         .onAppear {
             configureWorkoutSession()
         }
-        .onChange(of: isActive) { persistActiveSessionIfNeeded() }
-        .onChange(of: startTime) { persistActiveSessionIfNeeded() }
-        .onChange(of: exerciseEntries) { persistActiveSessionIfNeeded() }
-        .onChange(of: caloriesText) { persistActiveSessionIfNeeded() }
-        .onChange(of: comments) { persistActiveSessionIfNeeded() }
-        .onChange(of: activeWorkoutSessionStore.session) { syncWithActiveSessionIfNeeded($0) }
+        .onChange(of: isActive) { _, _ in persistActiveSessionIfNeeded() }
+        .onChange(of: startTime) { _, _ in persistActiveSessionIfNeeded() }
+        .onChange(of: exerciseEntries) { _, _ in persistActiveSessionIfNeeded() }
+        .onChange(of: caloriesText) { _, _ in persistActiveSessionIfNeeded() }
+        .onChange(of: comments) { _, _ in persistActiveSessionIfNeeded() }
+        .onChange(of: activeWorkoutSessionStore.session) { _, newSession in
+            syncWithActiveSessionIfNeeded(newSession)
+        }
     }
 
     // MARK: - Sub-views
@@ -133,12 +141,40 @@ struct WorkoutView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
 
             if isActive {
+                if lifecycleState == .paused {
+                    Label("Workout Paused", systemImage: "pause.circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.orange)
+                } else if activeWorkoutSessionStore.session?.usesLinkedWatchHealthSession == true,
+                          let metrics = activeWorkoutSessionStore.latestWatchMetrics {
+                    HStack(spacing: 16) {
+                        if let heartRate = metrics.heartRateBPM {
+                            Label("\(Int(heartRate.rounded())) bpm", systemImage: "heart.fill")
+                                .foregroundStyle(.red)
+                        }
+                        if let activeEnergy = metrics.activeEnergyKilocalories {
+                            Label("\(Int(activeEnergy.rounded())) kcal", systemImage: "flame.fill")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .font(.subheadline.weight(.medium))
+                }
+            }
+
+            if isActive {
                 Button {
-                    showingEndConfirmation = true
+                    if lifecycleState == .paused {
+                        resumeWorkout()
+                    } else {
+                        pauseWorkout()
+                    }
                 } label: {
-                    Label("End Workout", systemImage: "stop.circle.fill")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.red)
+                    Label(
+                        lifecycleState == .paused ? "Resume Workout" : "Pause Workout",
+                        systemImage: lifecycleState == .paused ? "play.circle.fill" : "pause.circle.fill"
+                    )
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(lifecycleState == .paused ? .green : .orange)
                 }
             } else {
                 Button {
@@ -250,7 +286,7 @@ struct WorkoutView: View {
     private func configureWorkoutSession() {
         if let activeSession = activeWorkoutSessionStore.session {
             applyActiveSession(activeSession)
-            broadcastActiveSessionToWatch()
+            broadcastActiveSessionToWatch(includeLaunch: true)
             return
         }
 
@@ -276,8 +312,12 @@ struct WorkoutView: View {
         let workoutID = programWorkout?.workoutID ?? UUID()
         let sourceLabels = watchSourceLabels()
         let sessionVersionStableID = watchSessionVersionStableID(workoutID: workoutID)
+        let usesLinkedWatchHealthSession = WatchSessionCoordinator.shared.shouldUseLinkedWatchHealthSession(
+            healthKitEnabled: healthKitEnabled && purchaseManager.isPremiumUnlocked
+        )
         startTime = now
         elapsedSeconds = 0
+        lifecycleState = .running
         exerciseEntries = entries
         caloriesText = ""
         comments = ""
@@ -289,17 +329,19 @@ struct WorkoutView: View {
             programContext: programContext,
             sessionPlanKind: programWorkout?.watchSessionPlanKind ?? (programContext == nil ? nil : .planned),
             sessionSourceLabels: sourceLabels,
-            sessionVersionStableID: sessionVersionStableID
+            sessionVersionStableID: sessionVersionStableID,
+            usesLinkedWatchHealthSession: usesLinkedWatchHealthSession
         )
-        broadcastActiveSessionToWatch()
+        broadcastActiveSessionToWatch(includeLaunch: true)
     }
 
     private func applyActiveSession(_ session: ActiveWorkoutSession) {
         startTime = session.startTime
-        elapsedSeconds = max(0, Int(Date.now.timeIntervalSince(session.startTime)))
+        elapsedSeconds = session.elapsedSeconds(at: .now)
         exerciseEntries = session.exerciseEntries
         caloriesText = session.caloriesText
         comments = session.comments
+        lifecycleState = session.lifecycleState
         isActive = true
     }
 
@@ -327,17 +369,39 @@ struct WorkoutView: View {
         if startTime == session.startTime,
            exerciseEntries == session.exerciseEntries,
            caloriesText == session.caloriesText,
-           comments == session.comments {
+           comments == session.comments,
+           lifecycleState == session.lifecycleState {
             return
         }
         applyActiveSession(session)
     }
 
-    private func broadcastActiveSessionToWatch() {
+    private func broadcastActiveSessionToWatch(includeLaunch: Bool = false) {
         guard let session = activeWorkoutSessionStore.session else { return }
         Task { @MainActor in
-            await WatchSessionCoordinator.shared.broadcastActiveSessionState(session)
+            await WatchSessionCoordinator.shared.broadcastActiveSessionState(
+                session,
+                includeLaunch: includeLaunch
+            )
         }
+    }
+
+    private func pauseWorkout() {
+        guard isActive else { return }
+        let now = Date.now
+        activeWorkoutSessionStore.pauseSession(at: now)
+        lifecycleState = .paused
+        elapsedSeconds = activeWorkoutSessionStore.resolvedElapsedSeconds(at: now)
+        broadcastActiveSessionToWatch()
+    }
+
+    private func resumeWorkout() {
+        guard isActive else { return }
+        let now = Date.now
+        activeWorkoutSessionStore.resumeSession(at: now)
+        lifecycleState = .running
+        elapsedSeconds = activeWorkoutSessionStore.resolvedElapsedSeconds(at: now)
+        broadcastActiveSessionToWatch()
     }
 
     private func activeProgramContext(from programWorkout: ProgramWorkoutContext?) -> ActiveWorkoutProgramContext? {
@@ -469,23 +533,33 @@ struct WorkoutView: View {
 
     private func saveWorkout() {
         guard isActive, let start = startTime else { return }
+        let endTime = Date.now
         let saveProgramContext = workoutSaveProgramContext()
         let runForSave = saveProgramContext?.run
         let wasAlreadyComplete = runForSave?.isCompleted ?? false
         let activeSessionForCompletion = activeWorkoutSessionStore.session
         let coordinator = WorkoutSaveCoordinator(modelContext: modelContext)
+        let resolvedDurationSeconds = activeWorkoutSessionStore.resolvedElapsedSeconds(at: endTime)
+        let resolvedCaloriesText = resolvedCaloriesTextForSave()
+        let skipHealthKitWriteback = activeSessionForCompletion?.usesLinkedWatchHealthSession == true
         let request = WorkoutSaveRequest(
+            workoutID: activeSessionForCompletion?.id,
             startTime: start,
-            endTime: Date.now,
-            caloriesText: caloriesText,
+            endTime: endTime,
+            durationSeconds: resolvedDurationSeconds,
+            caloriesText: resolvedCaloriesText,
             comments: comments,
             exerciseEntries: exerciseEntries,
             programContext: saveProgramContext,
             healthKitEnabled: healthKitEnabled && purchaseManager.isPremiumUnlocked,
-            healthKitWritebackEnabled: writeAppWorkoutsToHealthKit && purchaseManager.isPremiumUnlocked
+            healthKitWritebackEnabled: writeAppWorkoutsToHealthKit && purchaseManager.isPremiumUnlocked,
+            skipHealthKitWriteback: skipHealthKitWriteback
         )
         let savedWorkout = coordinator.saveWorkout(using: request)
-        let prCount = savedWorkout.exerciseEntries.flatMap(\.sets).filter(\.isPR).count
+        let prCount = savedWorkout.exerciseEntries
+            .flatMap { $0.sets }
+            .filter { $0.isPR }
+            .count
         let didCompleteBlock = !wasAlreadyComplete && (runForSave?.isCompleted ?? false)
         blockJustCompleted = didCompleteBlock
         pendingBlockReviewSnapshot = didCompleteBlock ? mesocycleReviewSnapshot(for: runForSave) : nil
@@ -496,6 +570,7 @@ struct WorkoutView: View {
         )
         activeWorkoutSessionStore.discardSession()
         isActive = false
+        lifecycleState = .running
 
         if prCount > 0 {
             newPRCount = prCount
@@ -546,6 +621,20 @@ struct WorkoutView: View {
             return "Suggested workout"
         }
         return "Workout"
+    }
+
+    private func resolvedCaloriesTextForSave() -> String {
+        let trimmed = caloriesText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        if let activeEnergy = activeWorkoutSessionStore.latestWatchMetrics?.activeEnergyKilocalories {
+            return "\(Int(activeEnergy.rounded()))"
+        }
+        if let activeEnergy = activeWorkoutSessionStore.latestWatchHealthSummary?.totalActiveEnergyKilocalories {
+            return "\(Int(activeEnergy.rounded()))"
+        }
+        return caloriesText
     }
 
     private func dismissCelebration() {

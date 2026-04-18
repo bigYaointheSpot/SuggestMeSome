@@ -125,6 +125,8 @@ enum WatchPreviewFixtures {
         programWeekNumber: 3,
         programSessionNumber: 2,
         sessionPlanKind: .planned,
+        lifecycleState: .running,
+        usesLinkedWatchHealthSession: true,
         sessionSourceLabels: ["Program", "Check-In"],
         sessionVersionStableID: "preview-session-version",
         capturedAt: referenceDate
@@ -159,6 +161,8 @@ enum WatchPreviewFixtures {
         quickCompleteEnabled: true,
         preferredInteractionModel: .digitalCrownFirst,
         sessionPlanKind: .planned,
+        lifecycleState: .running,
+        usesLinkedWatchHealthSession: true,
         sessionSourceLabels: ["Program", "Check-In"],
         sessionVersionStableID: "preview-session-version",
         capturedAt: referenceDate
@@ -185,6 +189,8 @@ enum WatchPreviewFixtures {
         quickCompleteEnabled: nil,
         preferredInteractionModel: nil,
         sessionPlanKind: .planned,
+        lifecycleState: .running,
+        usesLinkedWatchHealthSession: true,
         sessionSourceLabels: ["Program"],
         sessionVersionStableID: "preview-session-version-cardio",
         capturedAt: referenceDate
@@ -203,6 +209,8 @@ enum WatchPreviewFixtures {
         programWeekNumber: 3,
         programSessionNumber: 3,
         sessionPlanKind: .runtimeAdjusted,
+        lifecycleState: .running,
+        usesLinkedWatchHealthSession: true,
         sessionSourceLabels: ["Program", "Daily Coach"],
         sessionVersionStableID: "preview-session-adjusted",
         capturedAt: referenceDate
@@ -229,8 +237,20 @@ enum WatchPreviewFixtures {
         quickCompleteEnabled: true,
         preferredInteractionModel: .digitalCrownFirst,
         sessionPlanKind: .runtimeAdjusted,
+        lifecycleState: .running,
+        usesLinkedWatchHealthSession: true,
         sessionSourceLabels: ["Program", "Daily Coach"],
         sessionVersionStableID: "preview-session-adjusted",
+        capturedAt: referenceDate
+    )
+
+    static let activeWatchMetrics = WatchWorkoutMetricsPayload(
+        workoutID: UUID(uuidString: "11111111-2222-3333-4444-555555555555") ?? UUID(),
+        sessionVersionStableID: "preview-session-version",
+        lifecycleState: .running,
+        isLinkedHealthSessionActive: true,
+        heartRateBPM: 132,
+        activeEnergyKilocalories: 214,
         capturedAt: referenceDate
     )
 

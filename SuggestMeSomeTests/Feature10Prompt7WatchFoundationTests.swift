@@ -96,7 +96,7 @@ struct Feature10Prompt7WatchFoundationTests {
         decoder.dateDecodingStrategy = .secondsSince1970
         let decoded = try decoder.decode(WatchPayloadEnvelope<WatchLiveWorkoutSnapshot>.self, from: data)
         #expect(decoded == envelope)
-        #expect(decoded.schemaVersion == WatchPayloadContractVersion.v1)
+        #expect(decoded.schemaVersion == WatchPayloadContractVersion.current)
     }
 
     @Test func envelopeRoundTripsForCurrentSessionContext() throws {
@@ -736,6 +736,39 @@ struct Feature10Prompt7WatchFoundationTests {
         #expect(bridge.sessionContexts.first?.exerciseName == "OHP")
     }
 
+    @Test func coordinatorBroadcastsLifecycleAndLinkedHealthFlags() async {
+        let bridge = MockWatchCompanionBridge()
+        let coordinator = WatchSessionCoordinator(bridge: bridge)
+        let workoutID = UUID()
+        let startTime = Date(timeIntervalSince1970: 1_800_000_000)
+        let session = ActiveWorkoutSession(
+            id: workoutID,
+            startTime: startTime,
+            exerciseEntries: [makePartialEntry(name: "Bench Press", orderIndex: 0, totalSets: 3, loggedSets: 1)],
+            lifecycleState: .paused,
+            accumulatedElapsedSeconds: 305,
+            stateChangedAt: startTime.addingTimeInterval(305),
+            sessionPlanKind: .planned,
+            sessionSourceLabels: ["Program"],
+            sessionVersionStableID: "run-1::w1s1::planned",
+            usesLinkedWatchHealthSession: true
+        )
+
+        await coordinator.broadcastActiveSessionState(
+            session,
+            includeLaunch: true,
+            capturedAt: startTime.addingTimeInterval(600)
+        )
+
+        #expect(bridge.launchPayloads.first?.lifecycleState == .paused)
+        #expect(bridge.launchPayloads.first?.usesLinkedWatchHealthSession == true)
+        #expect(bridge.liveSnapshots.first?.lifecycleState == .paused)
+        #expect(bridge.liveSnapshots.first?.usesLinkedWatchHealthSession == true)
+        #expect(bridge.liveSnapshots.first?.elapsedSeconds == 305)
+        #expect(bridge.sessionContexts.first?.lifecycleState == .paused)
+        #expect(bridge.sessionContexts.first?.usesLinkedWatchHealthSession == true)
+    }
+
     @Test func coordinatorSkipsCurrentSessionContextWhenEntriesEmpty() async {
         let bridge = MockWatchCompanionBridge()
         let coordinator = WatchSessionCoordinator(bridge: bridge)
@@ -876,6 +909,8 @@ private enum WatchFoundationUnwrapError: Error {
 final class MockWatchCompanionBridge: WatchCompanionBridge {
     var latestStatus: WatchCompanionStatus = .unsupported()
     var executionActionHandler: WatchExecutionActionHandler?
+    var metricsUpdateHandler: WatchMetricsUpdateHandler?
+    var workoutHealthSummaryHandler: WatchHealthSummaryHandler?
     var launchPayloads: [WatchWorkoutLaunchPayload] = []
     var progressSnapshots: [WatchWorkoutProgressSnapshot] = []
     var todayPlanSnapshots: [WatchTodayPlanSnapshot] = []
