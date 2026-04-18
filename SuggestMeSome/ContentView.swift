@@ -263,7 +263,7 @@ struct WorkoutsTab: View {
                 Divider()
                 workoutList
             }
-            .navigationTitle("SuggestMeSome")
+            .navigationTitle("Workouts")
             .navigationBarTitleDisplayMode(.large)
             .navigationDestination(isPresented: $showingEmptyWorkout) {
                 WorkoutView()
@@ -371,11 +371,11 @@ struct WorkoutsTab: View {
     // MARK: - Sub-views
 
     private var actionButtonRow: some View {
-        HStack(spacing: 8) {
+        VStack(spacing: 8) {
             Button {
                 requestWorkoutStart(.empty)
             } label: {
-                Label("Start Workout", systemImage: "play.fill")
+                Label("New Workout", systemImage: "play.fill")
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -386,49 +386,51 @@ struct WorkoutsTab: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
 
-            Button {
-                guard FeatureAccessPolicy.isAccessible(
-                    .smartWorkoutGeneration,
-                    entitlementState: purchaseManager.entitlementState
-                ) else {
-                    paywallFeature = .smartWorkoutGeneration
-                    return
-                }
-                pendingGeneratedWorkout = nil
-                showingGeneratorSheet = true
-            } label: {
-                Label("Smart Session", systemImage: "wand.and.stars")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.indigo)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-
-            if !activeProgramRuns.isEmpty {
+            HStack(spacing: 8) {
                 Button {
                     guard FeatureAccessPolicy.isAccessible(
-                        .trainingPrograms,
+                        .smartWorkoutGeneration,
                         entitlementState: purchaseManager.entitlementState
                     ) else {
-                        paywallFeature = .trainingPrograms
+                        paywallFeature = .smartWorkoutGeneration
                         return
                     }
-                    pendingProgramWorkout = nil
-                    showingCompleteProgramSheet = true
+                    pendingGeneratedWorkout = nil
+                    showingGeneratorSheet = true
                 } label: {
-                    Label("Complete Program", systemImage: "checkmark.circle")
+                    Label("Smart Session", systemImage: "wand.and.stars")
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.indigo)
-                        .foregroundStyle(.white)
+                        .padding(.vertical, 12)
+                        .background(Color(.secondarySystemBackground))
+                        .foregroundStyle(Color.indigo)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+
+                if !activeProgramRuns.isEmpty {
+                    Button {
+                        guard FeatureAccessPolicy.isAccessible(
+                            .trainingPrograms,
+                            entitlementState: purchaseManager.entitlementState
+                        ) else {
+                            paywallFeature = .trainingPrograms
+                            return
+                        }
+                        pendingProgramWorkout = nil
+                        showingCompleteProgramSheet = true
+                    } label: {
+                        Label("Program Session", systemImage: "list.clipboard")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color(.secondarySystemBackground))
+                            .foregroundStyle(Color.indigo)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
                 }
             }
         }
@@ -563,7 +565,7 @@ struct WorkoutsTab: View {
                 systemImage: "dumbbell.fill",
                 description: Text(isFiltered
                     ? "Try adjusting your filters."
-                    : "Tap Start Workout above to begin.")
+                    : "Tap New Workout above to begin.")
             )
             .frame(maxHeight: .infinity)
         } else {

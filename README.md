@@ -3367,6 +3367,30 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 3 [Dashboard analytics caching and Workouts tab refresh] — 2026-04-18
+
+- Reworked the dashboard data flow around one cached refresh entry point:
+  - `DashboardViewModel` now stores a `DashboardRefreshInputs` snapshot and rebuilds its analytics from a single `refresh(...)` method instead of repeatedly filtering and reducing live raw arrays in computed properties
+  - cached outputs now include filtered workouts, weekly frequency buckets, sparklines, PR totals, streak, frequency target, significant lift trends, exercise-name to muscle-group lookup, muscle-group volume counts, and adaptive/HealthKit snapshot outputs
+  - `DashboardView` now uses a hashed refresh token plus one `.task(id:)` pass to sync queries into the view model, rather than incrementally copying each query result into observable state on multiple `.onChange` hooks
+- Kept the dashboard layout and feature order intact while shifting expensive analytics work off the render path:
+  - strength trends, adaptive signal cards, workout frequency, volume by muscle group, recent PRs, active program state, and proposal footer all now read from cached analytics fields
+  - time-window and selected-lift changes rebuild the cached dashboard state locally without rerunning the broader query ingestion path
+- Refreshed `WorkoutsTab` into a cleaner history-first surface:
+  - renamed the title from `SuggestMeSome` to `Workouts`
+  - changed the primary action to `New Workout`
+  - moved `Smart Session` and `Program Session` into compact secondary actions while preserving existing paywall, generator, complete-program, filter, detail, and delete flows
+  - updated the empty-state copy so it matches the new primary action label
+- Added focused Prompt 3 tests:
+  - new `Feature16Prompt3DashboardViewModelTests` verify cached dashboard analytics, adaptive snapshot outputs, muscle-group lookup/count caching, and time-window rebuild behavior
+- Verification:
+  - attempted `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - the build remains blocked locally by the same CoreSimulator/Xcode destination mismatch (`CoreSimulator 1051.49.0` vs Xcode build `1051.50.0`, with no usable iOS 26.4 destination), so the new dashboard tests were added but could not be executed in this environment
+
+**Commit:** `refactor: optimize dashboard analytics and refresh workouts tab`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

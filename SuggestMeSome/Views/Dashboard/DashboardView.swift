@@ -67,6 +67,69 @@ struct DashboardView: View {
         case programWorkout
     }
 
+    private var dashboardRefreshToken: Int {
+        var hasher = Hasher()
+        combine(activeProgramRuns, into: &hasher) { run, hasher in
+            hasher.combine(run.id)
+            hasher.combine(run.syncVersion)
+            hasher.combine(run.syncLastModifiedAt)
+            hasher.combine(run.isCompleted)
+            hasher.combine(run.startDate)
+        }
+        combine(allWorkouts, into: &hasher) { workout, hasher in
+            hasher.combine(workout.id)
+            hasher.combine(workout.syncVersion)
+            hasher.combine(workout.syncLastModifiedAt)
+            hasher.combine(workout.date)
+            hasher.combine(workout.programWeekNumber)
+            hasher.combine(workout.programSessionNumber)
+        }
+        combine(allPRs, into: &hasher) { pr, hasher in
+            hasher.combine(pr.id)
+            hasher.combine(pr.syncVersion)
+            hasher.combine(pr.syncLastModifiedAt)
+            hasher.combine(pr.dateAchieved)
+            hasher.combine(pr.exerciseName)
+            hasher.combine(pr.repCount)
+            hasher.combine(pr.weight)
+        }
+        combine(allExercises, into: &hasher) { exercise, hasher in
+            hasher.combine(exercise.name)
+            hasher.combine(exercise.exerciseType.rawValue)
+            hasher.combine(exercise.muscleGroup?.name)
+        }
+        combine(weeklyAnalyses, into: &hasher) { analysis, hasher in
+            hasher.combine(analysis.id)
+            hasher.combine(analysis.createdAt)
+            hasher.combine(analysis.weekStartDate)
+            hasher.combine(analysis.finalizedAt)
+            hasher.combine(analysis.fatigueStatus.rawValue)
+            hasher.combine(analysis.isFinalized)
+        }
+        combine(liftTrends, into: &hasher) { trend, hasher in
+            hasher.combine(trend.id)
+            hasher.combine(trend.updatedAt)
+            hasher.combine(trend.confidenceScore)
+            hasher.combine(trend.trendStatus.rawValue)
+            hasher.combine(trend.liftDisplayName)
+        }
+        combine(allProposals, into: &hasher) { proposal, hasher in
+            hasher.combine(proposal.id)
+            hasher.combine(proposal.syncVersion)
+            hasher.combine(proposal.syncLastModifiedAt)
+            hasher.combine(proposal.priority)
+            hasher.combine(proposal.proposalStatus.rawValue)
+        }
+        combine(healthKitSummaries, into: &hasher) { summary, hasher in
+            hasher.combine(summary.id)
+            hasher.combine(summary.syncVersion)
+            hasher.combine(summary.syncLastModifiedAt)
+            hasher.combine(summary.dayStart)
+            hasher.combine(summary.updatedAt)
+        }
+        return hasher.finalize()
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -171,38 +234,37 @@ struct DashboardView: View {
                 Text("Starting a new workout will delete the in-progress draft.")
             }
         }
-        .onAppear(perform: syncData)
-        .onChange(of: allWorkouts) { syncData() }
-        .onChange(of: activeProgramRuns) { syncData() }
-        .onChange(of: allPRs) { viewModel.allPRs = allPRs }
-        .onChange(of: allExercises) { viewModel.exercises = allExercises }
-        .onChange(of: weeklyAnalyses) { viewModel.weeklyAnalyses = weeklyAnalyses }
-        .onChange(of: liftTrends) { viewModel.liftTrends = liftTrends }
-        .onChange(of: allProposals) { viewModel.allProposals = allProposals }
-        .onChange(of: healthKitSummaries) { refreshHealthKitInsight() }
+        .task(id: dashboardRefreshToken) {
+            refreshDashboard()
+        }
     }
 
     // MARK: - Data sync
 
-    private func syncData() {
-        viewModel.workouts = allWorkouts
-        viewModel.activeProgramRuns = activeProgramRuns
-        viewModel.allPRs = allPRs
-        viewModel.exercises = allExercises
-        viewModel.weeklyAnalyses = weeklyAnalyses
-        viewModel.liftTrends = liftTrends
-        viewModel.allProposals = allProposals
-        refreshAdaptiveSnapshot()
-        refreshHealthKitInsight()
-    }
-
-    private func refreshAdaptiveSnapshot() {
+    private func refreshDashboard() {
         let engine = AdaptiveTrainingStateEngine(context: modelContext)
-        viewModel.trainingStateSnapshot = engine.buildSnapshot()
+        viewModel.refresh(
+            workouts: allWorkouts,
+            activeProgramRuns: activeProgramRuns,
+            allPRs: allPRs,
+            exercises: allExercises,
+            weeklyAnalyses: weeklyAnalyses,
+            liftTrends: liftTrends,
+            allProposals: allProposals,
+            trainingStateSnapshot: engine.buildSnapshot(),
+            healthKitInsight: HealthKitRecoveryInsightService.computeInsight(from: healthKitSummaries)
+        )
     }
 
-    private func refreshHealthKitInsight() {
-        viewModel.healthKitInsight = HealthKitRecoveryInsightService.computeInsight(from: healthKitSummaries)
+    private func combine<Row>(
+        _ rows: [Row],
+        into hasher: inout Hasher,
+        rowHasher: (Row, inout Hasher) -> Void
+    ) {
+        hasher.combine(rows.count)
+        for row in rows {
+            rowHasher(row, &hasher)
+        }
     }
 
     // MARK: - Quick Start Section

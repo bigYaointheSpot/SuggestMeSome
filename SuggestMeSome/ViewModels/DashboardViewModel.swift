@@ -15,13 +15,35 @@ struct WeekBucket: Identifiable {
     let count: Int
 }
 
+struct DashboardRefreshInputs {
+    let workouts: [Workout]
+    let activeProgramRuns: [ProgramRun]
+    let allPRs: [PersonalRecord]
+    let weeklyAnalyses: [WeeklyTrainingAnalysis]
+    let liftTrends: [LiftPerformanceTrend]
+    let allProposals: [AdaptationProposal]
+    let exercises: [Exercise]
+
+    static let empty = DashboardRefreshInputs(
+        workouts: [],
+        activeProgramRuns: [],
+        allPRs: [],
+        weeklyAnalyses: [],
+        liftTrends: [],
+        allProposals: [],
+        exercises: []
+    )
+}
+
 // MARK: - DashboardViewModel
 
 @Observable final class DashboardViewModel {
 
     // MARK: - Navigation & preference state
 
-    var timeWindow: DashboardTimeWindow = .fourWeeks
+    var timeWindow: DashboardTimeWindow = .fourWeeks {
+        didSet { rebuildDerivedState() }
+    }
     var navigateToEmptyWorkout: Bool = false
     var showingGeneratorSheet: Bool = false
     var pendingGeneratedWorkout: GeneratedWorkout? = nil
@@ -34,21 +56,46 @@ struct WeekBucket: Identifiable {
         CanonicalLift.bench.displayName,
         CanonicalLift.squat.displayName,
         CanonicalLift.deadlift.displayName,
-    ]
+    ] {
+        didSet { rebuildDerivedState() }
+    }
 
-    // MARK: - Input properties (synced from @Query in the View)
+    // MARK: - Cached input state
 
-    var workouts: [Workout] = []
-    var activeProgramRuns: [ProgramRun] = []
-    var allPRs: [PersonalRecord] = []
-    var weeklyAnalyses: [WeeklyTrainingAnalysis] = []
-    var liftTrends: [LiftPerformanceTrend] = []
-    var allProposals: [AdaptationProposal] = []
-    var exercises: [Exercise] = []
+    private var refreshInputs = DashboardRefreshInputs.empty
+    private var latestTrainingStateSnapshot: TrainingStateSnapshot? = nil
+    private var latestHealthKitInsight: ObjectiveRecoveryInsight? = nil
 
-    // Derived adaptive-engine signals (populated by the view on appear)
-    var trainingStateSnapshot: TrainingStateSnapshot? = nil
-    var healthKitInsight: ObjectiveRecoveryInsight? = nil
+    // MARK: - Derived analytics cache
+
+    var filteredWorkouts: [Workout] = []
+    var workoutCount: Int = 0
+    var timeTrainedLabel: String = "0h 0m"
+    var prCount: Int = 0
+    var streakWeeks: Int = 0
+
+    var recentAnalysis: WeeklyTrainingAnalysis? = nil
+    var pendingProposals: [AdaptationProposal] = []
+    var significantLiftTrends: [LiftPerformanceTrend] = []
+
+    var workoutFrequencyBuckets: [WeekBucket] = []
+    var frequencyTarget: Double = 3
+
+    var volumeByMuscleGroup: [(group: String, sets: Int, color: Color)] = []
+    var exerciseNameToMuscleGroup: [String: String] = [:]
+    var muscleGroupVolumeCounts: [String: Int] = [:]
+
+    var workoutsSparkline: [Double] = []
+    var timeTrainedSparkline: [Double] = []
+    var prSparkline: [Double] = []
+    var streakSparkline: [Double] = []
+
+    var activeLiftData: [(lift: (name: String, color: Color), points: [ChartPoint])] = []
+
+    var perMuscleSaturation: [ProgramVolumeMuscle: Double] = [:]
+    var recoveryPressure: TrainingStateRecoveryPressure = .neutral
+    var snapshotFatigueStatus: FatigueStatus? = nil
+    var hasAdaptiveSignals: Bool = false
 
     // MARK: - Constants
 
@@ -59,105 +106,192 @@ struct WeekBucket: Identifiable {
         (CanonicalLift.overheadPress.displayName, .purple),
     ]
 
-    // MARK: - Computed stats
+    // MARK: - Exposed source snapshots
 
-    var filteredWorkouts: [Workout] {
-        guard let cutoff = timeWindow.startDate else { return workouts }
-        return workouts.filter { $0.date >= cutoff }
+    var workouts: [Workout] { refreshInputs.workouts }
+    var activeProgramRuns: [ProgramRun] { refreshInputs.activeProgramRuns }
+    var allPRs: [PersonalRecord] { refreshInputs.allPRs }
+    var weeklyAnalyses: [WeeklyTrainingAnalysis] { refreshInputs.weeklyAnalyses }
+    var healthKitInsight: ObjectiveRecoveryInsight? { latestHealthKitInsight }
+    var hasCoachingData: Bool { recentAnalysis != nil || !pendingProposals.isEmpty }
+
+    // MARK: - Refresh
+
+    func refresh(
+        workouts: [Workout],
+        activeProgramRuns: [ProgramRun],
+        allPRs: [PersonalRecord],
+        exercises: [Exercise],
+        weeklyAnalyses: [WeeklyTrainingAnalysis],
+        liftTrends: [LiftPerformanceTrend],
+        allProposals: [AdaptationProposal],
+        trainingStateSnapshot: TrainingStateSnapshot?,
+        healthKitInsight: ObjectiveRecoveryInsight?
+    ) {
+        refreshInputs = DashboardRefreshInputs(
+            workouts: workouts,
+            activeProgramRuns: activeProgramRuns,
+            allPRs: allPRs,
+            weeklyAnalyses: weeklyAnalyses,
+            liftTrends: liftTrends,
+            allProposals: allProposals,
+            exercises: exercises
+        )
+        latestTrainingStateSnapshot = trainingStateSnapshot
+        latestHealthKitInsight = healthKitInsight
+        rebuildDerivedState()
     }
 
-    var workoutCount: Int { filteredWorkouts.count }
+    // MARK: - Derived-state builder
 
-    var timeTrainedLabel: String {
-        let total = filteredWorkouts.reduce(0) { $0 + $1.durationSeconds }
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        return "\(h)h \(m)m"
-    }
-
-    var prCount: Int {
-        filteredWorkouts.reduce(0) { count, workout in
-            count + workout.exerciseEntries.reduce(0) { $0 + $1.sets.filter(\.isPR).count }
-        }
-    }
-
-    var streakWeeks: Int {
-        let cal = Calendar.current
-        guard var weekStart = cal.dateInterval(of: .weekOfYear, for: Date())?.start else { return 0 }
-        var streak = 0
-        for _ in 0..<200 {
-            let weekEnd = cal.date(byAdding: .weekOfYear, value: 1, to: weekStart)!
-            let hasWorkout = workouts.contains { $0.date >= weekStart && $0.date < weekEnd }
-            guard hasWorkout else { break }
-            streak += 1
-            weekStart = cal.date(byAdding: .weekOfYear, value: -1, to: weekStart)!
-        }
-        return streak
-    }
-
-    // MARK: - Coaching data
-
-    var recentAnalysis: WeeklyTrainingAnalysis? {
-        weeklyAnalyses.first { $0.isFinalized }
-    }
-
-    var pendingProposals: [AdaptationProposal] {
-        allProposals
+    private func rebuildDerivedState() {
+        let filteredWorkouts = buildFilteredWorkouts(from: refreshInputs.workouts)
+        let recentAnalysis = refreshInputs.weeklyAnalyses.first { $0.isFinalized }
+        let pendingProposals = refreshInputs.allProposals
             .filter { $0.proposalStatus == .pendingUserConfirmation }
             .sorted { $0.priority > $1.priority }
-    }
-
-    var significantLiftTrends: [LiftPerformanceTrend] {
-        liftTrends
+        let significantLiftTrends = refreshInputs.liftTrends
             .filter { $0.trendStatus != .insufficientData && $0.confidenceScore >= 0.25 }
             .sorted { $0.confidenceScore > $1.confidenceScore }
             .prefix(5)
             .map { $0 }
-    }
-
-    var hasCoachingData: Bool {
-        recentAnalysis != nil || !pendingProposals.isEmpty
-    }
-
-    // MARK: - Chart data (strength)
-
-    var strengthChartData: [ChartPoint] {
-        StrengthAnalytics.chartPoints(
+        let workoutFrequencyBuckets = buildWorkoutFrequencyBuckets(
+            filteredWorkouts: filteredWorkouts,
+            allWorkouts: refreshInputs.workouts
+        )
+        let frequencyTarget = buildFrequencyTarget(
+            activeProgramRuns: refreshInputs.activeProgramRuns,
+            workoutFrequencyBuckets: workoutFrequencyBuckets
+        )
+        let exerciseNameToMuscleGroup = buildExerciseNameToMuscleGroupLookup(
+            exercises: refreshInputs.exercises
+        )
+        let muscleGroupVolumeCounts = buildMuscleGroupVolumeCounts(
+            filteredWorkouts: filteredWorkouts,
+            exerciseNameToMuscleGroup: exerciseNameToMuscleGroup
+        )
+        let volumeByMuscleGroup = muscleGroupVolumeCounts
+            .sorted { $0.value > $1.value }
+            .map {
+                (
+                    group: $0.key,
+                    sets: $0.value,
+                    color: DashboardMusclePalette.color(for: $0.key)
+                )
+            }
+        let strengthChartData = StrengthAnalytics.chartPoints(
             for: Array(selectedLifts),
-            from: workouts,
+            from: refreshInputs.workouts,
             since: timeWindow.startDate
         )
-    }
-
-    var activeLiftData: [(lift: (name: String, color: Color), points: [ChartPoint])] {
-        let data = strengthChartData
-        return liftOptions
+        let activeLiftData = liftOptions
             .filter { selectedLifts.contains($0.name) }
-            .map { lift in (lift: lift, points: data.filter { $0.exerciseName == lift.name }) }
+            .map { lift in
+                (
+                    lift: lift,
+                    points: strengthChartData.filter { $0.exerciseName == lift.name }
+                )
+            }
+
+        self.filteredWorkouts = filteredWorkouts
+        self.workoutCount = filteredWorkouts.count
+        self.timeTrainedLabel = buildTimeTrainedLabel(from: filteredWorkouts)
+        self.prCount = buildPRCount(from: filteredWorkouts)
+        self.streakWeeks = buildStreakWeeks(from: refreshInputs.workouts)
+        self.recentAnalysis = recentAnalysis
+        self.pendingProposals = pendingProposals
+        self.significantLiftTrends = significantLiftTrends
+        self.workoutFrequencyBuckets = workoutFrequencyBuckets
+        self.frequencyTarget = frequencyTarget
+        self.exerciseNameToMuscleGroup = exerciseNameToMuscleGroup
+        self.muscleGroupVolumeCounts = muscleGroupVolumeCounts
+        self.volumeByMuscleGroup = volumeByMuscleGroup
+        self.workoutsSparkline = workoutFrequencyBuckets.map { Double($0.count) }
+        self.timeTrainedSparkline = buildTimeTrainedSparkline(
+            filteredWorkouts: filteredWorkouts,
+            buckets: workoutFrequencyBuckets
+        )
+        self.prSparkline = buildPRSparkline(
+            filteredWorkouts: filteredWorkouts,
+            buckets: workoutFrequencyBuckets
+        )
+        self.streakSparkline = workoutFrequencyBuckets.map { $0.count > 0 ? 1 : 0 }
+        self.activeLiftData = activeLiftData
+        self.perMuscleSaturation = latestTrainingStateSnapshot?.perMuscleStressSaturation ?? [:]
+        self.recoveryPressure = latestTrainingStateSnapshot?.recoveryPressure ?? .neutral
+        self.snapshotFatigueStatus = latestTrainingStateSnapshot?.fatigueStatus ?? recentAnalysis?.fatigueStatus
+        self.hasAdaptiveSignals = latestTrainingStateSnapshot != nil || latestHealthKitInsight != nil
     }
 
-    // MARK: - Frequency chart data
+    // MARK: - Analytics builders
 
-    var workoutFrequencyBuckets: [WeekBucket] {
-        let cal = Calendar.current
+    private func buildFilteredWorkouts(from workouts: [Workout]) -> [Workout] {
+        guard let cutoff = timeWindow.startDate else { return workouts }
+        return workouts.filter { $0.date >= cutoff }
+    }
+
+    private func buildTimeTrainedLabel(from workouts: [Workout]) -> String {
+        let totalSeconds = workouts.reduce(0) { $0 + $1.durationSeconds }
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        return "\(hours)h \(minutes)m"
+    }
+
+    private func buildPRCount(from workouts: [Workout]) -> Int {
+        workouts.reduce(0) { count, workout in
+            count + workout.exerciseEntries.reduce(0) { total, entry in
+                total + entry.sets.filter(\.isPR).count
+            }
+        }
+    }
+
+    private func buildStreakWeeks(from workouts: [Workout]) -> Int {
+        let calendar = Calendar.current
+        guard var weekStart = calendar.dateInterval(of: .weekOfYear, for: Date())?.start else {
+            return 0
+        }
+
+        var streak = 0
+        for _ in 0..<200 {
+            guard let weekEnd = calendar.date(byAdding: .weekOfYear, value: 1, to: weekStart) else {
+                break
+            }
+            let hasWorkout = workouts.contains { $0.date >= weekStart && $0.date < weekEnd }
+            guard hasWorkout else { break }
+            streak += 1
+            guard let previousWeek = calendar.date(byAdding: .weekOfYear, value: -1, to: weekStart) else {
+                break
+            }
+            weekStart = previousWeek
+        }
+        return streak
+    }
+
+    private func buildWorkoutFrequencyBuckets(
+        filteredWorkouts: [Workout],
+        allWorkouts: [Workout]
+    ) -> [WeekBucket] {
+        let calendar = Calendar.current
         let now = Date()
 
         let windowStart: Date
-        if let c = timeWindow.startDate {
-            windowStart = c
-        } else if let earliest = workouts.map(\.date).min() {
+        if let cutoff = timeWindow.startDate {
+            windowStart = cutoff
+        } else if let earliest = allWorkouts.map(\.date).min() {
             windowStart = earliest
         } else {
             return []
         }
 
         let firstMonday = mondayOf(windowStart)
-        let thisMonday  = mondayOf(now)
+        let thisMonday = mondayOf(now)
 
         var buckets: [WeekBucket] = []
         var weekStart = firstMonday
         while weekStart <= thisMonday {
-            let weekEnd = cal.date(byAdding: .day, value: 7, to: weekStart)!
+            guard let weekEnd = calendar.date(byAdding: .day, value: 7, to: weekStart) else {
+                break
+            }
             let count = filteredWorkouts.filter { $0.date >= weekStart && $0.date < weekEnd }.count
             buckets.append(WeekBucket(monday: weekStart, count: count))
             weekStart = weekEnd
@@ -165,56 +299,53 @@ struct WeekBucket: Identifiable {
         return buckets
     }
 
-    var frequencyTarget: Double {
+    private func buildFrequencyTarget(
+        activeProgramRuns: [ProgramRun],
+        workoutFrequencyBuckets: [WeekBucket]
+    ) -> Double {
         let sortedRuns = activeProgramRuns.sorted { $0.startDate > $1.startDate }
         if let run = sortedRuns.first, let program = run.program {
             return Double(program.sessionsPerWeek)
         }
-        let buckets = workoutFrequencyBuckets
-        guard !buckets.isEmpty else { return 3 }
-        let total = buckets.reduce(0) { $0 + $1.count }
-        return Double(total) / Double(buckets.count)
+        guard !workoutFrequencyBuckets.isEmpty else { return 3 }
+        let total = workoutFrequencyBuckets.reduce(0) { $0 + $1.count }
+        return Double(total) / Double(workoutFrequencyBuckets.count)
     }
 
-    // MARK: - Volume by muscle group
+    private func buildExerciseNameToMuscleGroupLookup(
+        exercises: [Exercise]
+    ) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: exercises.compactMap { exercise in
+            guard let muscleGroup = exercise.muscleGroup?.name, muscleGroup != "Cardio" else {
+                return nil
+            }
+            return (exercise.name, muscleGroup)
+        })
+    }
 
-    var volumeByMuscleGroup: [(group: String, sets: Int, color: Color)] {
+    private func buildMuscleGroupVolumeCounts(
+        filteredWorkouts: [Workout],
+        exerciseNameToMuscleGroup: [String: String]
+    ) -> [String: Int] {
         var counts: [String: Int] = [:]
+
         for workout in filteredWorkouts {
-            for entry in workout.exerciseEntries {
-                guard !entry.isCardio else { continue }
-                let groupName: String
-                if let exercise = exercises.first(where: { $0.name == entry.exerciseName }),
-                   let mg = exercise.muscleGroup,
-                   mg.name != "Cardio" {
-                    groupName = mg.name
-                } else if exercises.first(where: { $0.name == entry.exerciseName }) == nil {
-                    continue
-                } else {
-                    groupName = "Other"
-                }
+            for entry in workout.exerciseEntries where !entry.isCardio {
+                guard let groupName = exerciseNameToMuscleGroup[entry.exerciseName] else { continue }
                 counts[groupName, default: 0] += entry.sets.count
             }
         }
+
         return counts
-            .sorted { $0.value > $1.value }
-            .map { (group: $0.key, sets: $0.value, color: DashboardMusclePalette.color(for: $0.key)) }
     }
 
-    // MARK: - Sparkline series
-
-    /// Weekly workout counts for the current window (ordered oldest → newest).
-    var workoutsSparkline: [Double] {
-        workoutFrequencyBuckets.map { Double($0.count) }
-    }
-
-    /// Weekly time-trained minutes over the current window (ordered oldest → newest).
-    var timeTrainedSparkline: [Double] {
-        let buckets = workoutFrequencyBuckets
-        guard !buckets.isEmpty else { return [] }
-        let cal = Calendar.current
+    private func buildTimeTrainedSparkline(
+        filteredWorkouts: [Workout],
+        buckets: [WeekBucket]
+    ) -> [Double] {
+        let calendar = Calendar.current
         return buckets.map { bucket in
-            let weekEnd = cal.date(byAdding: .day, value: 7, to: bucket.monday) ?? bucket.monday
+            let weekEnd = calendar.date(byAdding: .day, value: 7, to: bucket.monday) ?? bucket.monday
             let seconds = filteredWorkouts
                 .filter { $0.date >= bucket.monday && $0.date < weekEnd }
                 .reduce(0) { $0 + $1.durationSeconds }
@@ -222,51 +353,29 @@ struct WeekBucket: Identifiable {
         }
     }
 
-    /// Weekly PR count over the current window (ordered oldest → newest).
-    var prSparkline: [Double] {
-        let buckets = workoutFrequencyBuckets
-        guard !buckets.isEmpty else { return [] }
-        let cal = Calendar.current
+    private func buildPRSparkline(
+        filteredWorkouts: [Workout],
+        buckets: [WeekBucket]
+    ) -> [Double] {
+        let calendar = Calendar.current
         return buckets.map { bucket in
-            let weekEnd = cal.date(byAdding: .day, value: 7, to: bucket.monday) ?? bucket.monday
+            let weekEnd = calendar.date(byAdding: .day, value: 7, to: bucket.monday) ?? bucket.monday
             let count = filteredWorkouts
                 .filter { $0.date >= bucket.monday && $0.date < weekEnd }
                 .reduce(0) { total, workout in
-                    total + workout.exerciseEntries.reduce(0) { $0 + $1.sets.filter(\.isPR).count }
+                    total + workout.exerciseEntries.reduce(0) { subtotal, entry in
+                        subtotal + entry.sets.filter(\.isPR).count
+                    }
                 }
             return Double(count)
         }
     }
 
-    /// Rolling weekly streak indicator: 1 if the week hit at least one workout, else 0.
-    var streakSparkline: [Double] {
-        workoutFrequencyBuckets.map { $0.count > 0 ? 1 : 0 }
-    }
-
-    // MARK: - Coaching / adaptive signals
-
-    var perMuscleSaturation: [ProgramVolumeMuscle: Double] {
-        trainingStateSnapshot?.perMuscleStressSaturation ?? [:]
-    }
-
-    var recoveryPressure: TrainingStateRecoveryPressure {
-        trainingStateSnapshot?.recoveryPressure ?? .neutral
-    }
-
-    var snapshotFatigueStatus: FatigueStatus? {
-        trainingStateSnapshot?.fatigueStatus ?? recentAnalysis?.fatigueStatus
-    }
-
-    var hasAdaptiveSignals: Bool {
-        trainingStateSnapshot != nil || healthKitInsight != nil
-    }
-
-    // MARK: - Helpers
-
     private func mondayOf(_ date: Date) -> Date {
-        let cal = Calendar.current
-        let weekday = cal.component(.weekday, from: date)
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date)
         let daysToMonday = (weekday + 5) % 7
-        return cal.startOfDay(for: cal.date(byAdding: .day, value: -daysToMonday, to: date)!)
+        let shiftedDate = calendar.date(byAdding: .day, value: -daysToMonday, to: date) ?? date
+        return calendar.startOfDay(for: shiftedDate)
     }
 }
