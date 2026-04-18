@@ -46,6 +46,10 @@ struct WeekBucket: Identifiable {
     var allProposals: [AdaptationProposal] = []
     var exercises: [Exercise] = []
 
+    // Derived adaptive-engine signals (populated by the view on appear)
+    var trainingStateSnapshot: TrainingStateSnapshot? = nil
+    var healthKitInsight: ObjectiveRecoveryInsight? = nil
+
     // MARK: - Constants
 
     let liftOptions: [(name: String, color: Color)] = [
@@ -53,15 +57,6 @@ struct WeekBucket: Identifiable {
         (CanonicalLift.squat.displayName,         .green),
         (CanonicalLift.deadlift.displayName,      .orange),
         (CanonicalLift.overheadPress.displayName, .purple),
-    ]
-
-    private static let muscleGroupColors: [String: Color] = [
-        "Chest":      .blue,
-        "Back":       .green,
-        "Legs":       .orange,
-        "Shoulders":  .purple,
-        "Arms":       .red,
-        "Core":       .teal,
     ]
 
     // MARK: - Computed stats
@@ -203,7 +198,67 @@ struct WeekBucket: Identifiable {
         }
         return counts
             .sorted { $0.value > $1.value }
-            .map { (group: $0.key, sets: $0.value, color: Self.muscleGroupColors[$0.key] ?? .gray) }
+            .map { (group: $0.key, sets: $0.value, color: DashboardMusclePalette.color(for: $0.key)) }
+    }
+
+    // MARK: - Sparkline series
+
+    /// Weekly workout counts for the current window (ordered oldest → newest).
+    var workoutsSparkline: [Double] {
+        workoutFrequencyBuckets.map { Double($0.count) }
+    }
+
+    /// Weekly time-trained minutes over the current window (ordered oldest → newest).
+    var timeTrainedSparkline: [Double] {
+        let buckets = workoutFrequencyBuckets
+        guard !buckets.isEmpty else { return [] }
+        let cal = Calendar.current
+        return buckets.map { bucket in
+            let weekEnd = cal.date(byAdding: .day, value: 7, to: bucket.monday) ?? bucket.monday
+            let seconds = filteredWorkouts
+                .filter { $0.date >= bucket.monday && $0.date < weekEnd }
+                .reduce(0) { $0 + $1.durationSeconds }
+            return Double(seconds) / 60.0
+        }
+    }
+
+    /// Weekly PR count over the current window (ordered oldest → newest).
+    var prSparkline: [Double] {
+        let buckets = workoutFrequencyBuckets
+        guard !buckets.isEmpty else { return [] }
+        let cal = Calendar.current
+        return buckets.map { bucket in
+            let weekEnd = cal.date(byAdding: .day, value: 7, to: bucket.monday) ?? bucket.monday
+            let count = filteredWorkouts
+                .filter { $0.date >= bucket.monday && $0.date < weekEnd }
+                .reduce(0) { total, workout in
+                    total + workout.exerciseEntries.reduce(0) { $0 + $1.sets.filter(\.isPR).count }
+                }
+            return Double(count)
+        }
+    }
+
+    /// Rolling weekly streak indicator: 1 if the week hit at least one workout, else 0.
+    var streakSparkline: [Double] {
+        workoutFrequencyBuckets.map { $0.count > 0 ? 1 : 0 }
+    }
+
+    // MARK: - Coaching / adaptive signals
+
+    var perMuscleSaturation: [ProgramVolumeMuscle: Double] {
+        trainingStateSnapshot?.perMuscleStressSaturation ?? [:]
+    }
+
+    var recoveryPressure: TrainingStateRecoveryPressure {
+        trainingStateSnapshot?.recoveryPressure ?? .neutral
+    }
+
+    var snapshotFatigueStatus: FatigueStatus? {
+        trainingStateSnapshot?.fatigueStatus ?? recentAnalysis?.fatigueStatus
+    }
+
+    var hasAdaptiveSignals: Bool {
+        trainingStateSnapshot != nil || healthKitInsight != nil
     }
 
     // MARK: - Helpers

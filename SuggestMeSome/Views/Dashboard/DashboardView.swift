@@ -27,50 +27,13 @@ enum DashboardTimeWindow: String, CaseIterable {
         case .all:         return nil
         }
     }
-}
 
-// MARK: - FatigueStatus display helpers
-
-private extension FatigueStatus {
-    var displayName: String {
+    var icon: String {
         switch self {
-        case .low:        return "Low"
-        case .manageable: return "Manageable"
-        case .elevated:   return "Elevated"
-        case .high:       return "High"
-        case .critical:   return "Critical"
-        }
-    }
-    var accentColor: Color {
-        switch self {
-        case .low:        return .green
-        case .manageable: return .blue
-        case .elevated:   return .yellow
-        case .high:       return .orange
-        case .critical:   return .red
-        }
-    }
-}
-
-// MARK: - LiftTrendStatus display helpers
-
-private extension LiftTrendStatus {
-    var trendIcon: String {
-        switch self {
-        case .improving:       return "arrow.up.right"
-        case .stable:          return "equal"
-        case .declining:       return "arrow.down.right"
-        case .volatile:        return "waveform"
-        case .insufficientData: return "minus"
-        }
-    }
-    var trendColor: Color {
-        switch self {
-        case .improving:       return .green
-        case .stable:          return .blue
-        case .declining:       return .red
-        case .volatile:        return .orange
-        case .insufficientData: return .gray
+        case .fourWeeks:   return "calendar"
+        case .threeMonths: return "calendar.badge.clock"
+        case .oneYear:     return "calendar.circle"
+        case .all:         return "infinity"
         }
     }
 }
@@ -92,6 +55,8 @@ struct DashboardView: View {
     @Query(sort: \LiftPerformanceTrend.updatedAt, order: .reverse)
     private var liftTrends: [LiftPerformanceTrend]
     @Query private var allProposals: [AdaptationProposal]
+    @Query(sort: \HealthKitDailySummary.dayStart, order: .reverse)
+    private var healthKitSummaries: [HealthKitDailySummary]
 
     @State private var viewModel = DashboardViewModel()
     @State private var pendingWorkoutStart: PendingWorkoutStart?
@@ -107,27 +72,25 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: DSSpacing.xl) {
                     quickStartSection
-                    if viewModel.hasCoachingData {
-                        coachingInsightsSection
-                    }
-                    if !viewModel.activeProgramRuns.isEmpty {
-                        activeProgramSection
-                    }
                     timeWindowPicker
                     statsBar
-                    prFeedSection
-                    strengthChartSection
-                    workoutFrequencySection
-                    volumeMuscleGroupSection
-                    if viewModel.activeProgramRuns.isEmpty {
-                        activeProgramSection
+                    strengthTrendsCard
+                    if viewModel.hasAdaptiveSignals || viewModel.snapshotFatigueStatus != nil {
+                        adaptiveSignalsRow
+                    }
+                    workoutFrequencyCard
+                    volumeMuscleGroupCard
+                    prFeedCard
+                    activeProgramSection
+                    if !viewModel.pendingProposals.isEmpty {
+                        coachingFooterCard
                     }
                 }
                 .padding(.horizontal)
-                .padding(.top, 12)
-                .padding(.bottom, 24)
+                .padding(.top, DSSpacing.m)
+                .padding(.bottom, DSSpacing.xxl)
             }
             .navigationTitle("Dashboard")
             .navigationBarTitleDisplayMode(.large)
@@ -208,31 +171,47 @@ struct DashboardView: View {
                 Text("Starting a new workout will delete the in-progress draft.")
             }
         }
-        .onAppear {
-            viewModel.workouts = allWorkouts
-            viewModel.activeProgramRuns = activeProgramRuns
-            viewModel.allPRs = allPRs
-            viewModel.exercises = allExercises
-            viewModel.weeklyAnalyses = weeklyAnalyses
-            viewModel.liftTrends = liftTrends
-            viewModel.allProposals = allProposals
-        }
-        .onChange(of: allWorkouts) { viewModel.workouts = allWorkouts }
-        .onChange(of: activeProgramRuns) { viewModel.activeProgramRuns = activeProgramRuns }
+        .onAppear(perform: syncData)
+        .onChange(of: allWorkouts) { syncData() }
+        .onChange(of: activeProgramRuns) { syncData() }
         .onChange(of: allPRs) { viewModel.allPRs = allPRs }
         .onChange(of: allExercises) { viewModel.exercises = allExercises }
         .onChange(of: weeklyAnalyses) { viewModel.weeklyAnalyses = weeklyAnalyses }
         .onChange(of: liftTrends) { viewModel.liftTrends = liftTrends }
         .onChange(of: allProposals) { viewModel.allProposals = allProposals }
+        .onChange(of: healthKitSummaries) { refreshHealthKitInsight() }
+    }
+
+    // MARK: - Data sync
+
+    private func syncData() {
+        viewModel.workouts = allWorkouts
+        viewModel.activeProgramRuns = activeProgramRuns
+        viewModel.allPRs = allPRs
+        viewModel.exercises = allExercises
+        viewModel.weeklyAnalyses = weeklyAnalyses
+        viewModel.liftTrends = liftTrends
+        viewModel.allProposals = allProposals
+        refreshAdaptiveSnapshot()
+        refreshHealthKitInsight()
+    }
+
+    private func refreshAdaptiveSnapshot() {
+        let engine = AdaptiveTrainingStateEngine(context: modelContext)
+        viewModel.trainingStateSnapshot = engine.buildSnapshot()
+    }
+
+    private func refreshHealthKitInsight() {
+        viewModel.healthKitInsight = HealthKitRecoveryInsightService.computeInsight(from: healthKitSummaries)
     }
 
     // MARK: - Quick Start Section
 
     private var quickStartSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DSSpacing.s) {
             Text("Start Workout")
                 .font(.title3.weight(.bold))
-            HStack(spacing: 10) {
+            HStack(spacing: DSSpacing.s) {
                 quickStartButton(icon: "play.fill", label: "Empty", color: .indigo) {
                     requestWorkoutStart(.empty)
                 }
@@ -308,7 +287,7 @@ struct DashboardView: View {
                 .frame(maxHeight: .infinity)
                 .background(color.gradient)
                 .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.l, style: .continuous))
 
                 if let badge {
                     Text(badge)
@@ -324,429 +303,457 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Coaching Insights Section
-
-    private var coachingInsightsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "brain.head.profile")
-                    .foregroundStyle(.indigo)
-                Text("Smart Coaching")
-                    .font(.headline.weight(.bold))
-                Spacer()
-                if !viewModel.pendingProposals.isEmpty {
-                    Text("\(viewModel.pendingProposals.count) pending")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.indigo)
-                }
-            }
-
-            HStack(spacing: 10) {
-                // Fatigue status tile
-                if let analysis = viewModel.recentAnalysis {
-                    fatigueStatusTile(analysis)
-                }
-
-                // Proposals tile
-                if !viewModel.pendingProposals.isEmpty, !viewModel.activeProgramRuns.isEmpty {
-                    proposalsTile(viewModel.pendingProposals)
-                } else if let analysis = viewModel.recentAnalysis {
-                    performanceTile(analysis)
-                }
-            }
-        }
-        .padding(16)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.indigo.opacity(0.4), lineWidth: 1.5))
-        .shadow(color: Color.indigo.opacity(0.12), radius: 10, x: 0, y: 2)
-    }
-
-    private func fatigueStatusTile(_ analysis: WeeklyTrainingAnalysis) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("FATIGUE")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(analysis.fatigueStatus.accentColor)
-                    .frame(width: 8, height: 8)
-                Text(analysis.fatigueStatus.displayName)
-                    .font(.subheadline.weight(.semibold))
-            }
-            if let weekNum = analysis.programWeekNumber {
-                Text("Program week \(weekNum)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(analysis.weekStartDate, format: .dateTime.month(.abbreviated).day())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(analysis.fatigueStatus.accentColor.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func performanceTile(_ analysis: WeeklyTrainingAnalysis) -> some View {
-        let score = analysis.weightedPerformanceScore
-        let scoreLabel: String
-        let scoreColor: Color
-        if score >= 4 {
-            scoreLabel = "Above Target"
-            scoreColor = .green
-        } else if score <= -4 {
-            scoreLabel = "Below Target"
-            scoreColor = .orange
-        } else {
-            scoreLabel = "On Target"
-            scoreColor = .blue
-        }
-
-        return VStack(alignment: .leading, spacing: 6) {
-            Text("PERFORMANCE")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(scoreLabel)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(scoreColor)
-            Text(String(format: "%.0f%% adherence", min(analysis.adherenceScore, 1.0) * 100))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(scoreColor.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func proposalsTile(_ proposals: [AdaptationProposal]) -> some View {
-        Button {
-            viewModel.showingProposalReview = true
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("RECOMMENDATIONS")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(proposals.first?.summaryText ?? "View proposals")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.indigo)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                HStack(spacing: 3) {
-                    Text("Review \(proposals.count) proposal\(proposals.count == 1 ? "" : "s")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(Color.indigo.opacity(0.10))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: - Time Window Picker
 
     private var timeWindowPicker: some View {
-        Picker("Time Window", selection: $viewModel.timeWindow) {
+        HStack(spacing: DSSpacing.xs) {
             ForEach(DashboardTimeWindow.allCases, id: \.self) { w in
-                Text(w.rawValue).tag(w)
+                let isActive = viewModel.timeWindow == w
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        viewModel.timeWindow = w
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: w.icon)
+                            .font(.caption2.weight(.semibold))
+                        Text(w.rawValue)
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DSSpacing.s)
+                    .background(isActive ? DSColor.primaryAction : Color.clear)
+                    .foregroundStyle(isActive ? Color.white : DSColor.primaryAction)
+                    .clipShape(RoundedRectangle(cornerRadius: DSRadius.s, style: .continuous))
+                }
             }
         }
-        .pickerStyle(.segmented)
+        .padding(DSSpacing.xs)
+        .background(DSColor.primaryAction.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.m, style: .continuous))
     }
 
     // MARK: - Stats Bar
 
     private var statsBar: some View {
-        HStack(spacing: 12) {
-            StatCard(
+        HStack(spacing: DSSpacing.s) {
+            DashboardStatCard(
                 icon: "figure.strengthtraining.traditional",
                 iconColor: .indigo,
                 value: "\(viewModel.workoutCount)",
-                label: "Workouts"
+                label: "Workouts",
+                sparkline: viewModel.workoutsSparkline
             )
-            StatCard(
+            DashboardStatCard(
                 icon: "clock.fill",
                 iconColor: .indigo,
                 value: viewModel.timeTrainedLabel,
-                label: "Time Trained"
+                label: "Trained",
+                sparkline: viewModel.timeTrainedSparkline
             )
-            StatCard(
+            DashboardStatCard(
                 icon: "star.fill",
                 iconColor: .yellow,
                 value: "\(viewModel.prCount)",
-                label: "PRs Hit"
+                label: "PRs",
+                sparkline: viewModel.prSparkline
             )
-            StatCard(
+            DashboardStatCard(
                 icon: "flame.fill",
                 iconColor: .orange,
                 value: "\(viewModel.streakWeeks)wk",
-                label: "Streak"
+                label: "Streak",
+                sparkline: viewModel.streakSparkline
             )
         }
     }
 
-    // MARK: - PR Feed Section
+    // MARK: - Strength Trends Card
 
-    private var prFeedSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "star.fill")
-                    .foregroundStyle(.yellow)
-                Text("Recent PRs")
-                    .font(.headline)
-                Spacer()
-                NavigationLink("See All") {
-                    PersonalRecordsView()
-                }
-                .font(.subheadline)
-            }
-
-            if viewModel.allPRs.isEmpty {
-                Text("Complete your first workout to start tracking PRs")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-            } else {
-                ForEach(viewModel.allPRs.prefix(5)) { pr in
-                    let delta = StrengthAnalytics.previousBest(
-                        exerciseName: pr.exerciseName,
-                        repCount: pr.repCount,
-                        unit: pr.unit,
-                        before: pr.dateAchieved,
-                        workouts: viewModel.workouts
-                    ).map { pr.weight - $0 }
-                    PRFeedRow(pr: pr, delta: delta)
-                }
-            }
-        }
-    }
-
-    // MARK: - Strength Chart Section
-
-    private var strengthChartSection: some View {
+    private var strengthTrendsCard: some View {
         let liftData = viewModel.activeLiftData
         let plotData = liftData.filter { $0.points.count >= 2 }
         let sparseNames = liftData.filter { $0.points.count < 2 }.map { $0.lift.name }
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "chart.line.uptrend.xyaxis")
-                    .foregroundStyle(.indigo)
-                Text("Strength Trends")
-                    .font(.headline.weight(.bold))
-            }
+        return ExpandableCard {
+            VStack(alignment: .leading, spacing: DSSpacing.m) {
+                DSSectionHeader(icon: "chart.line.uptrend.xyaxis", title: "Strength Trends")
 
-            // Lift trend badges from Feature 6 LiftPerformanceTrend
-            if !viewModel.significantLiftTrends.isEmpty {
+                if !viewModel.significantLiftTrends.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: DSSpacing.s) {
+                            ForEach(viewModel.significantLiftTrends) { trend in
+                                LiftTrendBadge(trend: trend)
+                            }
+                        }
+                        .padding(.horizontal, 1)
+                    }
+                }
+
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(viewModel.significantLiftTrends) { trend in
-                            LiftTrendBadge(trend: trend)
+                    HStack(spacing: DSSpacing.s) {
+                        ForEach(viewModel.liftOptions, id: \.name) { lift in
+                            let isActive = viewModel.selectedLifts.contains(lift.name)
+                            Button {
+                                if isActive {
+                                    if viewModel.selectedLifts.count > 1 {
+                                        viewModel.selectedLifts.remove(lift.name)
+                                    }
+                                } else if viewModel.selectedLifts.count < 3 {
+                                    viewModel.selectedLifts.insert(lift.name)
+                                }
+                            } label: {
+                                Text(lift.name)
+                                    .font(.footnote.weight(isActive ? .semibold : .regular))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(isActive ? lift.color : DSColor.surfaceElevated)
+                                    .foregroundStyle(isActive ? Color.white : lift.color)
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(lift.color.opacity(isActive ? 0 : 0.5), lineWidth: 1)
+                                    )
+                            }
                         }
                     }
                     .padding(.horizontal, 1)
                 }
-            }
 
-            // Lift pill selector
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(viewModel.liftOptions, id: \.name) { lift in
-                        let isActive = viewModel.selectedLifts.contains(lift.name)
-                        Button {
-                            if isActive {
-                                if viewModel.selectedLifts.count > 1 {
-                                    viewModel.selectedLifts.remove(lift.name)
-                                }
-                            } else if viewModel.selectedLifts.count < 3 {
-                                viewModel.selectedLifts.insert(lift.name)
-                            }
-                        } label: {
-                            Text(lift.name)
-                                .font(.subheadline.weight(isActive ? .semibold : .regular))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 7)
-                                .background(isActive ? lift.color : Color(.tertiarySystemBackground))
-                                .foregroundStyle(isActive ? Color.white : lift.color)
-                                .clipShape(Capsule())
-                                .overlay(
-                                    Capsule()
-                                        .stroke(lift.color.opacity(isActive ? 0 : 0.5), lineWidth: 1)
+                if plotData.isEmpty {
+                    DashboardEmptyState(
+                        icon: "chart.xyaxis.line",
+                        title: "Not enough data",
+                        message: "Log at least two workouts on your tracked lifts to see the trend line."
+                    )
+                    .frame(minHeight: 180)
+                } else {
+                    Chart {
+                        ForEach(plotData, id: \.lift.name) { pair in
+                            ForEach(pair.points) { point in
+                                LineMark(
+                                    x: .value("Date", point.date),
+                                    y: .value("e1RM (lbs)", point.e1RM)
                                 )
+                                .foregroundStyle(pair.lift.color)
+                                .interpolationMethod(.catmullRom)
+
+                                PointMark(
+                                    x: .value("Date", point.date),
+                                    y: .value("e1RM (lbs)", point.e1RM)
+                                )
+                                .foregroundStyle(pair.lift.color)
+                                .symbolSize(40)
+                            }
                         }
                     }
+                    .frame(height: 220)
+
+                    if !sparseNames.isEmpty {
+                        Text("Not enough data for: \(sparseNames.joined(separator: ", "))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .padding(.horizontal, 1)
             }
-
-            // Chart or placeholder
-            if plotData.isEmpty {
-                Text("Log workouts to see strength trends")
-                    .font(.subheadline)
+        } expanded: {
+            VStack(alignment: .leading, spacing: DSSpacing.s) {
+                Text("Lift confidence & momentum")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 200, alignment: .center)
-            } else {
-                Chart {
-                    ForEach(plotData, id: \.lift.name) { pair in
-                        ForEach(pair.points) { point in
-                            LineMark(
-                                x: .value("Date", point.date),
-                                y: .value("e1RM (lbs)", point.e1RM)
-                            )
-                            .foregroundStyle(pair.lift.color)
-                            .interpolationMethod(.catmullRom)
-
-                            PointMark(
-                                x: .value("Date", point.date),
-                                y: .value("e1RM (lbs)", point.e1RM)
-                            )
-                            .foregroundStyle(pair.lift.color)
-                            .symbolSize(40)
-                        }
-                    }
+                ForEach(viewModel.significantLiftTrends) { trend in
+                    strengthTrendDetailRow(trend)
                 }
-                .frame(height: 250)
-
-                if !sparseNames.isEmpty {
-                    Text("Not enough data for: \(sparseNames.joined(separator: ", "))")
+                if viewModel.significantLiftTrends.isEmpty {
+                    Text("Trend details appear here once the coach has enough data per lift (about four weeks).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
         }
-        .padding(16)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    // MARK: - Workout Frequency Section
+    private func strengthTrendDetailRow(_ trend: LiftPerformanceTrend) -> some View {
+        HStack(alignment: .top, spacing: DSSpacing.s) {
+            Image(systemName: trend.trendStatus.dsTrendIcon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(trend.trendStatus.dsTrendColor)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(trend.liftDisplayName)
+                        .font(.caption.weight(.semibold))
+                    if let change = trend.fourWeekChangePercent {
+                        Text(String(format: "%+.1f%%", change))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(change >= 0 ? Color.green : Color.red)
+                    }
+                }
+                Text(String(format: "Confidence %.0f%% · %d data points",
+                            trend.confidenceScore * 100,
+                            trend.totalDataPoints))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+    }
 
-    private var workoutFrequencySection: some View {
+    // MARK: - Adaptive Signals Row
+
+    private var adaptiveSignalsRow: some View {
+        VStack(spacing: DSSpacing.m) {
+            RecoveryPressureCard(
+                pressure: viewModel.recoveryPressure,
+                fatigueStatus: viewModel.snapshotFatigueStatus,
+                healthKitInsight: viewModel.healthKitInsight
+            )
+            bodyHeatmapCard
+        }
+    }
+
+    private var bodyHeatmapCard: some View {
+        ExpandableCard {
+            VStack(alignment: .leading, spacing: DSSpacing.m) {
+                DSSectionHeader(
+                    icon: "figure.arms.open",
+                    title: "Muscle Load",
+                    iconColor: DSColor.signalCaution
+                )
+                if viewModel.perMuscleSaturation.isEmpty {
+                    DashboardEmptyState(
+                        icon: "figure.run",
+                        title: "Not enough recent training",
+                        message: "Log a few workouts this week to see per-muscle stress distribution."
+                    )
+                } else {
+                    BodyHeatmapView(saturation: viewModel.perMuscleSaturation)
+                }
+            }
+        } expanded: {
+            VStack(alignment: .leading, spacing: DSSpacing.s) {
+                Text("Saturation is calculated from hard sets over the past 7 days, compared against your weekly target range.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let topMuscle = topLoadedMuscle {
+                    Text("Most loaded: **\(topMuscle.displayName)** at \(percentString(viewModel.perMuscleSaturation[topMuscle] ?? 0)) of target.")
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                }
+                if let underloaded = leastLoadedMuscle {
+                    Text("Undertrained: **\(underloaded.displayName)** at \(percentString(viewModel.perMuscleSaturation[underloaded] ?? 0)). Consider adding volume.")
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+    }
+
+    private var topLoadedMuscle: ProgramVolumeMuscle? {
+        viewModel.perMuscleSaturation.max { $0.value < $1.value }?.key
+    }
+
+    private var leastLoadedMuscle: ProgramVolumeMuscle? {
+        viewModel.perMuscleSaturation.min { $0.value < $1.value }?.key
+    }
+
+    private func percentString(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    // MARK: - Workout Frequency Card
+
+    private var workoutFrequencyCard: some View {
         let buckets = viewModel.workoutFrequencyBuckets
         let target  = viewModel.frequencyTarget
+        let hits    = buckets.filter { Double($0.count) >= target }.count
+        let adherencePct = buckets.isEmpty ? 0 : Int((Double(hits) / Double(buckets.count) * 100).rounded())
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "calendar")
-                    .foregroundStyle(.indigo)
-                Text("Workout Frequency")
-                    .font(.headline.weight(.bold))
-            }
+        return ExpandableCard {
+            VStack(alignment: .leading, spacing: DSSpacing.m) {
+                DSSectionHeader(
+                    icon: "calendar",
+                    title: "Workout Frequency",
+                    trailing: AnyView(
+                        Text("\(adherencePct)% weeks on target")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    )
+                )
 
-            if buckets.isEmpty {
-                Text("Start logging workouts to see your frequency")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
-            } else {
-                Chart {
-                    ForEach(buckets) { bucket in
-                        BarMark(
-                            x: .value("Week", bucket.monday, unit: .weekOfYear),
-                            y: .value("Workouts", bucket.count)
-                        )
-                        .foregroundStyle(
-                            Double(bucket.count) >= target
-                                ? Color.indigo
-                                : Color.indigo.opacity(0.4)
-                        )
-                        .cornerRadius(4)
-                    }
-                    RuleMark(y: .value("Target", target))
-                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4]))
-                        .foregroundStyle(Color.indigo.opacity(0.7))
-                        .annotation(position: .top, alignment: .leading) {
-                            Text("Target")
-                                .font(.caption2)
-                                .foregroundStyle(Color.indigo.opacity(0.8))
+                if buckets.isEmpty {
+                    DashboardEmptyState(
+                        icon: "calendar.badge.plus",
+                        title: "No workouts yet",
+                        message: "Start logging workouts to see your weekly cadence."
+                    )
+                    .frame(minHeight: 160)
+                } else {
+                    Chart {
+                        ForEach(buckets) { bucket in
+                            BarMark(
+                                x: .value("Week", bucket.monday, unit: .weekOfYear),
+                                y: .value("Workouts", bucket.count)
+                            )
+                            .foregroundStyle(
+                                Double(bucket.count) >= target
+                                    ? DSColor.primaryAction
+                                    : DSColor.primaryAction.opacity(0.35)
+                            )
+                            .cornerRadius(4)
                         }
-                }
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .weekOfYear)) { value in
-                        if let date = value.as(Date.self) {
-                            AxisValueLabel {
-                                Text(date, format: .dateTime.month(.abbreviated).day())
-                                    .font(.caption2)
+                        RuleMark(y: .value("Target", target))
+                            .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 3]))
+                            .foregroundStyle(DSColor.signalPositive)
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("Target \(Int(target))")
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(DSColor.signalPositive.opacity(0.15))
+                                    .foregroundStyle(DSColor.signalPositive)
+                                    .clipShape(Capsule())
                             }
+                    }
+                    .chartXAxis {
+                        AxisMarks(values: .stride(by: .weekOfYear)) { value in
+                            if let date = value.as(Date.self) {
+                                AxisValueLabel {
+                                    Text(date, format: .dateTime.month(.abbreviated).day())
+                                        .font(.caption2)
+                                }
+                            }
+                            AxisGridLine()
                         }
-                        AxisGridLine()
                     }
-                }
-                .chartYAxis {
-                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                        AxisGridLine()
-                        AxisValueLabel()
+                    .chartYAxis {
+                        AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                            AxisGridLine()
+                            AxisValueLabel()
+                        }
                     }
+                    .frame(height: 180)
                 }
-                .frame(height: 200)
+            }
+        } expanded: {
+            VStack(alignment: .leading, spacing: DSSpacing.s) {
+                Text("You hit your target **\(hits) of \(buckets.count) weeks** in this window.")
+                    .font(.caption)
+                Text("Target is pulled from your active program's sessions-per-week, or the rolling average when you're training without one.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(16)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    // MARK: - Volume by Muscle Group Section
+    // MARK: - Volume by Muscle Group Card
 
-    private var volumeMuscleGroupSection: some View {
+    private var volumeMuscleGroupCard: some View {
         let data = viewModel.volumeByMuscleGroup
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "figure.arms.open")
-                    .foregroundStyle(.indigo)
-                Text("Volume by Muscle Group")
-                    .font(.headline.weight(.bold))
-            }
+        return ExpandableCard {
+            VStack(alignment: .leading, spacing: DSSpacing.m) {
+                DSSectionHeader(icon: "figure.strengthtraining.functional", title: "Volume by Muscle Group")
 
-            if data.isEmpty {
-                Text("No workout data yet — log some sets to see volume breakdown")
-                    .font(.subheadline)
+                if data.isEmpty {
+                    DashboardEmptyState(
+                        icon: "chart.bar.fill",
+                        title: "No logged sets yet",
+                        message: "Once you log working sets, the breakdown appears here."
+                    )
+                    .frame(minHeight: 160)
+                } else {
+                    Chart {
+                        ForEach(data, id: \.group) { item in
+                            BarMark(
+                                x: .value("Sets", item.sets),
+                                y: .value("Muscle Group", item.group)
+                            )
+                            .foregroundStyle(item.color)
+                            .cornerRadius(4)
+                            .annotation(position: .trailing, alignment: .leading) {
+                                Text("\(item.sets)")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .chartXAxis {
+                        AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                            AxisGridLine()
+                            AxisValueLabel()
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { _ in AxisValueLabel() }
+                    }
+                    .frame(height: 200)
+                }
+            }
+        } expanded: {
+            VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                Text("Total hard sets per muscle group in this window.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 160, alignment: .center)
-            } else {
-                Chart {
-                    ForEach(data, id: \.group) { item in
-                        BarMark(
-                            x: .value("Sets", item.sets),
-                            y: .value("Muscle Group", item.group)
-                        )
-                        .foregroundStyle(item.color)
-                        .cornerRadius(4)
-                        .annotation(position: .trailing, alignment: .leading) {
-                            Text("\(item.sets)")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                if let top = data.first {
+                    Text("Heaviest: **\(top.group)** with \(top.sets) sets.")
+                        .font(.caption)
+                }
+                if let light = data.last, data.count > 1 {
+                    Text("Lightest: **\(light.group)** with \(light.sets) sets.")
+                        .font(.caption)
+                }
+            }
+        }
+    }
+
+    // MARK: - PR Feed Card
+
+    private var prFeedCard: some View {
+        ExpandableCard {
+            VStack(alignment: .leading, spacing: DSSpacing.m) {
+                DSSectionHeader(
+                    icon: "star.fill",
+                    title: "Recent PRs",
+                    iconColor: .yellow,
+                    trailing: AnyView(
+                        NavigationLink("See All") {
+                            PersonalRecordsView()
+                        }
+                        .font(.caption.weight(.semibold))
+                    )
+                )
+
+                if viewModel.allPRs.isEmpty {
+                    DashboardEmptyState(
+                        icon: "trophy.fill",
+                        title: "No PRs yet",
+                        message: "Complete a working set to bag your first personal record.",
+                        iconColor: .yellow
+                    )
+                } else {
+                    VStack(spacing: DSSpacing.s) {
+                        ForEach(viewModel.allPRs.prefix(5)) { pr in
+                            let delta = StrengthAnalytics.previousBest(
+                                exerciseName: pr.exerciseName,
+                                repCount: pr.repCount,
+                                unit: pr.unit,
+                                before: pr.dateAchieved,
+                                workouts: viewModel.workouts
+                            ).map { pr.weight - $0 }
+                            PRFeedRow(pr: pr, delta: delta)
                         }
                     }
                 }
-                .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 5)) { _ in
-                        AxisGridLine()
-                        AxisValueLabel()
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks { _ in
-                        AxisValueLabel()
-                    }
-                }
-                .frame(height: 220)
             }
+        } expanded: {
+            Text("Showing your five most recent personal records. Tap \"See All\" for the full history, including the workout each PR came from.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(16)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Active Program Section
@@ -754,13 +761,8 @@ struct DashboardView: View {
     private var activeProgramSection: some View {
         let sortedRuns = viewModel.activeProgramRuns.sorted { $0.startDate > $1.startDate }
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "list.clipboard")
-                    .foregroundStyle(.indigo)
-                Text("Active Program")
-                    .font(.headline)
-            }
+        return VStack(alignment: .leading, spacing: DSSpacing.m) {
+            DSSectionHeader(icon: "list.clipboard", title: "Active Program")
 
             if let run = sortedRuns.first, let program = run.program {
                 let latestAnalysis = viewModel.weeklyAnalyses.first {
@@ -786,295 +788,62 @@ struct DashboardView: View {
                     .font(.subheadline)
                     .buttonStyle(.bordered)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .dsCardStyle()
             }
         }
     }
-}
 
-// MARK: - LiftTrendBadge
+    // MARK: - Coaching Footer Card
 
-private struct LiftTrendBadge: View {
-    let trend: LiftPerformanceTrend
+    private var coachingFooterCard: some View {
+        let proposals = viewModel.pendingProposals
 
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: trend.trendStatus.trendIcon)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(trend.trendStatus.trendColor)
-
-            Text(trend.liftDisplayName)
-                .font(.caption.weight(.semibold))
-
-            if let changePercent = trend.fourWeekChangePercent {
-                Text(String(format: "%+.1f%%", changePercent))
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(changePercent >= 0 ? Color.green : Color.red)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(trend.trendStatus.trendColor.opacity(0.10))
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(trend.trendStatus.trendColor.opacity(0.25), lineWidth: 1))
-    }
-}
-
-// MARK: - ActiveProgramCard
-
-private struct ActiveProgramCard: View {
-    let run: ProgramRun
-    let program: TrainingProgram
-    let allWorkouts: [Workout]
-    let latestAnalysis: WeeklyTrainingAnalysis?
-    let onContinue: () -> Void
-    let onReviewProposals: (() -> Void)?
-
-    private var currentWeek: Int {
-        let weeks = Int(Date().timeIntervalSince(run.startDate) / (7 * 86400)) + 1
-        return min(max(weeks, 1), program.lengthInWeeks)
-    }
-
-    private var programWorkouts: [Workout] {
-        allWorkouts.filter { $0.programRun?.id == run.id }
-    }
-
-    private var completedCount: Int { programWorkouts.count }
-
-    private var totalSessions: Int { program.lengthInWeeks * program.sessionsPerWeek }
-
-    private var progress: Double {
-        guard totalSessions > 0 else { return 0 }
-        return min(Double(completedCount) / Double(totalSessions), 1.0)
-    }
-
-    private var thisWeekCompletedCount: Int {
-        programWorkouts.filter { $0.programWeekNumber == currentWeek }.count
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Progress ring + info
-            HStack(spacing: 16) {
-                ZStack {
-                    Circle()
-                        .stroke(Color.indigo.opacity(0.2), lineWidth: 8)
-                    Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(Color.indigo, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                    Text("\(Int(progress * 100))%")
-                        .font(.caption.weight(.semibold))
-                }
-                .frame(width: 60, height: 60)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(program.name)
+        return ExpandableCard(tint: DSColor.primaryAction) {
+            VStack(alignment: .leading, spacing: DSSpacing.s) {
+                DSSectionHeader(
+                    icon: "brain.head.profile",
+                    title: "Smart Coaching",
+                    trailing: AnyView(
+                        Text("\(proposals.count) pending")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(DSColor.primaryAction)
+                    )
+                )
+                if let first = proposals.first {
+                    Text(first.summaryText)
                         .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(DSColor.primaryAction)
                         .lineLimit(2)
-                    Text("Week \(currentWeek) of \(program.lengthInWeeks)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("\(completedCount) of \(totalSessions) sessions complete")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
-
-                Spacer()
-
-                // Latest analysis stats
-                if let analysis = latestAnalysis {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(analysis.fatigueStatus.accentColor)
-                                .frame(width: 7, height: 7)
-                            Text(analysis.fatigueStatus.displayName)
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(analysis.fatigueStatus.accentColor)
-                        }
-                        Text(String(format: "%.0f%% adherence", min(analysis.adherenceScore, 1.0) * 100))
+                Button {
+                    viewModel.showingProposalReview = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Review \(proposals.count) proposal\(proposals.count == 1 ? "" : "s")")
+                            .font(.caption.weight(.semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(DSColor.primaryAction)
+                }
+                .buttonStyle(.plain)
+            }
+        } expanded: {
+            VStack(alignment: .leading, spacing: DSSpacing.s) {
+                ForEach(proposals.prefix(4)) { proposal in
+                    HStack(alignment: .top, spacing: DSSpacing.s) {
+                        Image(systemName: "circle.fill")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DSColor.primaryAction.opacity(0.7))
+                            .padding(.top, 4)
+                        Text(proposal.summaryText)
+                            .font(.caption)
                     }
                 }
-            }
-
-            // This week session dots
-            VStack(alignment: .leading, spacing: 6) {
-                Text("This Week")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 10) {
-                    ForEach(1...max(program.sessionsPerWeek, 1), id: \.self) { i in
-                        Image(systemName: i <= thisWeekCompletedCount ? "checkmark.circle.fill" : "circle")
-                            .font(.title3)
-                            .foregroundStyle(i <= thisWeekCompletedCount ? Color.green : Color(.systemGray3))
-                    }
-                }
-            }
-
-            // Action buttons
-            HStack(spacing: 10) {
-                Button(action: onContinue) {
-                    Text("Continue Program")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.indigo)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-
-                if let reviewAction = onReviewProposals {
-                    Button(action: reviewAction) {
-                        Image(systemName: "brain.head.profile")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 14)
-                            .background(Color.indigo.opacity(0.15))
-                            .foregroundStyle(.indigo)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-// MARK: - PRFeedRow
-
-private struct PRFeedRow: View {
-    let pr: PersonalRecord
-    let delta: Double?
-
-    private var formattedWeight: String {
-        let w = pr.weight
-        let num = w.truncatingRemainder(dividingBy: 1) == 0
-            ? "\(Int(w))"
-            : String(format: "%.1f", w)
-        return "\(num) \(pr.unit.rawValue)"
-    }
-
-    private var formattedDelta: String? {
-        guard let d = delta, d > 0 else { return nil }
-        let num = d.truncatingRemainder(dividingBy: 1) == 0
-            ? "\(Int(d))"
-            : String(format: "%.1f", d)
-        return "+\(num) \(pr.unit.rawValue)"
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(pr.exerciseName)
-                        .font(.subheadline.weight(.semibold))
-                    Text("×\(pr.repCount)")
-                        .font(.subheadline)
+                if proposals.count > 4 {
+                    Text("+ \(proposals.count - 4) more…")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
-                }
-                Text(pr.dateAchieved, format: .dateTime.month(.abbreviated).day().year())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(formattedWeight)
-                    .font(.headline)
-                if let deltaStr = formattedDelta {
-                    Text(deltaStr)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.green)
-                } else {
-                    Text("First PR")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.yellow.opacity(0.2))
-                        .foregroundStyle(Color.orange)
-                        .clipShape(Capsule())
-                }
-            }
-        }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.yellow.opacity(0.5), lineWidth: 1.5))
-        .shadow(color: Color.yellow.opacity(0.08), radius: 6, x: 0, y: 1)
-    }
-}
-
-// MARK: - StatCard
-
-private struct StatCard: View {
-    let icon: String
-    let iconColor: Color
-    let value: String
-    let label: String
-
-    @State private var displayedInt: Int = 0
-
-    private var targetInt: Int? { Int(value) }
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(iconColor)
-            Group {
-                if targetInt != nil {
-                    Text("\(displayedInt)")
-                } else {
-                    Text(value)
-                }
-            }
-            .font(.title2.weight(.bold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .contentTransition(.numericText())
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .padding(.horizontal, 6)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .onAppear {
-            if let target = targetInt {
-                animateCount(to: target)
-            }
-        }
-        .onChange(of: value) { _, _ in
-            if let target = targetInt {
-                animateCount(to: target)
-            }
-        }
-    }
-
-    private func animateCount(to target: Int) {
-        displayedInt = 0
-        guard target > 0 else { return }
-        let steps = min(target, 24)
-        let duration = 0.8
-        for i in 1...steps {
-            let delay = duration * Double(i) / Double(steps)
-            let stepValue = Int(Double(target) * Double(i) / Double(steps))
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                withAnimation(.easeOut(duration: 0.05)) {
-                    displayedInt = stepValue
                 }
             }
         }
