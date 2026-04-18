@@ -114,19 +114,19 @@ struct AdaptiveSteeringControlsCard: View {
 
 struct AdaptiveExplanationCard: View {
     let bundle: AdaptiveExplanationBundle
-    var title: String = "Adaptive Coach Loop"
+    var title: String = "Coach Notes"
     var compact: Bool = false
 
     private var displayedAdjustments: [AdaptiveAdjustment] {
-        compact ? Array(bundle.adjustments.prefix(3)) : bundle.adjustments
+        compact ? Array(bundle.adjustments.prefix(2)) : bundle.adjustments
     }
 
     private var displayedCarryForward: [AdaptiveCarryForwardSource] {
-        compact ? Array(bundle.carryForwardSources.prefix(2)) : bundle.carryForwardSources
+        compact ? Array(bundle.carryForwardSources.prefix(1)) : bundle.carryForwardSources
     }
 
     private var displayedPreview: [AdaptiveSteeringPreview] {
-        compact ? Array(bundle.steeringPreview.prefix(2)) : bundle.steeringPreview
+        compact ? Array(bundle.steeringPreview.prefix(1)) : bundle.steeringPreview
     }
 
     var body: some View {
@@ -162,7 +162,7 @@ struct AdaptiveExplanationCard: View {
             }
 
             if !displayedAdjustments.isEmpty {
-                sectionLabel("Personalization Delta")
+                sectionLabel("What Changed")
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(displayedAdjustments) { adjustment in
                         adjustmentRow(adjustment)
@@ -171,7 +171,7 @@ struct AdaptiveExplanationCard: View {
             }
 
             if !bundle.protectedConstraints.isEmpty {
-                sectionLabel("Protected")
+                sectionLabel("What Stayed Fixed")
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(bundle.protectedConstraints, id: \.self) { item in
                         bulletRow(item, icon: "lock.fill", color: .orange)
@@ -180,7 +180,7 @@ struct AdaptiveExplanationCard: View {
             }
 
             if !displayedCarryForward.isEmpty {
-                sectionLabel("Carry Forward")
+                sectionLabel("Why")
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(displayedCarryForward) { source in
                         VStack(alignment: .leading, spacing: 2) {
@@ -196,7 +196,7 @@ struct AdaptiveExplanationCard: View {
             }
 
             if !displayedPreview.isEmpty {
-                sectionLabel("Steering Effect")
+                sectionLabel("Steering")
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(displayedPreview) { preview in
                         VStack(alignment: .leading, spacing: 2) {
@@ -283,5 +283,82 @@ struct AdaptiveExplanationCard: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+struct CoachPresentationSummaryCard: View {
+    let copy: CoachPresentationCopy
+    var eyebrow: String? = "Coach Take"
+    var accent: Color = .teal
+    var supportLimit: Int = 2
+
+    private var supportingItems: [String] {
+        copy.detailSections.first?.items.prefix(supportLimit).map { $0 } ?? []
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let eyebrow, !eyebrow.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "quote.bubble.fill")
+                        .font(.caption2)
+                    Text(eyebrow)
+                        .font(.caption2.weight(.semibold))
+                        .textCase(.uppercase)
+                        .tracking(0.4)
+                }
+                .foregroundStyle(accent)
+            }
+
+            if !copy.headline.isEmpty {
+                Text(copy.headline)
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !copy.action.isEmpty {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "point.forward.to.point.capsulepath")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(accent)
+                        .padding(.top, 2)
+                    Text(copy.action)
+                        .font(.caption.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if !copy.whyShort.isEmpty {
+                Text(copy.whyShort)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !supportingItems.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(supportingItems, id: \.self) { item in
+                        HStack(alignment: .top, spacing: 6) {
+                            Circle()
+                                .fill(accent.opacity(0.8))
+                                .frame(width: 5, height: 5)
+                                .padding(.top, 6)
+                            Text(item)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(accent.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(accent.opacity(0.20), lineWidth: 0.5)
+        )
     }
 }

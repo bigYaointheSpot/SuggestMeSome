@@ -204,19 +204,19 @@ struct DailyCoachRecommendationService {
         if hasPain {
             let primary = DailyCoachSuggestionItem(
                 type: .suggestManualVariationSwap,
-                compactText: "Pain flagged — review your session before training.",
-                expandedText: "You reported pain or discomfort today. No automatic changes are made. Review the session manually and consider a lower-stress variation, a significant load reduction, or skipping the session if training does not feel appropriate."
+                compactText: "Pain flagged - review before training.",
+                expandedText: "You flagged pain or discomfort today. Keep the call manual: lower stress, swap to a pain-free variation, or skip the session if needed."
             )
             let secondary = [DailyCoachSuggestionItem(
                 type: .trimAccessories,
-                compactText: "Consider skipping accessories and prioritising the primary lift only.",
-                expandedText: "If you decide to train, keep the session simple, limit it to the primary lift, and skip accessories that feel likely to add unnecessary stress."
+                compactText: "If you train, keep only the main work.",
+                expandedText: "If you still want to move, keep the session simple and drop accessory work that adds stress."
             )]
             return (
                 primary,
                 secondary,
-                "Pain flagged. Manual review recommended before training.",
-                "You reported pain or discomfort. The recommendation engine will not auto-swap anything. Review your session manually, choose a lower-stress option if needed, and prioritize comfort and control over intensity."
+                "Pain flagged. Review today's session before you train.",
+                "Daily Coach will not auto-adjust around pain. Choose the lowest-stress option that feels controlled, including stopping entirely."
             )
         }
 
@@ -224,14 +224,14 @@ struct DailyCoachRecommendationService {
         if availableMinutes < 30 {
             let primary = DailyCoachSuggestionItem(
                 type: .trimAccessories,
-                compactText: "Only \(availableMinutes) min — primary lift + top set only.",
-                expandedText: "With under 30 minutes you should preserve: (1) primary lift, (2) top set. Drop all backoff sets and accessories today to stay within your window."
+                compactText: "Only \(availableMinutes) min - keep the primary lift + top set.",
+                expandedText: "Your window is too short for the full session. Keep the main lift and top set, then move on."
             )
             return (
                 primary,
                 [],
-                "Only \(availableMinutes) min available. Primary lift + top set only.",
-                "A severe time constraint means almost everything gets cut. Focus entirely on the primary movement and its top set. Quality over quantity — one good set is better than a rushed incomplete session."
+                "Only \(availableMinutes) min available. Keep the primary lift + top set.",
+                "Use the shortest version that still preserves the session's main intent. Backoff work and accessories can wait."
             )
         }
 
@@ -239,14 +239,14 @@ struct DailyCoachRecommendationService {
         if availableMinutes < 45 && (fatigueStatus == .elevated || fatigueStatus == .high || fatigueStatus == .critical) {
             let primary = DailyCoachSuggestionItem(
                 type: .trimAccessories,
-                compactText: "Limited time + elevated fatigue — trim accessories.",
-                expandedText: "With \(availableMinutes) minutes and elevated fatigue, keep: (1) primary lift, (2) top set, (3) backoff work, (4) your single highest-value accessory. Drop the rest."
+                compactText: "Limited time + high fatigue - trim accessories.",
+                expandedText: "Keep the main lift, top set, backoff work, and one high-value accessory. Drop the rest."
             )
             return (
                 primary,
                 [],
-                "\(availableMinutes) min + elevated fatigue. Trim accessories, keep primary.",
-                "Moderate time pressure combined with elevated fatigue calls for a focused session. Run the main lift fully and one key accessory. Skipping lower-priority accessories now helps keep fatigue from building further."
+                "\(availableMinutes) min and fatigue is elevated. Run the main work and trim accessories.",
+                "This keeps the session productive without stacking extra fatigue on a time-crunched day."
             )
         }
 
@@ -258,28 +258,28 @@ struct DailyCoachRecommendationService {
             if isHighFatigue {
                 primary = DailyCoachSuggestionItem(
                     type: .reduceWorkingLoadsSlightly,
-                    compactText: "Low readiness + high fatigue — reduce working loads 5–10%.",
-                    expandedText: "Both readiness and fatigue are elevated today. Reduce all working loads by 5–10% and drop one backoff set. Keep the primary lift and top set. Your body is signalling it needs more recovery."
+                    compactText: "Low readiness + high fatigue - reduce working loads 5-10%.",
+                    expandedText: "Keep the main lift, reduce working loads 5-10%, and drop one backoff set. Focus on clean reps instead of pushing."
                 )
             } else {
                 primary = DailyCoachSuggestionItem(
                     type: .trimOneBackoffSet,
-                    compactText: "Low readiness — run \(sessionLabel), drop one backoff set.",
-                    expandedText: "Readiness is low today. Run the session as programmed but remove the final backoff set from the primary lift. Primary lift, top set, and remaining backoff sets are kept. Accessories remain as planned."
+                    compactText: "Low readiness - run \(sessionLabel) and drop one backoff set.",
+                    expandedText: "Keep the session intact, but remove the last backoff set from the primary lift. If you still feel flat later, trim the lowest-priority accessory."
                 )
             }
             let secondary = [DailyCoachSuggestionItem(
                 type: .trimAccessories,
-                compactText: "If energy stays low, trim lowest-priority accessories mid-session.",
-                expandedText: "If you reach the accessories and still feel off, drop the lowest-priority one. Your top 1–2 accessories are still worth completing."
+                compactText: "If you still feel flat, trim one accessory.",
+                expandedText: "If energy does not come around by the accessory work, drop the lowest-priority piece and finish there."
             )]
             let expanded = hasObjectiveCaution
-                ? "Your manual readiness is low, and objective recovery also shows caution. Run the session conservatively — full primary lift, top set, and trimmed backoff. Keep effort controlled and avoid forcing progression."
-                : "Your composite readiness is low. The plan is to run the session conservatively — full primary lift, top set, and trimmed backoff. This keeps you training without digging a deeper fatigue hole."
+                ? "Manual readiness is low, and objective recovery also shows caution. Keep the session conservative and avoid forcing progression."
+                : "Manual readiness is low. Keep the session conservative and avoid forcing progression."
             return (
                 primary,
                 secondary,
-                "Low readiness. Conservative session for \(sessionLabel) suggested.",
+                "Low readiness. Run \(sessionLabel) conservatively today.",
                 expanded
             )
         }
@@ -299,27 +299,27 @@ struct DailyCoachRecommendationService {
             if objectiveRecoveryInsight?.status == .caution {
                 let primary = DailyCoachSuggestionItem(
                     type: .trimOneBackoffSet,
-                    compactText: "Strong check-in, but objective recovery is cautious — trim one backoff set.",
-                    expandedText: "Your manual check-in looks strong, but objective recovery is slightly below baseline today. Keep the main lift and top set, then trim one backoff set to stay productive without overreaching."
+                    compactText: "Strong check-in, but recovery is cautious - trim one backoff set.",
+                    expandedText: "Manual readiness is strong, but objective recovery is a bit below baseline. Keep the session intact and trim one backoff set."
                 )
                 return (
                     primary,
                     secondary,
-                    "Strong manual readiness with objective caution. Slightly conservative session for \(sessionLabel).",
-                    "Manual readiness is strong, but objective recovery is mildly poor versus baseline. Rather than a hard change, take a small conservative adjustment today by trimming one backoff set."
+                    "Strong check-in with recovery caution. Run \(sessionLabel) with a small trim.",
+                    "You still have a good day to train, but the recovery signal argues for a small buffer."
                 )
             }
 
             let primary = DailyCoachSuggestionItem(
                 type: .runAsPlanned,
-                compactText: "Strong readiness. Push hard on \(sessionLabel).",
-                expandedText: "All readiness indicators are high. Execute the full session and focus on quality reps — especially on your top set. High-readiness days are when progress is most likely to happen."
+                compactText: "Strong readiness. Run \(sessionLabel) hard.",
+                expandedText: "Signals are favorable today. Run the full session and push the top work if warm-ups feel good."
             )
             return (
                 primary,
                 secondary,
-                "Strong readiness. Full session for \(sessionLabel) — push hard.",
-                "High readiness across sleep, energy, soreness, and stress. This is one of your better training days. Don't sandbag — run the full session and aim for clean, confident reps on your top set."
+                "Strong readiness. Run \(sessionLabel) as planned and lean in.",
+                "This is a higher-readiness day. Keep quality high and use the session to drive progress."
             )
         }
 
@@ -328,21 +328,21 @@ struct DailyCoachRecommendationService {
         let primary = DailyCoachSuggestionItem(
             type: .runAsPlanned,
             compactText: hasObjectiveCaution
-                ? "Solid readiness with mild objective caution. Run \(sessionLabel) with controlled effort."
+                ? "Solid readiness with recovery caution. Run \(sessionLabel) with a small buffer."
                 : "Solid readiness. Run \(sessionLabel) as planned.",
             expandedText: hasObjectiveCaution
-                ? "Manual readiness is solid, but objective recovery is slightly below baseline. Keep the session as planned and leave a small effort buffer on hard sets."
-                : "Readiness is in a normal range. Proceed with the full session as programmed. Stay attentive to how working sets feel — if a set feels off, it is fine to stop a rep or two short."
+                ? "Keep the session as planned, but leave a little room on hard sets if they feel heavy."
+                : "Nothing is pushing you to change the session up front. Let early working sets guide effort."
         )
         return (
             primary,
             secondary,
             hasObjectiveCaution
-                ? "Solid readiness with objective caution. Run \(sessionLabel) with slightly conservative pacing."
+                ? "Solid readiness with recovery caution. Run \(sessionLabel) with controlled effort."
                 : "Solid readiness. Run \(sessionLabel) as planned.",
             hasObjectiveCaution
-                ? "Manual readiness is neutral-to-good while objective recovery is mildly poor. Keep the full session, but avoid forcing top-end effort if sets feel heavier than usual."
-                : "Readiness is neutral-to-good. Run the full session. Adjust effort based on how early working sets feel rather than making pre-session changes."
+                ? "The day still supports training. Just skip the all-out feel and keep reps clean."
+                : "This looks like a normal training day. Stay attentive to bar speed and leave room to adjust in-session if needed."
         )
     }
 
@@ -453,13 +453,13 @@ struct DailyCoachRecommendationService {
             let primary = DailyCoachSuggestionItem(
                 type: .standaloneRecoverySession,
                 compactText: "Pain flagged. Light recovery session only today.",
-                expandedText: "You flagged pain or discomfort. Skip strength work today. A light recovery session — mobility, walking, or easy cardio — is the most conservative option."
+                expandedText: "Skip strength work today. Mobility, walking, or easy cardio is the safer call."
             )
             return (
                 primary,
                 [],
                 "Pain flagged. Light recovery session recommended.",
-                "You reported discomfort today. A light recovery option or full rest may fit better than strength training."
+                "You reported discomfort today. A light recovery option or full rest fits better than strength training."
             )
         }
 
@@ -468,13 +468,13 @@ struct DailyCoachRecommendationService {
             let primary = DailyCoachSuggestionItem(
                 type: .standaloneRecoverySession,
                 compactText: "Recovery session recommended — light movement today.",
-                expandedText: "Readiness and fatigue signals suggest your body needs a lighter day. A recovery session — gentle movement, stretching, or light cardio — will set you up for a better training session tomorrow."
+                expandedText: "Readiness and fatigue signals point to a lighter day. Gentle movement, stretching, or easy cardio will set up a better next session."
             )
             return (
                 primary,
                 [],
                 "Recovery day. Light movement recommended over hard training.",
-                "High fatigue or low readiness signals indicate accumulated stress. A recovery session today will allow better quality training in the next session."
+                "High fatigue or low readiness signals suggest accumulated stress. A recovery session today should support better quality training next time."
             )
         }
 
@@ -482,14 +482,14 @@ struct DailyCoachRecommendationService {
         if availableMinutes < 30 {
             let primary = DailyCoachSuggestionItem(
                 type: .standaloneShortStrengthSession,
-                compactText: "Under 30 min — 2–3 key compound movements.",
-                expandedText: "Pick 2–3 high-value compound movements (e.g. squat, press, row). Keep rest periods to 60–90 seconds and prioritise quality over volume."
+                compactText: "Under 30 min - 2-3 key compound movements.",
+                expandedText: "Pick 2-3 high-value compound movements, keep rest short, and prioritize quality over volume."
             )
             return (
                 primary,
                 [],
                 "Under 30 min. Short strength session — 2–3 movements.",
-                "Time is tight. Choose one lower-body and one upper-body compound movement. Two to three working sets each. Short rest, clean reps."
+                "Time is tight. Choose one lower-body and one upper-body compound movement, then finish."
             )
         }
 
@@ -502,8 +502,8 @@ struct DailyCoachRecommendationService {
             type: .standaloneShortStrengthSession,
             compactText: "\(name) session recommended today.",
             expandedText: hasObjectiveCaution
-                ? "Based on your recent training and today's readiness, a \(name.lowercased()) session fits well. Keep it slightly conservative: use 2–4 key movements and stop hard sets a little short today.\(toneNote)"
-                : "Based on your recent training and today's readiness, a \(name.lowercased()) session fits well. Aim for 3–5 compound movements with 3–4 working sets each.\(toneNote)"
+                ? "A \(name.lowercased()) session fits today. Keep it slightly conservative with 2-4 key movements and stop hard sets a little short.\(toneNote)"
+                : "A \(name.lowercased()) session fits today. Aim for 3-5 compound movements and let warm-ups set the pace.\(toneNote)"
         )
         return (
             primary,
@@ -512,8 +512,8 @@ struct DailyCoachRecommendationService {
                 ? "\(name) session recommended with a slightly conservative pace today."
                 : "\(name) session recommended today.",
             hasObjectiveCaution
-                ? "Manual readiness supports training today, but objective recovery is mildly poor versus baseline. Keep the \(name.lowercased()) session, reduce session ambition slightly, and prioritize clean reps.\(toneNote)"
-                : "Your readiness and recent training history suggest a \(name.lowercased()) session. Choose 3–5 exercises and keep intensity aligned with how you feel during warm-up sets.\(toneNote)"
+                ? "Manual readiness supports training today, but objective recovery is mildly poor versus baseline. Keep the \(name.lowercased()) session and prioritize clean reps.\(toneNote)"
+                : "Your readiness and recent training history point toward a \(name.lowercased()) session. Keep intensity aligned with how warm-up sets feel.\(toneNote)"
         )
     }
 

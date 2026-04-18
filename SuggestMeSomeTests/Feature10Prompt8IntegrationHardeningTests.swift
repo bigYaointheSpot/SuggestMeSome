@@ -104,9 +104,10 @@ struct Feature10Prompt8IntegrationHardeningTests {
             programRunStableID: run.resolvedSyncStableID,
             generatedAt: day(0)
         )
+        let coachCopy = CoachPresentationService.dailyPlan(for: plan)
 
-        #expect(snapshot.compactSummary == plan.recommendation.compactSummary)
-        #expect(snapshot.primarySuggestionText == plan.recommendation.primarySuggestion.compactText)
+        #expect(snapshot.compactSummary == coachCopy.headline)
+        #expect(snapshot.primarySuggestionText == coachCopy.action)
         #expect(snapshot.confidence == plan.confidence.rawValue)
         #expect(snapshot.activeSourceLabels == plan.attribution.activeSourceLabels)
         #expect(snapshot.whatChangedToday == plan.whatChangedToday)

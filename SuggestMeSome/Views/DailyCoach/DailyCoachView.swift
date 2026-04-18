@@ -204,6 +204,10 @@ struct DailyCoachView: View {
     @State private var watchSessionCoordinator: WatchSessionCoordinator?
     @State private var lastPublishedWatchTodayPlanSignature: String?
 
+    init(recommendationExpanded: Bool = false) {
+        _recommendationExpanded = State(initialValue: recommendationExpanded)
+    }
+
     // MARK: Body
 
     var body: some View {
@@ -600,6 +604,7 @@ struct DailyCoachView: View {
     private var coachRecommendationCard: some View {
         let plan = todayPlan
         let rec = plan.recommendation
+        let coachCopy = CoachPresentationService.dailyPlan(for: plan)
         return VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
@@ -634,31 +639,14 @@ struct DailyCoachView: View {
 
             recommendationSourcesRow(plan.attribution.activeSourceLabels)
 
-            // Compact summary
-            Text(rec.compactSummary)
-                .font(.subheadline.weight(.medium))
-                .fixedSize(horizontal: false, vertical: true)
-
-            whatChangedTodaySection(plan.changeSummary)
-            nextStepGuidanceSection(plan.nextStepGuidance)
-
-            // Primary suggestion chip
-            HStack(spacing: 6) {
-                Image(systemName: suggestionIcon(rec.primarySuggestion.type))
-                    .font(.caption)
-                    .foregroundStyle(suggestionColor(rec.primarySuggestion.type))
-                Text(rec.primarySuggestion.compactText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            CoachPresentationSummaryCard(
+                copy: coachCopy,
+                eyebrow: "Coach Call",
+                accent: suggestionColor(rec.primarySuggestion.type),
+                supportLimit: 0
+            )
 
             guidanceSafetyRow
-
-            launchSourceRow(
-                source: currentLaunchSource(for: rec),
-                hasRelevantPendingProposal: relevantProposalForTodayPlan != nil
-            )
 
             // Expand / collapse toggle
             Button {
@@ -680,51 +668,48 @@ struct DailyCoachView: View {
             if recommendationExpanded {
                 Divider()
 
-                // Why Today
-                if !plan.whyToday.isEmpty {
+                ForEach(coachCopy.detailSections) { section in
+                    coachPresentationSection(section)
+                }
+
+                attributionSection(plan.attribution)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Confidence")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text("\(plan.confidence.rawValue): \(plan.confidenceRationale)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let insight = plan.objectiveRecoveryEvaluation.insight {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Why Today")
+                        Text("Objective Recovery")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        Text(plan.whyToday)
+                        Text(insight.detailSummary)
                             .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else if plan.objectiveRecoveryEvaluation.state != .disabled {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Objective Recovery")
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
+                        Text(TodayPlanExplanationAssembler.healthKitInfluenceText(for: plan.objectiveRecoveryEvaluation))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
-                Text(rec.expandedDetails)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                attributionSection(plan.attribution)
-
-                // Confidence rationale
-                Text("Confidence (\(plan.confidence.rawValue)): \(plan.confidenceRationale)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if let insight = plan.objectiveRecoveryEvaluation.insight {
-                    Text(insight.detailSummary)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if plan.objectiveRecoveryEvaluation.state != .disabled {
-                    Text(TodayPlanExplanationAssembler.healthKitInfluenceText(for: plan.objectiveRecoveryEvaluation))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if !rec.primarySuggestion.expandedText.isEmpty {
-                    recommendationDetailRow(rec.primarySuggestion)
-                }
-
-                ForEach(Array(rec.secondarySuggestions.enumerated()), id: \.offset) { _, item in
-                    recommendationDetailRow(item)
-                }
+                launchSourceRow(
+                    source: currentLaunchSource(for: rec),
+                    hasRelevantPendingProposal: relevantProposalForTodayPlan != nil
+                )
 
                 if let session = rec.nextProgramSession {
                     Divider()
@@ -753,33 +738,38 @@ struct DailyCoachView: View {
     }
 
     private var guidanceSafetyRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Safety Note")
-                .font(.caption2.weight(.semibold))
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "cross.case")
+                .font(.caption2)
                 .foregroundStyle(.secondary)
-            Text(ComplianceConfiguration.doctorCheckDisclosure)
+                .padding(.top, 1)
+            Text("Training guidance only - not medical advice.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private func recommendationDetailRow(_ item: DailyCoachSuggestionItem) -> some View {
+    private func coachPresentationSection(_ section: CoachPresentationDetailSection) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 5) {
-                Image(systemName: suggestionIcon(item.type))
-                    .font(.caption2)
-                    .foregroundStyle(suggestionColor(item.type))
-                Text(item.compactText)
-                    .font(.caption.weight(.medium))
-            }
-            if !item.expandedText.isEmpty {
-                Text(item.expandedText)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .padding(.leading, 17)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text(section.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(section.items, id: \.self) { item in
+                HStack(alignment: .top, spacing: 6) {
+                    Circle()
+                        .fill(Color.secondary.opacity(0.7))
+                        .frame(width: 5, height: 5)
+                        .padding(.top, 6)
+                    Text(item)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -868,7 +858,7 @@ struct DailyCoachView: View {
 
     private func recommendationSourcesRow(_ labels: [String]) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("Recommendation Sources")
+            Text("Based on")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             HStack(spacing: 6) {
@@ -920,7 +910,7 @@ struct DailyCoachView: View {
 
     private func attributionSection(_ attribution: TodayPlanSourceAttribution) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Attribution")
+            Text("Source Details")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             attributionRow("Manual Readiness", attribution.manualReadinessInfluence)
@@ -1458,15 +1448,17 @@ struct DailyCoachView: View {
     private var watchTodayPlanSignature: String {
         let plan = todayPlan
         let session = plan.recommendation.nextProgramSession
+        let coachCopy = CoachPresentationService.dailyPlan(for: plan)
         return [
             focusRun?.syncStableID ?? "standalone",
             focusRun?.program?.name ?? "",
             "\(session?.weekNumber ?? 0)",
             "\(session?.sessionNumber ?? 0)",
             plan.confidence.rawValue,
-            plan.recommendation.compactSummary,
+            coachCopy.headline,
             plan.recommendation.primarySuggestion.type.rawValue,
-            plan.recommendation.primarySuggestion.compactText,
+            coachCopy.action,
+            coachCopy.whyShort,
             "\(plan.recommendation.hasPainFlag)",
             "\(plan.recommendation.pendingProposalCount)",
             plan.recommendation.readinessTier.watchSignatureLabel,

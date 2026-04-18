@@ -74,7 +74,7 @@ struct NextBlockPrefillReviewSheet: View {
                     ) { steeringProfile = $0 }
                     AdaptiveExplanationCard(
                         bundle: liveExplanationBundle,
-                        title: "Adaptive Coach Loop",
+                        title: "Why this block fits",
                         compact: false
                     )
                     if !orderedLiftNames.isEmpty {

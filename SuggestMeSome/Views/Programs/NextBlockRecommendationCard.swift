@@ -37,7 +37,8 @@ struct NextBlockRecommendationCard: View {
     // MARK: Primary
 
     private var primaryBody: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let coachCopy = CoachPresentationService.nextBlockRecommendation(for: recommendation)
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
@@ -51,9 +52,6 @@ struct NextBlockRecommendationCard: View {
                     }
                     Text(recommendation.title)
                         .font(.headline)
-                    Text(recommendation.summary)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -68,6 +66,13 @@ struct NextBlockRecommendationCard: View {
                 capsule(recommendation.suggestedLevel.rawValue.capitalized, color: .secondary, filled: false)
             }
 
+            CoachPresentationSummaryCard(
+                copy: coachCopy,
+                eyebrow: "Coach Call",
+                accent: .teal,
+                supportLimit: 2
+            )
+
             if let explanation = recommendation.explanationBundle, !explanation.topReasons.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -79,22 +84,7 @@ struct NextBlockRecommendationCard: View {
                 }
             }
 
-            if !recommendation.rationale.isEmpty {
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(recommendation.rationale, id: \.self) { point in
-                        HStack(alignment: .top, spacing: 6) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.teal)
-                            Text(point)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-
-            Text("Tap to review and edit defaults")
+            Text("Review and adjust defaults")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.teal)
         }
@@ -112,7 +102,8 @@ struct NextBlockRecommendationCard: View {
     // MARK: Secondary
 
     private var secondaryBody: some View {
-        HStack(alignment: .top, spacing: 10) {
+        let coachCopy = CoachPresentationService.nextBlockRecommendation(for: recommendation)
+        return HStack(alignment: .top, spacing: 10) {
             Text("#\(recommendation.rank)")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -121,10 +112,22 @@ struct NextBlockRecommendationCard: View {
                 Text(recommendation.title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
-                Text(recommendation.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                if !coachCopy.action.isEmpty {
+                    Text(coachCopy.action)
+                        .font(.caption.weight(.medium))
+                        .lineLimit(2)
+                }
+                if !coachCopy.whyShort.isEmpty {
+                    Text(coachCopy.whyShort)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                } else {
+                    Text(coachCopy.headline)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
                 HStack(spacing: 6) {
                     capsule(recommendation.targetFocusDisplayName, color: .teal, filled: false)
                     capsule("\(recommendation.suggestedDurationWeeks)w · \(recommendation.suggestedSessionsPerWeek)×", color: .secondary, filled: false)

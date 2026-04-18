@@ -18,10 +18,21 @@ struct SuggestMeSomeBuildStepView: View {
                     if let note = workout.adaptationNote {
                         adaptationBanner(note)
                     }
+                    if let recommendation = viewModel.recommendation {
+                        CoachPresentationSummaryCard(
+                            copy: CoachPresentationService.builtSession(
+                                recommendation: recommendation,
+                                workout: workout
+                            ),
+                            eyebrow: "Coach Call",
+                            accent: .purple,
+                            supportLimit: 1
+                        )
+                    }
                     if let bundle = workout.explanationBundle {
                         AdaptiveExplanationCard(
                             bundle: bundle,
-                            title: "Adaptive Coach Loop",
+                            title: "Coach Notes",
                             compact: true
                         )
                     }

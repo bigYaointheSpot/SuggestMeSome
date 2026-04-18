@@ -12,9 +12,9 @@
 //  matching the existing `DefaultWatchCompanionBridge` isolation.
 //
 //  Coaching trust: the coordinator never synthesises its own plan. Today Plan
-//  snapshots are derived verbatim from `TodayPlan` values produced by
-//  `TodayPlanEngine`, so the watch surface stays faithful to the explainable
-//  iPhone output.
+//  snapshots are derived from `TodayPlan` values through the shared
+//  presentation-layer coach copy, so the watch surface stays faithful to the
+//  explainable iPhone output while keeping the smaller UI concise.
 //
 
 import Foundation
@@ -63,6 +63,7 @@ enum WatchPayloadMapper {
         generatedAt: Date = Date()
     ) -> WatchTodayPlanSnapshot {
         let rec = plan.recommendation
+        let copy = CoachPresentationService.dailyPlan(for: plan)
 
         let sessionLabel: String
         var programWeek: Int? = nil
@@ -96,8 +97,8 @@ enum WatchPayloadMapper {
 
         return WatchTodayPlanSnapshot(
             confidence: plan.confidence.rawValue,
-            compactSummary: rec.compactSummary,
-            primarySuggestionText: rec.primarySuggestion.compactText,
+            compactSummary: copy.headline,
+            primarySuggestionText: copy.action,
             readinessTier: readinessLabel,
             hasPainFlag: rec.hasPainFlag,
             sessionLabel: sessionLabel,

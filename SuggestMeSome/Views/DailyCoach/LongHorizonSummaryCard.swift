@@ -12,14 +12,8 @@ struct LongHorizonSummaryCard: View {
     let onReviewBlock: () -> Void
     let onGenerateNextBlock: () -> Void
 
-    private var actionableInsights: [LongHorizonAdaptationInsight] {
-        summary.insights
-            .filter { $0.kind != .insufficientData }
-            .prefix(3)
-            .map { $0 }
-    }
-
     var body: some View {
+        let coachCopy = CoachPresentationService.longHorizonSummary(for: summary)
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.up.forward.circle")
@@ -32,17 +26,12 @@ struct LongHorizonSummaryCard: View {
 
             Divider()
 
-            Text(summary.headline)
-                .font(.subheadline.weight(.medium))
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !actionableInsights.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    ForEach(actionableInsights, id: \.title) { insight in
-                        insightRow(insight)
-                    }
-                }
-            }
+            CoachPresentationSummaryCard(
+                copy: coachCopy,
+                eyebrow: "Coach Take",
+                accent: .indigo,
+                supportLimit: 2
+            )
 
             Divider()
 
@@ -86,42 +75,4 @@ struct LongHorizonSummaryCard: View {
             .clipShape(Capsule())
     }
 
-    private func insightRow(_ insight: LongHorizonAdaptationInsight) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: insightIcon(insight.kind))
-                .font(.caption2)
-                .foregroundStyle(insightColor(insight.kind))
-                .frame(width: 14)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(insight.title)
-                    .font(.caption.weight(.semibold))
-                Text(insight.detail)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func insightIcon(_ kind: LongHorizonAdaptationInsightKind) -> String {
-        switch kind {
-        case .adherenceTrend:       return "chart.line.uptrend.xyaxis"
-        case .movementContinuity:   return "arrow.2.circlepath"
-        case .toleratedFrequency:   return "calendar"
-        case .missedSessionPattern: return "exclamationmark.triangle"
-        case .standaloneInfluence:  return "plus.circle"
-        case .insufficientData:     return "info.circle"
-        }
-    }
-
-    private func insightColor(_ kind: LongHorizonAdaptationInsightKind) -> Color {
-        switch kind {
-        case .adherenceTrend:       return .green
-        case .movementContinuity:   return .teal
-        case .toleratedFrequency:   return .blue
-        case .missedSessionPattern: return .orange
-        case .standaloneInfluence:  return .indigo
-        case .insufficientData:     return .secondary
-        }
-    }
 }

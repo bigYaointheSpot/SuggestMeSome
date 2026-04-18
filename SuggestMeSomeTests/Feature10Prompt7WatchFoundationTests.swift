@@ -248,10 +248,11 @@ struct Feature10Prompt7WatchFoundationTests {
             from: plan,
             generatedAt: Date(timeIntervalSince1970: 1_700_000_000)
         )
+        let coachCopy = CoachPresentationService.dailyPlan(for: plan)
 
         #expect(snapshot.confidence == "High")
-        #expect(snapshot.compactSummary == "Heavy day")
-        #expect(snapshot.primarySuggestionText == "Work hard")
+        #expect(snapshot.compactSummary == coachCopy.headline)
+        #expect(snapshot.primarySuggestionText == coachCopy.action)
         #expect(snapshot.readinessTier == "Neutral")
         #expect(snapshot.hasPainFlag == false)
         #expect(snapshot.sessionLabel.contains("W3"))

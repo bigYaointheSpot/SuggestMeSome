@@ -226,7 +226,7 @@ struct AIProgramGeneratorView: View {
                 if let adaptivePreviewBundle {
                     AdaptiveExplanationCard(
                         bundle: adaptivePreviewBundle,
-                        title: "Adaptive Preview",
+                        title: "Coach Preview",
                         compact: true
                     )
                 }

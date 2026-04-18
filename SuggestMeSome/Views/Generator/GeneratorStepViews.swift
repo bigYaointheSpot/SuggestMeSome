@@ -127,7 +127,7 @@ struct SuggestMeSomeRecommendationStepView: View {
                     if let bundle = recommendation.explanationBundle {
                         AdaptiveExplanationCard(
                             bundle: bundle,
-                            title: "Adaptive Coach Loop",
+                            title: "Coach Notes",
                             compact: true
                         )
                     }
@@ -147,7 +147,8 @@ struct SuggestMeSomeRecommendationStepView: View {
     // MARK: - Recommendation card
 
     private func recommendationCard(_ recommendation: SuggestMeSomeSessionRecommendation) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let coachCopy = CoachPresentationService.sessionRecommendation(for: recommendation)
+        return VStack(alignment: .leading, spacing: 12) {
             // Header
             Label("Recommended Session", systemImage: "lightbulb.max.fill")
                 .font(.headline)
@@ -171,13 +172,12 @@ struct SuggestMeSomeRecommendationStepView: View {
 
             Divider()
 
-            // Summary — plain-English "why this session"
-            Text(recommendation.summary)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            continuitySection(recommendation)
+            CoachPresentationSummaryCard(
+                copy: coachCopy,
+                eyebrow: "Coach Call",
+                accent: .teal,
+                supportLimit: 1
+            )
 
             // Redirect notice — shown only when mode was adjusted
             if recommendation.wasRedirected {

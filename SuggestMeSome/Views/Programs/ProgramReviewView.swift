@@ -439,7 +439,7 @@ struct ProgramReviewView: View {
             if let adaptiveExplanationBundle {
                 AdaptiveExplanationCard(
                     bundle: adaptiveExplanationBundle,
-                    title: "Adaptive Coach Loop",
+                    title: "Coach Notes",
                     compact: false
                 )
             }
