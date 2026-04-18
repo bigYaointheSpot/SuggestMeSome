@@ -218,7 +218,9 @@ struct DailyCoachView: View {
                     if isBetweenBlocks {
                         betweenBlocksContextCard
                     }
-                    readinessCard
+                    if todayCheckIn == nil {
+                        readinessCard
+                    }
                     coachRecommendationCard
                     if let rescue = todayPlan.adherenceRescue {
                         adherenceRescueCard(rescue: rescue)
@@ -241,6 +243,9 @@ struct DailyCoachView: View {
                             onReviewBlock: presentLatestCompletedReview,
                             onGenerateNextBlock: { showingNextBlockGenerator = true }
                         )
+                    }
+                    if todayCheckIn != nil {
+                        readinessCard
                     }
                 }
                 .padding(.horizontal)

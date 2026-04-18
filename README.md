@@ -3283,6 +3283,17 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 8 [Daily Coach Check-In Reordering] — 2026-04-17
+
+- Reordered the Daily Coach tab so the readiness/check-in card moves to the bottom of the scroll view once today's check-in has been logged:
+  - updated the `DailyCoachView` body to render `readinessCard` above the coach recommendation only while `todayCheckIn == nil`
+  - appended `readinessCard` after the block continuity and long-horizon cards once today's check-in exists, preserving the edit-check-in affordance without pushing the coach recommendation below the fold
+- Kept the underlying check-in presentation and sheet wiring unchanged so existing `todayCheckInSummary`, edit, and empty-state flows continue to work
+- Verification:
+  - `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' build`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
