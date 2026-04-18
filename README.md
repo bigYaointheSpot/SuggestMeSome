@@ -3265,15 +3265,7 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
-### Feature 16 — App Branding Refresh
-
-**Status:** Complete
-
-Updated the iPhone and Apple Watch app icons to use the new provided logo art.
-
----
-
-#### Prompt 1 [iPhone + Apple Watch Icon Refresh] — 2026-04-17
+#### Prompt 7 [iPhone + Apple Watch Icon Refresh] — 2026-04-17
 
 - Replaced the shared master app icon artwork in both asset catalogs:
   - updated `SuggestMeSome/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`
@@ -3290,7 +3282,6 @@ Updated the iPhone and Apple Watch app icons to use the new provided logo art.
 **Commit:** `feat: refresh ios and watch app icons`
 
 ---
-
 
 ## Project Setup
 
