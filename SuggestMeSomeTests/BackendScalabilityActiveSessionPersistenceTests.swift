@@ -76,4 +76,167 @@ struct BackendScalabilityActiveSessionPersistenceTests {
         #expect(second.result.status == .ignoredStaleCursor)
         #expect(second.session?.exerciseEntries[0].sets[0].repsText == "5")
     }
+
+    @Test func persistenceStoreSkipsWritesWhenEncodedPayloadIsUnchanged() {
+        let suiteName = "BackendScalabilityActiveSessionPersistenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let store = ActiveWorkoutSessionPersistenceStore(
+            userDefaults: defaults,
+            persistenceKey: "active-session"
+        )
+        let session = makeSession()
+
+        let firstWrite = store.save(session)
+        let secondWrite = store.save(session)
+
+        #expect(firstWrite)
+        #expect(secondWrite == false)
+        #expect(store.load() == session)
+    }
+
+    @Test func updateSessionReturnsUnchangedWhenDraftValuesMatchExistingSession() {
+        let store = makeStore()
+        let session = makeSession()
+
+        store.startSession(
+            id: session.id,
+            startTime: session.startTime,
+            exerciseEntries: session.exerciseEntries,
+            programContext: session.programContext,
+            sessionPlanKind: session.sessionPlanKind,
+            sessionSourceLabels: session.sessionSourceLabels,
+            sessionVersionStableID: session.sessionVersionStableID,
+            usesLinkedWatchHealthSession: session.usesLinkedWatchHealthSession
+        )
+        store.updateSession(
+            startTime: session.startTime,
+            exerciseEntries: session.exerciseEntries,
+            caloriesText: session.caloriesText,
+            comments: session.comments,
+            programContext: session.programContext,
+            sessionPlanKind: session.sessionPlanKind,
+            sessionSourceLabels: session.sessionSourceLabels,
+            sessionVersionStableID: session.sessionVersionStableID
+        )
+
+        let result = store.updateSession(
+            startTime: session.startTime,
+            exerciseEntries: session.exerciseEntries,
+            caloriesText: session.caloriesText,
+            comments: session.comments,
+            programContext: session.programContext,
+            sessionPlanKind: session.sessionPlanKind,
+            sessionSourceLabels: session.sessionSourceLabels,
+            sessionVersionStableID: session.sessionVersionStableID
+        )
+
+        #expect(result == .unchanged)
+    }
+
+    @Test func updateSessionSkipsWatchBroadcastForCommentAndCalorieOnlyEdits() {
+        let store = makeStore()
+        let session = makeSession()
+
+        store.startSession(
+            id: session.id,
+            startTime: session.startTime,
+            exerciseEntries: session.exerciseEntries,
+            programContext: session.programContext,
+            sessionPlanKind: session.sessionPlanKind,
+            sessionSourceLabels: session.sessionSourceLabels,
+            sessionVersionStableID: session.sessionVersionStableID,
+            usesLinkedWatchHealthSession: session.usesLinkedWatchHealthSession
+        )
+
+        let result = store.updateSession(
+            startTime: session.startTime,
+            exerciseEntries: session.exerciseEntries,
+            caloriesText: "245",
+            comments: "Strong session",
+            programContext: session.programContext,
+            sessionPlanKind: session.sessionPlanKind,
+            sessionSourceLabels: session.sessionSourceLabels,
+            sessionVersionStableID: session.sessionVersionStableID
+        )
+
+        #expect(result.didChangeSession)
+        #expect(result.shouldBroadcastWatch == false)
+        #expect(store.session?.caloriesText == "245")
+        #expect(store.session?.comments == "Strong session")
+    }
+
+    @Test func updateSessionBroadcastsWatchForExerciseEntryEdits() {
+        let store = makeStore()
+        let session = makeSession()
+
+        store.startSession(
+            id: session.id,
+            startTime: session.startTime,
+            exerciseEntries: session.exerciseEntries,
+            programContext: session.programContext,
+            sessionPlanKind: session.sessionPlanKind,
+            sessionSourceLabels: session.sessionSourceLabels,
+            sessionVersionStableID: session.sessionVersionStableID,
+            usesLinkedWatchHealthSession: session.usesLinkedWatchHealthSession
+        )
+
+        var updatedEntries = session.exerciseEntries
+        updatedEntries[0].sets[0].repsText = "6"
+
+        let result = store.updateSession(
+            startTime: session.startTime,
+            exerciseEntries: updatedEntries,
+            caloriesText: session.caloriesText,
+            comments: session.comments,
+            programContext: session.programContext,
+            sessionPlanKind: session.sessionPlanKind,
+            sessionSourceLabels: session.sessionSourceLabels,
+            sessionVersionStableID: session.sessionVersionStableID
+        )
+
+        #expect(result.didChangeSession)
+        #expect(result.shouldBroadcastWatch)
+        #expect(store.session?.exerciseEntries[0].sets[0].repsText == "6")
+    }
+
+    private func makeStore() -> ActiveWorkoutSessionStore {
+        let suiteName = "BackendScalabilityActiveSessionPersistenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return ActiveWorkoutSessionStore(
+            userDefaults: defaults,
+            persistenceKey: "active-session"
+        )
+    }
+
+    private func makeSession() -> ActiveWorkoutSession {
+        ActiveWorkoutSession(
+            id: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+            startTime: Date(timeIntervalSince1970: 1_780_000_000),
+            exerciseEntries: [
+                DraftExerciseEntry(
+                    exerciseName: "Bench Press",
+                    unit: .lbs,
+                    orderIndex: 0,
+                    sets: [DraftSet(setNumber: 1, repsText: "5", weightText: "185")]
+                )
+            ],
+            caloriesText: "200",
+            comments: "Baseline",
+            programContext: ActiveWorkoutProgramContext(
+                programRunID: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
+                programRunStableID: "run-1",
+                weekNumber: 1,
+                sessionNumber: 1
+            ),
+            lifecycleState: .running,
+            accumulatedElapsedSeconds: 600,
+            stateChangedAt: Date(timeIntervalSince1970: 1_780_000_600),
+            sessionPlanKind: .planned,
+            sessionSourceLabels: ["Program"],
+            sessionVersionStableID: "run-1::w1s1::planned",
+            usesLinkedWatchHealthSession: true
+        )
+    }
 }

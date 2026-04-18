@@ -90,7 +90,40 @@ struct BackendScalabilityPersistenceTests {
         )
     }
 
-    @Test func persistenceMaintenanceCoordinatorSkipsAuditWhenSchemaUnchangedAndAlreadyAuditedToday() throws {
+    @Test func blockingStartupMaintenanceDefersAuditUntilExplicitFollowUpPass() throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "BackendScalabilityPersistenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let blockingReport = PersistenceMaintenanceCoordinator.runBlockingStartupMaintenance(
+            context: container.mainContext,
+            userDefaults: defaults,
+            now: day(10)
+        )
+
+        #expect(blockingReport.previousSchemaVersion == nil)
+        #expect(blockingReport.currentSchemaVersion == PersistenceSchemaVersion.current)
+        #expect(blockingReport.shouldRunDeferredSyncMetadataAudit)
+        #expect(
+            PersistenceMaintenanceCoordinator.storedLastAuditAt(userDefaults: defaults) == nil
+        )
+
+        let deferredReport = PersistenceMaintenanceCoordinator.runDeferredStartupSyncAuditIfNeeded(
+            context: container.mainContext,
+            shouldRunSyncAudit: blockingReport.shouldRunDeferredSyncMetadataAudit,
+            userDefaults: defaults,
+            now: day(10)
+        )
+
+        #expect(deferredReport.didRunSyncMetadataAudit)
+        #expect(
+            PersistenceMaintenanceCoordinator.storedLastAuditAt(userDefaults: defaults)
+            == day(10)
+        )
+    }
+
+    @Test func persistenceMaintenanceCoordinatorSkipsAuditWhenSchemaUnchangedAndAuditIsFreshWithinSevenDays() throws {
         let container = try makeInMemoryContainer()
         let suiteName = "BackendScalabilityPersistenceTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -107,7 +140,7 @@ struct BackendScalabilityPersistenceTests {
         let report = PersistenceMaintenanceCoordinator.runStartupMaintenance(
             context: container.mainContext,
             userDefaults: defaults,
-            now: day(12)
+            now: day(18)
         )
 
         #expect(report.previousSchemaVersion == PersistenceSchemaVersion.current)
@@ -120,7 +153,7 @@ struct BackendScalabilityPersistenceTests {
         )
     }
 
-    @Test func persistenceMaintenanceCoordinatorRunsAuditAgainAfterDailyCadenceExpires() throws {
+    @Test func persistenceMaintenanceCoordinatorRunsAuditAgainAfterSevenDayCadenceExpires() throws {
         let container = try makeInMemoryContainer()
         let suiteName = "BackendScalabilityPersistenceTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -137,7 +170,7 @@ struct BackendScalabilityPersistenceTests {
         let report = PersistenceMaintenanceCoordinator.runStartupMaintenance(
             context: container.mainContext,
             userDefaults: defaults,
-            now: day(12)
+            now: day(18)
         )
 
         #expect(report.previousSchemaVersion == PersistenceSchemaVersion.current)

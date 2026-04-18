@@ -181,7 +181,7 @@ final class WorkoutSaveCoordinator {
         let workout = buildWorkout(using: request)
         modelContext.insert(workout)
 
-        var personalRecords = TrainingReadRepository.historySnapshot(context: modelContext).personalRecords
+        var personalRecords = TrainingReadRepository.fetchPersonalRecords(context: modelContext)
         persistExerciseEntries(request.exerciseEntries, for: workout, at: request.endTime, personalRecords: &personalRecords)
 
         let transactionStatus = persistPrimaryTransaction()

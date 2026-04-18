@@ -51,6 +51,7 @@ struct WorkoutView: View {
     @State private var showBlockReview = false
     @State private var pendingBlockReviewSnapshot: MesocycleReviewSnapshot?
     @State private var blockJustCompleted = false
+    @State private var draftPersistenceTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
@@ -115,11 +116,18 @@ struct WorkoutView: View {
         .onAppear {
             configureWorkoutSession()
         }
-        .onChange(of: isActive) { _, _ in persistActiveSessionIfNeeded() }
-        .onChange(of: startTime) { _, _ in persistActiveSessionIfNeeded() }
-        .onChange(of: exerciseEntries) { _, _ in persistActiveSessionIfNeeded() }
-        .onChange(of: caloriesText) { _, _ in persistActiveSessionIfNeeded() }
-        .onChange(of: comments) { _, _ in persistActiveSessionIfNeeded() }
+        .onDisappear {
+            flushPendingDraftPersistence(broadcastWatchIfNeeded: true)
+        }
+        .onChange(of: exerciseEntries) { _, _ in
+            scheduleDraftPersistence()
+        }
+        .onChange(of: caloriesText) { _, _ in
+            scheduleDraftPersistence()
+        }
+        .onChange(of: comments) { _, _ in
+            scheduleDraftPersistence()
+        }
         .onChange(of: activeWorkoutSessionStore.session) { _, newSession in
             syncWithActiveSessionIfNeeded(newSession)
         }
@@ -345,9 +353,30 @@ struct WorkoutView: View {
         isActive = true
     }
 
-    private func persistActiveSessionIfNeeded() {
+    private func scheduleDraftPersistence() {
+        guard isActive, startTime != nil else { return }
+        draftPersistenceTask?.cancel()
+        draftPersistenceTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            persistActiveSessionIfNeeded()
+            draftPersistenceTask = nil
+        }
+    }
+
+    private func cancelPendingDraftPersistence() {
+        draftPersistenceTask?.cancel()
+        draftPersistenceTask = nil
+    }
+
+    private func flushPendingDraftPersistence(broadcastWatchIfNeeded: Bool) {
+        cancelPendingDraftPersistence()
+        persistActiveSessionIfNeeded(broadcastWatchIfNeeded: broadcastWatchIfNeeded)
+    }
+
+    private func persistActiveSessionIfNeeded(broadcastWatchIfNeeded: Bool = true) {
         guard isActive, let startTime else { return }
-        activeWorkoutSessionStore.updateSession(
+        let mutation = activeWorkoutSessionStore.updateSession(
             startTime: startTime,
             exerciseEntries: exerciseEntries,
             caloriesText: caloriesText,
@@ -357,11 +386,15 @@ struct WorkoutView: View {
             sessionSourceLabels: programWorkout?.watchSessionSourceLabels,
             sessionVersionStableID: programWorkout?.watchSessionVersionStableID
         )
-        broadcastActiveSessionToWatch()
+        guard mutation.didChangeSession else { return }
+        if broadcastWatchIfNeeded && mutation.shouldBroadcastWatch {
+            broadcastActiveSessionToWatch()
+        }
     }
 
     private func syncWithActiveSessionIfNeeded(_ session: ActiveWorkoutSession?) {
         guard let session else { return }
+        cancelPendingDraftPersistence()
         guard isActive else {
             applyActiveSession(session)
             return
@@ -388,6 +421,7 @@ struct WorkoutView: View {
 
     private func pauseWorkout() {
         guard isActive else { return }
+        flushPendingDraftPersistence(broadcastWatchIfNeeded: false)
         let now = Date.now
         activeWorkoutSessionStore.pauseSession(at: now)
         lifecycleState = .paused
@@ -397,6 +431,7 @@ struct WorkoutView: View {
 
     private func resumeWorkout() {
         guard isActive else { return }
+        flushPendingDraftPersistence(broadcastWatchIfNeeded: false)
         let now = Date.now
         activeWorkoutSessionStore.resumeSession(at: now)
         lifecycleState = .running
@@ -533,6 +568,7 @@ struct WorkoutView: View {
 
     private func saveWorkout() {
         guard isActive, let start = startTime else { return }
+        flushPendingDraftPersistence(broadcastWatchIfNeeded: false)
         let endTime = Date.now
         let saveProgramContext = workoutSaveProgramContext()
         let runForSave = saveProgramContext?.run

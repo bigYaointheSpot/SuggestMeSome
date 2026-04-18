@@ -15,6 +15,7 @@ struct SuggestMeSomeApp: App {
     @State private var purchaseManager = PurchaseManager.shared
     @State private var complianceStateStore = ComplianceStateStore.shared
     @State private var accountManager = AccountManager.shared
+    @State private var hasPerformedStartupMaintenance = false
 
     private static let sharedSchema = Schema([
             MuscleGroup.self,
@@ -102,7 +103,10 @@ struct SuggestMeSomeApp: App {
                 .environment(complianceStateStore)
                 .environment(accountManager)
                 .onAppear {
-                    _ = PersistenceMaintenanceCoordinator.runStartupMaintenance(
+                    guard !hasPerformedStartupMaintenance else { return }
+                    hasPerformedStartupMaintenance = true
+
+                    let maintenanceReport = PersistenceMaintenanceCoordinator.runBlockingStartupMaintenance(
                         context: sharedModelContainer.mainContext
                     )
                     HealthKitSettingsStorage.migrateLegacyRecoverySyncTimestampIfNeeded(
@@ -114,6 +118,15 @@ struct SuggestMeSomeApp: App {
                     )
                     Task { @MainActor in
                         await purchaseManager.bootstrap()
+                    }
+                    if maintenanceReport.shouldRunDeferredSyncMetadataAudit {
+                        Task { @MainActor in
+                            await Task.yield()
+                            _ = PersistenceMaintenanceCoordinator.runDeferredStartupSyncAuditIfNeeded(
+                                context: sharedModelContainer.mainContext,
+                                shouldRunSyncAudit: true
+                            )
+                        }
                     }
                 }
                 .onChange(of: scenePhase) { _, newPhase in

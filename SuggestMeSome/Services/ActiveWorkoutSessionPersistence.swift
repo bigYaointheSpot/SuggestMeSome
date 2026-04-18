@@ -58,13 +58,22 @@ struct ActiveWorkoutSessionPersistenceStore {
         )
     }
 
-    func save(_ session: ActiveWorkoutSession?) {
-        guard let data = ActiveWorkoutSessionPersistenceCodec.encode(session) else {
+    @discardableResult
+    func save(_ session: ActiveWorkoutSession?) -> Bool {
+        let data = ActiveWorkoutSessionPersistenceCodec.encode(session)
+        let existingData = userDefaults.data(forKey: persistenceKey)
+
+        if existingData == data {
+            return false
+        }
+
+        guard let data else {
             userDefaults.removeObject(forKey: persistenceKey)
-            return
+            return true
         }
 
         userDefaults.set(data, forKey: persistenceKey)
+        return true
     }
 }
 

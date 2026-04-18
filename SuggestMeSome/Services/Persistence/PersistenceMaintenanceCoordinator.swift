@@ -16,10 +16,23 @@ struct PersistenceMaintenanceReport: Equatable {
     let syncAuditReport: SyncMetadataAuditReport
 }
 
+struct BlockingStartupMaintenanceReport: Equatable {
+    let previousSchemaVersion: Int?
+    let currentSchemaVersion: Int
+    let performedSteps: [String]
+    let shouldRunDeferredSyncMetadataAudit: Bool
+}
+
+struct DeferredStartupSyncAuditReport: Equatable {
+    let didRunSyncMetadataAudit: Bool
+    let syncAuditReport: SyncMetadataAuditReport
+}
+
 @MainActor
 enum PersistenceMaintenanceCoordinator {
     static let schemaVersionDefaultsKey = "persistence.schemaVersion"
     static let lastAuditAtDefaultsKey = "persistence.lastAuditAt"
+    static let syncAuditIntervalDays = 7
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "SuggestMeSome",
         category: "PersistenceMaintenance"
@@ -31,6 +44,45 @@ enum PersistenceMaintenanceCoordinator {
         now: Date = .now,
         calendar: Calendar = .autoupdatingCurrent
     ) -> PersistenceMaintenanceReport {
+        let previousSchemaVersion = storedSchemaVersion(userDefaults: userDefaults)
+        let lastAuditAt = storedLastAuditAt(userDefaults: userDefaults)
+        let blockingReport = runBlockingStartupMaintenance(
+            context: context,
+            userDefaults: userDefaults,
+            now: now,
+            calendar: calendar
+        )
+        let deferredAuditReport = runDeferredStartupSyncAuditIfNeeded(
+            context: context,
+            shouldRunSyncAudit: blockingReport.shouldRunDeferredSyncMetadataAudit,
+            userDefaults: userDefaults,
+            now: now
+        )
+        let report = PersistenceMaintenanceReport(
+            previousSchemaVersion: previousSchemaVersion,
+            currentSchemaVersion: blockingReport.currentSchemaVersion,
+            performedSteps: blockingReport.performedSteps + [
+                deferredAuditReport.didRunSyncMetadataAudit
+                ? "syncMetadataAuditAndRepair"
+                : "syncMetadataAuditSkipped"
+            ],
+            didRunSyncMetadataAudit: deferredAuditReport.didRunSyncMetadataAudit,
+            syncAuditReport: deferredAuditReport.syncAuditReport
+        )
+        logStartupMaintenance(
+            report: report,
+            lastAuditAt: lastAuditAt,
+            elapsedMilliseconds: nil
+        )
+        return report
+    }
+
+    static func runBlockingStartupMaintenance(
+        context: ModelContext,
+        userDefaults: UserDefaults = .standard,
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> BlockingStartupMaintenanceReport {
         let maintenanceStartedAt = ProcessInfo.processInfo.systemUptime
         let previousSchemaVersion = storedSchemaVersion(userDefaults: userDefaults)
         let lastAuditAt = storedLastAuditAt(userDefaults: userDefaults)
@@ -45,16 +97,6 @@ enum PersistenceMaintenanceCoordinator {
             now: now,
             calendar: calendar
         )
-        let syncAuditReport: SyncMetadataAuditReport
-        if shouldRunSyncAudit {
-            syncAuditReport = SyncMetadataAuditService.auditAndRepair(
-                context: context,
-                auditedAt: now
-            )
-            userDefaults.set(now.timeIntervalSince1970, forKey: lastAuditAtDefaultsKey)
-        } else {
-            syncAuditReport = SyncMetadataAuditReport.skipped(auditedAt: now)
-        }
 
         userDefaults.set(PersistenceSchemaVersion.current, forKey: schemaVersionDefaultsKey)
 
@@ -62,22 +104,45 @@ enum PersistenceMaintenanceCoordinator {
             "seedDefaultDataIfNeeded",
             "migrateExerciseTypesIfNeeded",
             "migrateExercisesV2IfNeeded",
-            shouldRunSyncAudit ? "syncMetadataAuditAndRepair" : "syncMetadataAuditSkipped",
         ]
-        let report = PersistenceMaintenanceReport(
+        let report = BlockingStartupMaintenanceReport(
             previousSchemaVersion: previousSchemaVersion,
             currentSchemaVersion: PersistenceSchemaVersion.current,
             performedSteps: performedSteps,
-            didRunSyncMetadataAudit: shouldRunSyncAudit,
-            syncAuditReport: syncAuditReport
+            shouldRunDeferredSyncMetadataAudit: shouldRunSyncAudit
         )
-        logStartupMaintenance(
+        logBlockingStartupMaintenance(
             report: report,
             lastAuditAt: lastAuditAt,
             elapsedMilliseconds: (ProcessInfo.processInfo.systemUptime - maintenanceStartedAt) * 1_000
         )
 
         return report
+    }
+
+    static func runDeferredStartupSyncAuditIfNeeded(
+        context: ModelContext,
+        shouldRunSyncAudit: Bool,
+        userDefaults: UserDefaults = .standard,
+        now: Date = .now
+    ) -> DeferredStartupSyncAuditReport {
+        guard shouldRunSyncAudit else {
+            return DeferredStartupSyncAuditReport(
+                didRunSyncMetadataAudit: false,
+                syncAuditReport: .skipped(auditedAt: now)
+            )
+        }
+
+        let syncAuditReport = SyncMetadataAuditService.auditAndRepair(
+            context: context,
+            auditedAt: now
+        )
+        userDefaults.set(now.timeIntervalSince1970, forKey: lastAuditAtDefaultsKey)
+
+        return DeferredStartupSyncAuditReport(
+            didRunSyncMetadataAudit: true,
+            syncAuditReport: syncAuditReport
+        )
     }
 
     static func storedSchemaVersion(userDefaults: UserDefaults = .standard) -> Int? {
@@ -106,23 +171,43 @@ enum PersistenceMaintenanceCoordinator {
         guard let lastAuditAt else {
             return true
         }
-        return !calendar.isDate(lastAuditAt, inSameDayAs: now)
+        guard let nextScheduledAuditAt = calendar.date(
+            byAdding: .day,
+            value: syncAuditIntervalDays,
+            to: lastAuditAt
+        ) else {
+            return true
+        }
+        return now >= nextScheduledAuditAt
     }
 
-    private static func logStartupMaintenance(
-        report: PersistenceMaintenanceReport,
+    private static func logBlockingStartupMaintenance(
+        report: BlockingStartupMaintenanceReport,
         lastAuditAt: Date?,
         elapsedMilliseconds: Double
     ) {
         #if DEBUG
         let roundedMilliseconds = Int(elapsedMilliseconds.rounded())
-        if report.didRunSyncMetadataAudit {
+        logger.debug(
+            "blocking startup maintenance completed in \(roundedMilliseconds)ms; deferredAudit=\(report.shouldRunDeferredSyncMetadataAudit) previousSchemaVersion=\(report.previousSchemaVersion ?? -1) lastAuditAt=\(lastAuditAt?.timeIntervalSince1970 ?? -1)"
+        )
+        #endif
+    }
+
+    private static func logStartupMaintenance(
+        report: PersistenceMaintenanceReport,
+        lastAuditAt: Date?,
+        elapsedMilliseconds: Double?
+    ) {
+        #if DEBUG
+        if let elapsedMilliseconds {
+            let roundedMilliseconds = Int(elapsedMilliseconds.rounded())
             logger.debug(
-                "startup maintenance completed in \(roundedMilliseconds)ms; auditRan=true repairedRows=\(report.syncAuditReport.repairedRows) totalRows=\(report.syncAuditReport.totalRows) previousSchemaVersion=\(report.previousSchemaVersion ?? -1)"
+                "startup maintenance completed in \(roundedMilliseconds)ms; auditRan=\(report.didRunSyncMetadataAudit) previousSchemaVersion=\(report.previousSchemaVersion ?? -1) lastAuditAt=\(lastAuditAt?.timeIntervalSince1970 ?? -1)"
             )
         } else {
             logger.debug(
-                "startup maintenance completed in \(roundedMilliseconds)ms; auditRan=false previousSchemaVersion=\(report.previousSchemaVersion ?? -1) lastAuditAt=\(lastAuditAt?.timeIntervalSince1970 ?? -1)"
+                "startup maintenance completed; auditRan=\(report.didRunSyncMetadataAudit) previousSchemaVersion=\(report.previousSchemaVersion ?? -1) lastAuditAt=\(lastAuditAt?.timeIntervalSince1970 ?? -1)"
             )
         }
         #endif

@@ -3318,6 +3318,35 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+### Feature 16 — Performance, read-path cleanup, and stale-surface refresh
+
+**Status:** In Progress
+
+#### Prompt 1 [Launch, audit cadence, and workout draft persistence hardening] — 2026-04-18
+
+- Split startup persistence maintenance into a blocking launch pass plus a deferred sync-audit follow-up:
+  - `PersistenceMaintenanceCoordinator` now exposes `runBlockingStartupMaintenance(...)` for seeding/migration work only and `runDeferredStartupSyncAuditIfNeeded(...)` for post-launch metadata repair
+  - the startup audit cadence now runs when the schema changes, when no prior audit exists, or when the last audit is at least 7 days old
+  - `SuggestMeSomeApp` schedules the deferred audit after the first UI presentation instead of keeping that read-heavy pass on the initial render path
+- Hardened active workout draft persistence and watch rebroadcast behavior:
+  - `WorkoutView` now debounces draft-field persistence for `exerciseEntries`, `caloriesText`, and `comments` by 300ms
+  - session lifecycle events still flush immediately before pause, resume, save, or disappearance
+  - `ActiveWorkoutSessionStore` now reports whether a mutation actually changed the session and whether the watch needs a rebroadcast, so comment-only and calorie-only edits no longer resend the whole workout payload to the watch
+  - `ActiveWorkoutSessionPersistenceStore` skips redundant writes when the encoded draft payload is unchanged
+- Removed unnecessary read work from workout save:
+  - `WorkoutSaveCoordinator` now fetches personal records directly instead of hydrating the full `TrainingReadRepository.historySnapshot(...)` just to run PR detection
+- Added targeted backend coverage for the new persistence behavior:
+  - startup maintenance tests now cover deferred audit gating, fresh-within-7-days skips, and 7-day expiry reruns
+  - active workout persistence tests now cover unchanged-payload write skipping plus watch broadcast suppression for comment/calorie-only edits
+- Verification:
+  - attempted `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - attempted fallback compile invocations with `-sdk iphonesimulator`, `-sdk iphoneos CODE_SIGNING_ALLOWED=NO`, and `-destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO`
+  - all build attempts are currently blocked on this machine by an out-of-date CoreSimulator framework plus missing usable iOS 26.4 destinations, so the new test coverage was added but could not be executed locally in this environment
+
+**Commit:** `refactor: harden launch and workout persistence performance`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

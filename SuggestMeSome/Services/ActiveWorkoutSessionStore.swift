@@ -7,6 +7,16 @@
 
 import Foundation
 
+struct ActiveWorkoutSessionMutationResult: Equatable {
+    let didChangeSession: Bool
+    let shouldBroadcastWatch: Bool
+
+    static let unchanged = ActiveWorkoutSessionMutationResult(
+        didChangeSession: false,
+        shouldBroadcastWatch: false
+    )
+}
+
 struct ActiveWorkoutProgramContext: Codable, Equatable {
     var programRunID: UUID
     var programRunStableID: String? = nil
@@ -187,6 +197,7 @@ final class ActiveWorkoutSessionStore {
         latestWatchHealthSummary = nil
     }
 
+    @discardableResult
     func updateSession(
         startTime: Date,
         exerciseEntries: [DraftExerciseEntry],
@@ -196,7 +207,7 @@ final class ActiveWorkoutSessionStore {
         sessionPlanKind: WatchSessionPlanKind? = nil,
         sessionSourceLabels: [String]? = nil,
         sessionVersionStableID: String? = nil
-    ) {
+    ) -> ActiveWorkoutSessionMutationResult {
         guard var current = session else {
             let id = UUID()
             let metadata = resolvedWatchMetadata(
@@ -220,9 +231,13 @@ final class ActiveWorkoutSessionStore {
                 sessionSourceLabels: metadata.sourceLabels,
                 sessionVersionStableID: metadata.versionID
             )
-            return
+            return ActiveWorkoutSessionMutationResult(
+                didChangeSession: true,
+                shouldBroadcastWatch: true
+            )
         }
 
+        let existingWatchBroadcastSnapshot = current.watchBroadcastSnapshot
         current.startTime = startTime
         current.exerciseEntries = exerciseEntries
         current.caloriesText = caloriesText
@@ -239,7 +254,16 @@ final class ActiveWorkoutSessionStore {
         if let sessionVersionStableID {
             current.sessionVersionStableID = sessionVersionStableID
         }
+        guard session != current else {
+            return .unchanged
+        }
+
+        let shouldBroadcastWatch = existingWatchBroadcastSnapshot != current.watchBroadcastSnapshot
         session = current
+        return ActiveWorkoutSessionMutationResult(
+            didChangeSession: true,
+            shouldBroadcastWatch: shouldBroadcastWatch
+        )
     }
 
     func pauseSession(at date: Date = .now) {
@@ -247,20 +271,20 @@ final class ActiveWorkoutSessionStore {
         current.accumulatedElapsedSeconds = current.elapsedSeconds(at: date)
         current.lifecycleState = .paused
         current.stateChangedAt = date
-        session = current
+        setSessionIfChanged(current)
     }
 
     func resumeSession(at date: Date = .now) {
         guard var current = session, current.lifecycleState == .paused else { return }
         current.lifecycleState = .running
         current.stateChangedAt = date
-        session = current
+        setSessionIfChanged(current)
     }
 
     func markLinkedWatchHealthSessionActive(_ isActive: Bool, for workoutID: UUID) {
         guard var current = session, current.id == workoutID else { return }
         current.usesLinkedWatchHealthSession = isActive
-        session = current
+        setSessionIfChanged(current)
     }
 
     func updateLatestWatchMetrics(_ payload: WatchWorkoutMetricsPayload) {
@@ -293,13 +317,18 @@ final class ActiveWorkoutSessionStore {
             session: session,
             appliedActionIDs: appliedWatchActionIDs
         )
-        session = reduction.session
+        setSessionIfChanged(reduction.session)
         appliedWatchActionIDs = reduction.appliedActionIDs
         return reduction.result
     }
 
     private func persistSession() {
-        persistenceStore.save(session)
+        _ = persistenceStore.save(session)
+    }
+
+    private func setSessionIfChanged(_ newSession: ActiveWorkoutSession?) {
+        guard session != newSession else { return }
+        session = newSession
     }
 
     private func resolvedWatchMetadata(
@@ -343,5 +372,37 @@ final class ActiveWorkoutSessionStore {
             suffix = "planned"
         }
         return "\(runSegment)::w\(programContext.weekNumber)s\(programContext.sessionNumber)::\(suffix)"
+    }
+}
+
+private struct ActiveWorkoutSessionWatchBroadcastSnapshot: Equatable {
+    let id: UUID
+    let startTime: Date
+    let exerciseEntries: [DraftExerciseEntry]
+    let programContext: ActiveWorkoutProgramContext?
+    let lifecycleState: WatchWorkoutLifecycleState
+    let accumulatedElapsedSeconds: Int
+    let stateChangedAt: Date
+    let sessionPlanKind: WatchSessionPlanKind?
+    let sessionSourceLabels: [String]?
+    let sessionVersionStableID: String?
+    let usesLinkedWatchHealthSession: Bool
+}
+
+private extension ActiveWorkoutSession {
+    var watchBroadcastSnapshot: ActiveWorkoutSessionWatchBroadcastSnapshot {
+        ActiveWorkoutSessionWatchBroadcastSnapshot(
+            id: id,
+            startTime: startTime,
+            exerciseEntries: exerciseEntries,
+            programContext: programContext,
+            lifecycleState: lifecycleState,
+            accumulatedElapsedSeconds: accumulatedElapsedSeconds,
+            stateChangedAt: stateChangedAt,
+            sessionPlanKind: sessionPlanKind,
+            sessionSourceLabels: sessionSourceLabels,
+            sessionVersionStableID: sessionVersionStableID,
+            usesLinkedWatchHealthSession: usesLinkedWatchHealthSession
+        )
     }
 }
