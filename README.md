@@ -3216,6 +3216,30 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 5 [Analytics-First Dashboard Redesign] — 2026-04-17
+
+- Introduced a shared dashboard design-token layer so cards stop drifting and hierarchy is consistent:
+  - added `DashboardTheme.swift` with `DSSpacing`, `DSRadius`, `DSColor`, a `DSCardStyle` view modifier, a `DSSectionHeader` component, and typed color/icon accessors on `FatigueStatus`, `TrainingStateRecoveryPressure`, `LiftTrendStatus`, `ObjectiveRecoveryStatus`, and `ProgramVolumeMuscle`
+  - relocated the muscle-group palette into `DashboardMusclePalette` so dashboard and chart surfaces share the same color roles
+- Split the 1,083-line `DashboardView` into focused components under `Views/Dashboard/Components/`:
+  - extracted `DashboardStatCard`, `PRFeedRow`, `LiftTrendBadge`, and `ActiveProgramCard` from the monolithic view
+  - added a generic `ExpandableCard` wrapper so every signal card collapses by default and reveals engine rationale inline when tapped
+  - added `Sparkline` (compact Chart-based trend line) and `DashboardEmptyState` (icon + headline + CTA) to replace five inline gray-text empty states
+- Surfaced adaptive-engine signals that were previously hidden from the UI:
+  - new `BodyHeatmapView` colors per-muscle tiles by `TrainingStateSnapshot.perMuscleStressSaturation` with a legend strip covering Low/Moderate/High/Saturated zones
+  - new `RecoveryPressureCard` renders a three-state gauge from `AdaptiveTrainingStateEngine.recoveryPressure` plus HealthKit Sleep/HRV/RHR chips sourced from `HealthKitRecoveryInsightService.computeInsight`, and gracefully falls back to a fatigue-only summary when HealthKit is off
+  - expanded the view model with `trainingStateSnapshot`, `healthKitInsight`, `perMuscleSaturation`, `recoveryPressure`, and `snapshotFatigueStatus` inputs refreshed on appear and whenever workouts or analyses change
+- Reordered the dashboard around an analytics-first hierarchy and made every card tap-to-expand:
+  - quick-start strip → icon-driven time window pills → hero stat row with sparklines (workouts, time trained, PRs, streak) → strength trends → body heatmap + recovery pressure → workout frequency → volume by muscle group → recent PRs → active program → optional coaching footer
+  - expanded states show `LiftPerformanceTrend` rationale, per-muscle saturation context, `ObjectiveRecoveryInsight.detailSummary`, adherence + target streaks, and pending `AdaptationProposal.summaryText` without leaving the tab
+  - weekly sparklines are derived from `workoutFrequencyBuckets` so they track the selected time window consistently with the larger charts
+- Verification:
+  - `xcodebuild -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -configuration Debug build`
+
+**Commits:** `feat: redesign dashboard with analytics-first layout and adaptive signal cards`, `docs: document analytics-first dashboard redesign`
+
+---
+
 
 ## Project Setup
 
