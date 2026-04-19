@@ -11,6 +11,7 @@ enum PersonalRecordMaintenanceService {
         guard !workouts.isEmpty else { return }
 
         let affectedExerciseNames = exerciseNames(in: workouts)
+        CloudSyncManager.shared.captureDeletedWorkouts(workouts)
         for workout in workouts {
             context.delete(workout)
         }

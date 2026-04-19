@@ -456,6 +456,7 @@ struct ProgramReviewView: View {
 
         modelContext.insert(run)
         try? modelContext.save()
+        CloudSyncManager.shared.notifyLocalMutation("Started program run")
         onStartProgram()
     }
 

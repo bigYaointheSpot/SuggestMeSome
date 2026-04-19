@@ -504,6 +504,7 @@ struct CreateProgramView: View {
         }
 
         try? modelContext.save()
+        CloudSyncManager.shared.notifyLocalMutation("Saved training program")
         dismiss()
     }
 }

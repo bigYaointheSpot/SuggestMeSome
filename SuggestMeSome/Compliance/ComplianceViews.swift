@@ -65,7 +65,7 @@ struct SupportInfoView: View {
             } header: {
                 Text("U.S. Launch Checklist")
             } footer: {
-                Text("Hosted legal pages, App Store metadata, and the production account backend still need to be finished before a public cloud-backed launch.")
+                Text("Hosted legal pages, App Store metadata, and end-to-end production backend validation still need to be finished before a public launch.")
             }
 
             Section("Document Preview") {

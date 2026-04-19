@@ -15,6 +15,7 @@ struct SuggestMeSomeApp: App {
     @State private var purchaseManager = PurchaseManager.shared
     @State private var complianceStateStore = ComplianceStateStore.shared
     @State private var accountManager = AccountManager.shared
+    @State private var cloudSyncManager = CloudSyncManager.shared
     @State private var hasPerformedStartupMaintenance = false
 
     private static let sharedSchema = Schema([
@@ -102,6 +103,7 @@ struct SuggestMeSomeApp: App {
                 .environment(purchaseManager)
                 .environment(complianceStateStore)
                 .environment(accountManager)
+                .environment(cloudSyncManager)
                 .onAppear {
                     guard !hasPerformedStartupMaintenance else { return }
                     hasPerformedStartupMaintenance = true
@@ -112,12 +114,18 @@ struct SuggestMeSomeApp: App {
                     HealthKitSettingsStorage.migrateLegacyRecoverySyncTimestampIfNeeded(
                         context: sharedModelContainer.mainContext
                     )
+                    cloudSyncManager.configure(
+                        modelContext: sharedModelContainer.mainContext
+                    )
+                    accountManager.configureCloudSyncManager(cloudSyncManager)
                     WatchSessionCoordinator.shared.installCompanionHandlers(
                         activeWorkoutSessionStore: activeWorkoutSessionStore,
                         modelContext: sharedModelContainer.mainContext
                     )
                     Task { @MainActor in
+                        await accountManager.restoreSessionIfNeeded()
                         await purchaseManager.bootstrap()
+                        await cloudSyncManager.syncOnAppDidBecomeActive()
                     }
                     if maintenanceReport.shouldRunDeferredSyncMetadataAudit {
                         let modelContainer = sharedModelContainer
@@ -132,6 +140,8 @@ struct SuggestMeSomeApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     guard newPhase == .active else { return }
                     Task { @MainActor in
+                        await accountManager.restoreSessionIfNeeded()
+                        await cloudSyncManager.syncOnAppDidBecomeActive()
                         await purchaseManager.refreshEntitlements()
                         guard purchaseManager.isPremiumUnlocked else { return }
                         _ = await HealthKitRecoveryAutoRefreshCoordinator.shared.refreshIfNeeded(

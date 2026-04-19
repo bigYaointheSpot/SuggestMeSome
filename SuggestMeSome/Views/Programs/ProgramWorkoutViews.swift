@@ -77,6 +77,7 @@ struct SelectProgramView: View {
         run.program = program
         modelContext.insert(run)
         try? modelContext.save()
+        CloudSyncManager.shared.notifyLocalMutation("Started program run")
         dismiss()
     }
 }

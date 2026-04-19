@@ -14,6 +14,7 @@ struct SettingsTab: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(AccountManager.self) private var accountManager
+    @Environment(CloudSyncManager.self) private var cloudSyncManager
 
     // MARK: Preferences
     @AppStorage("globalWeightUnit") private var globalWeightUnit: String = WeightUnit.lbs.rawValue
@@ -92,6 +93,7 @@ struct SettingsTab: View {
             List {
                 preferencesSection
                 workoutSection
+                cloudSyncSection
                 quickLinksSection
                 accountSection
                 premiumSection
@@ -109,6 +111,15 @@ struct SettingsTab: View {
             }
             .task {
                 refreshWorkoutCount()
+            }
+            .onChange(of: globalWeightUnit) { _, _ in
+                markTrainingPreferencesUpdated(reason: "Updated default weight unit")
+            }
+            .onChange(of: defaultRestTimerSeconds) { _, _ in
+                markTrainingPreferencesUpdated(reason: "Updated rest timer preference")
+            }
+            .onChange(of: coachPreferredDays) { _, _ in
+                markTrainingPreferencesUpdated(reason: "Updated preferred training days")
             }
             .onChange(of: showingDeleteAllConfirm) { _, isPresented in
                 guard isPresented else { return }
@@ -212,6 +223,32 @@ struct SettingsTab: View {
                 Label("Manage Exercises", systemImage: "list.bullet.clipboard.fill")
                     .foregroundStyle(.blue)
             }
+        }
+    }
+
+    private var cloudSyncSection: some View {
+        Section {
+            NavigationLink {
+                CloudSyncSettingsView()
+            } label: {
+                HStack {
+                    Label("Cloud Sync", systemImage: "arrow.triangle.2.circlepath.circle.fill")
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(cloudSyncManager.phase.title)
+                            .foregroundStyle(.secondary)
+                        if let email = cloudSyncManager.currentAccountEmail {
+                            Text(email)
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Cloud Sync")
+        } footer: {
+            Text("Cloud sync keeps workouts, programs, daily coaching, adaptive history, and key training preferences aligned across signed-in devices. Apple Health-derived recovery data stays on this device in Feature 18.")
         }
     }
 
@@ -474,6 +511,11 @@ struct SettingsTab: View {
 
     private func refreshWorkoutCount() {
         workoutCount = TrainingReadRepository.workoutCount(context: modelContext)
+    }
+
+    private func markTrainingPreferencesUpdated(reason: String) {
+        TrainingPreferencesStore.markUpdated()
+        cloudSyncManager.notifyLocalMutation(reason)
     }
 }
 

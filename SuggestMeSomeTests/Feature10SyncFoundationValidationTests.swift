@@ -810,6 +810,106 @@ struct Feature10SyncFoundationValidationTests {
         #expect(try repository.fetchHealthKitSummaryPayloads(since: since).map(\.metadata.stableID) == ["health-new"])
     }
 
+    @Test func trainingPreferencesSyncStoreRoundTripsAndRespectsSinceFiltering() throws {
+        let suiteName = "Feature18TrainingPreferences.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let container = try makeInMemoryContainer()
+        let repository = LocalSyncRepository(
+            modelContext: container.mainContext,
+            userDefaults: defaults
+        )
+
+        defaults.set(WeightUnit.kg.rawValue, forKey: "globalWeightUnit")
+        defaults.set(180, forKey: "defaultRestTimerSeconds")
+        defaults.set(0b0101010, forKey: "coachPreferredDays")
+        TrainingPreferencesStore.markUpdated(
+            userDefaults: defaults,
+            at: day(3)
+        )
+
+        let initial = try repository.fetchTrainingPreferencesPayload(since: nil)
+        #expect(initial?.globalWeightUnitRawValue == WeightUnit.kg.rawValue)
+        #expect(initial?.defaultRestTimerSeconds == 180)
+        #expect(initial?.coachPreferredDaysBitmask == 0b0101010)
+        #expect(initial?.metadata.lastModifiedAt == day(3))
+        #expect(try repository.fetchTrainingPreferencesPayload(since: day(4)) == nil)
+
+        let remote = TrainingPreferencesSyncDTO(
+            metadata: SyncRecordMetadataDTO(
+                stableID: TrainingPreferencesStore.stableID,
+                version: 9,
+                lastModifiedAt: day(5)
+            ),
+            globalWeightUnitRawValue: WeightUnit.lbs.rawValue,
+            defaultRestTimerSeconds: 120,
+            coachPreferredDaysBitmask: 0b0011100
+        )
+        try repository.upsertTrainingPreferencesPayload(remote)
+
+        let fetched = try repository.fetchTrainingPreferencesPayload(since: day(4))
+        #expect(fetched == remote)
+        #expect(defaults.string(forKey: "globalWeightUnit") == WeightUnit.lbs.rawValue)
+        #expect(defaults.integer(forKey: "defaultRestTimerSeconds") == 120)
+        #expect(defaults.integer(forKey: "coachPreferredDays") == 0b0011100)
+    }
+
+    @Test func cloudSyncStateStorePersistsCursorsPendingBatchesAndActivity() {
+        let suiteName = "Feature18CloudSyncStateStore.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = CloudSyncStateStore(userDefaults: defaults)
+        let deviceID = store.deviceID()
+        let accountID = UUID(uuidString: "F2000000-0000-0000-0000-000000000001")!
+        let cursor = CloudSyncCollectionCursorDTO(
+            collection: .workouts,
+            nextCursor: "cursor-1",
+            lastSuccessfulSyncAt: day(4)
+        )
+        let payload = CloudSyncBatchPayload(
+            workouts: [makeWorkoutDTO(
+                stableID: "pending-workout-1",
+                lastModifiedAt: day(5),
+                version: 2,
+                comments: "Queued",
+                entryStableIDs: ["pending-entry-1"]
+            )]
+        )
+        let pendingBatch = PendingCloudSyncBatch(
+            createdAt: day(5),
+            reason: "Queued workout deletion sync",
+            payload: payload
+        )
+        let activity = CloudSyncActivityRecord(
+            date: day(6),
+            level: .warning,
+            message: "Retry sync soon"
+        )
+
+        store.setCursors([cursor])
+        store.setLastSuccessfulSyncAt(day(4))
+        store.setPendingBatches([pendingBatch])
+        store.appendActivity(activity)
+        store.setBootstrappedAccountID(accountID)
+
+        #expect(store.deviceID() == deviceID)
+        #expect(store.cursors() == [cursor])
+        #expect(store.lastSuccessfulSyncAt() == day(4))
+        #expect(store.pendingBatches() == [pendingBatch])
+        #expect(store.activity().first == activity)
+        #expect(store.bootstrappedAccountID() == accountID)
+
+        store.clearRuntimeState()
+        #expect(store.deviceID() == deviceID)
+        #expect(store.cursors().isEmpty)
+        #expect(store.lastSuccessfulSyncAt() == nil)
+        #expect(store.pendingBatches().isEmpty)
+        #expect(store.bootstrappedAccountID() == nil)
+        #expect(store.activity().first == activity)
+    }
+
     // MARK: - Helpers
 
     private func makeInMemoryContainer() throws -> ModelContainer {

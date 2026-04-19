@@ -73,7 +73,7 @@ struct DataExportView: View {
             } header: {
                 Text("Backup Summary")
             } footer: {
-                Text("Portable backup includes local app records, settings, local account/privacy state, and cached Apple Health summaries stored inside SuggestMeSome.")
+                Text("Portable backup includes local app records, settings, local account/privacy state, and cached Apple Health summaries stored inside SuggestMeSome. Unlike Cloud Sync, it is a one-time file export and does not keep devices continuously aligned.")
             }
 
             Section {
@@ -118,7 +118,7 @@ struct DataExportView: View {
             } header: {
                 Text("Device Backup")
             } footer: {
-                Text("Portable backup is a single unencrypted JSON file for device-to-device migration. Import replaces all local data on this device. Apple Health data outside SuggestMeSome, active live workout state, purchase cache, and watch widget cache are not included.")
+                Text("Portable backup is a single unencrypted JSON file for device-to-device migration. Use it when you want a manual snapshot or to move local data without signing into Cloud Sync. Import replaces all local data on this device. Apple Health data outside SuggestMeSome, active live workout state, purchase cache, and watch widget cache are not included.")
             }
 
             Section {
@@ -159,7 +159,7 @@ struct DataExportView: View {
                 if summarySnapshot.workoutCount == 0 {
                     Text("No workout data is available for CSV export yet.")
                 } else {
-                    Text("CSV remains a human-readable workout export. Use Device Backup when you want to move all local app data to another device.")
+                    Text("CSV remains a human-readable workout export. Use Device Backup for full local migration, or Cloud Sync when you want ongoing account-backed continuity across devices.")
                 }
             }
 

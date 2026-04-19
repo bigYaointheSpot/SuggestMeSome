@@ -195,6 +195,7 @@ final class WorkoutSaveCoordinator {
         }
 
         let sideEffectReports = runPostSavePipeline(for: workout, request: request)
+        CloudSyncManager.shared.notifyLocalMutation("Saved workout")
         return WorkoutSaveResult(
             workout: workout,
             transactionStatus: transactionStatus,

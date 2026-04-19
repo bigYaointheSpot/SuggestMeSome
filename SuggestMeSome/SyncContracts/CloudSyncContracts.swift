@@ -212,6 +212,31 @@ struct CloudSyncBatchPayload: Codable, Equatable {
     }
 }
 
+struct CloudAuthExchangeRequest: Codable, Equatable {
+    var deviceID: String
+    var appleUserID: String
+    var identityToken: String
+    var authorizationCode: String?
+    var email: String?
+    var displayName: String?
+}
+
+struct CloudSessionTokensDTO: Codable, Equatable {
+    var accessToken: String
+    var refreshToken: String
+    var accessTokenExpiresAt: Date
+}
+
+struct CloudSessionRefreshRequest: Codable, Equatable {
+    var deviceID: String
+    var refreshToken: String
+}
+
+struct CloudAuthSessionResponse: Codable, Equatable {
+    var accountState: AccountBackendContractState
+    var tokens: CloudSessionTokensDTO
+}
+
 struct CloudSyncCollectionCursorDTO: Codable, Equatable {
     var collection: CloudSyncCollection
     var nextCursor: String?

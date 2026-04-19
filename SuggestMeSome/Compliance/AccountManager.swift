@@ -34,6 +34,7 @@ enum AccountBackendLaunchMode: String, Codable, Equatable {
 
 struct UserAccount: Codable, Equatable, Identifiable {
     let id: UUID
+    var appleUserID: String?
     var displayName: String
     var email: String
     var createdAt: Date
@@ -42,6 +43,7 @@ struct UserAccount: Codable, Equatable, Identifiable {
 
     init(
         id: UUID = UUID(),
+        appleUserID: String? = nil,
         displayName: String,
         email: String,
         createdAt: Date = Date(),
@@ -49,12 +51,21 @@ struct UserAccount: Codable, Equatable, Identifiable {
         launchMode: AccountBackendLaunchMode = .localContractValidation
     ) {
         self.id = id
+        self.appleUserID = appleUserID
         self.displayName = displayName
         self.email = email
         self.createdAt = createdAt
         self.lastSignedInAt = lastSignedInAt
         self.launchMode = launchMode
     }
+}
+
+struct AppleSignInIdentity: Codable, Equatable {
+    var appleUserID: String
+    var identityToken: String
+    var authorizationCode: String?
+    var email: String?
+    var displayName: String?
 }
 
 enum SessionState: String, Codable, Equatable {
@@ -197,6 +208,8 @@ enum AuthServiceError: LocalizedError, Equatable {
     case duplicateAccount
     case accountNotFound
     case noSignedInAccount
+    case signInWithAppleRequired
+    case missingAppleIdentityToken
 
     var errorDescription: String? {
         switch self {
@@ -210,17 +223,24 @@ enum AuthServiceError: LocalizedError, Equatable {
             return "No account with that email was found on this device."
         case .noSignedInAccount:
             return "Sign in to manage account privacy requests."
+        case .signInWithAppleRequired:
+            return "Use Sign in with Apple to connect your cloud account."
+        case .missingAppleIdentityToken:
+            return "Apple did not provide a sign-in token."
         }
     }
 }
 
 protocol AuthService {
     func restoreState() -> AccountBackendContractState
+    func restoreSessionIfNeeded() async -> AccountBackendContractState
     func createAccount(displayName: String, email: String) async throws -> AccountBackendContractState
     func signIn(email: String) async throws -> AccountBackendContractState
+    func signInWithApple(_ identity: AppleSignInIdentity) async throws -> AccountBackendContractState
     func signOut() async -> AccountBackendContractState
     func submitPrivacyRequest(_ type: PrivacyRequestType) async throws -> AccountBackendContractState
     func setConsumerHealthConsent(granted: Bool) async throws -> AccountBackendContractState
+    func requestAccountExport() async throws -> CloudAccountExportResponse
     func deleteCurrentAccount() async throws -> AccountBackendContractState
 }
 
@@ -239,6 +259,10 @@ final class LocalContractAuthService: AuthService {
     }
 
     func restoreState() -> AccountBackendContractState {
+        loadState()
+    }
+
+    func restoreSessionIfNeeded() async -> AccountBackendContractState {
         loadState()
     }
 
@@ -272,6 +296,35 @@ final class LocalContractAuthService: AuthService {
 
         state.knownAccounts[index].lastSignedInAt = Date()
         state.currentAccountID = state.knownAccounts[index].id
+        persist(state)
+        return state
+    }
+
+    func signInWithApple(_ identity: AppleSignInIdentity) async throws -> AccountBackendContractState {
+        var state = loadState()
+        let resolvedEmail = try Self.normalizedEmail(identity.email ?? "\(identity.appleUserID)@privaterelay.appleid.com")
+        let resolvedName = try Self.normalizedDisplayName(identity.displayName ?? "Apple ID User")
+
+        if let index = state.knownAccounts.firstIndex(where: {
+            $0.appleUserID == identity.appleUserID || $0.email == resolvedEmail
+        }) {
+            state.knownAccounts[index].appleUserID = identity.appleUserID
+            state.knownAccounts[index].displayName = resolvedName
+            state.knownAccounts[index].email = resolvedEmail
+            state.knownAccounts[index].lastSignedInAt = Date()
+            state.knownAccounts[index].launchMode = launchMode
+            state.currentAccountID = state.knownAccounts[index].id
+        } else {
+            let account = UserAccount(
+                appleUserID: identity.appleUserID,
+                displayName: resolvedName,
+                email: resolvedEmail,
+                launchMode: launchMode
+            )
+            state.knownAccounts.append(account)
+            state.currentAccountID = account.id
+        }
+
         persist(state)
         return state
     }
@@ -331,6 +384,21 @@ final class LocalContractAuthService: AuthService {
         return state
     }
 
+    func requestAccountExport() async throws -> CloudAccountExportResponse {
+        let state = loadState()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(state) else {
+            throw AuthServiceError.noSignedInAccount
+        }
+        return CloudAccountExportResponse(
+            fileName: "SuggestMeSome_Account_Export.json",
+            mimeType: "application/json",
+            data: data
+        )
+    }
+
     func deleteCurrentAccount() async throws -> AccountBackendContractState {
         var state = loadState()
         guard let accountID = state.currentAccountID else {
@@ -381,6 +449,7 @@ final class AccountManager {
     static let shared = AccountManager(userDefaults: .standard)
 
     private let authService: AuthService
+    private weak var cloudSyncManager: CloudSyncManager?
 
     private(set) var sessionState: SessionState = .signedOut
     private(set) var knownAccounts: [UserAccount] = []
@@ -396,16 +465,25 @@ final class AccountManager {
     }
 
     convenience init(userDefaults: UserDefaults) {
-        self.init(
-            authService: LocalContractAuthService(
-                userDefaults: userDefaults,
-                launchMode: ComplianceConfiguration.accountBackendLaunchMode
+        switch ComplianceConfiguration.accountBackendLaunchMode {
+        case .localContractValidation:
+            self.init(
+                authService: LocalContractAuthService(
+                    userDefaults: userDefaults,
+                    launchMode: ComplianceConfiguration.accountBackendLaunchMode
+                )
             )
-        )
+        case .productionBackend:
+            self.init(
+                authService: ProductionBackendAuthService(
+                    userDefaults: userDefaults
+                )
+            )
+        }
     }
 
     var launchMode: AccountBackendLaunchMode {
-        currentUser?.launchMode ?? .localContractValidation
+        currentUser?.launchMode ?? ComplianceConfiguration.accountBackendLaunchMode
     }
 
     var currentAccountPrivacyRequests: [PrivacyRequestRecord] {
@@ -448,12 +526,31 @@ final class AccountManager {
         }
     }
 
+    func signInWithApple(_ identity: AppleSignInIdentity) async {
+        sessionState = .signingIn
+        statusMessage = nil
+        lastErrorMessage = nil
+        do {
+            let state = try await authService.signInWithApple(identity)
+            apply(state)
+            statusMessage = "Cloud account connected."
+        } catch {
+            sessionState = currentUser == nil ? .signedOut : .signedIn
+            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? "Sign in failed."
+        }
+    }
+
     func signOut() async {
         statusMessage = nil
         lastErrorMessage = nil
         let state = await authService.signOut()
         apply(state)
         statusMessage = "Signed out."
+    }
+
+    func restoreSessionIfNeeded() async {
+        let state = await authService.restoreSessionIfNeeded()
+        apply(state)
     }
 
     func submitPrivacyRequest(_ type: PrivacyRequestType) async {
@@ -489,10 +586,26 @@ final class AccountManager {
         do {
             let state = try await authService.deleteCurrentAccount()
             apply(state)
-            statusMessage = "Account deleted from this device."
+            statusMessage = "Cloud account deleted and this device was signed out."
         } catch {
             sessionState = currentUser == nil ? .signedOut : .signedIn
             lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? "Account deletion failed."
+        }
+    }
+
+    func requestAccountExport() async throws -> CloudAccountExportResponse {
+        try await authService.requestAccountExport()
+    }
+
+    func recordExternalError(_ message: String) {
+        statusMessage = nil
+        lastErrorMessage = message
+    }
+
+    func configureCloudSyncManager(_ manager: CloudSyncManager) {
+        cloudSyncManager = manager
+        Task { @MainActor in
+            await manager.handleAccountStateDidChange(currentState)
         }
     }
 
@@ -508,5 +621,19 @@ final class AccountManager {
         consumerHealthConsents = state.consumerHealthConsents.sorted { $0.acceptedAt > $1.acceptedAt }
         currentUser = state.knownAccounts.first(where: { $0.id == state.currentAccountID })
         sessionState = currentUser == nil ? .signedOut : .signedIn
+        if let cloudSyncManager {
+            Task { @MainActor in
+                await cloudSyncManager.handleAccountStateDidChange(state)
+            }
+        }
+    }
+
+    private var currentState: AccountBackendContractState {
+        AccountBackendContractState(
+            knownAccounts: knownAccounts,
+            currentAccountID: currentUser?.id,
+            privacyRequests: privacyRequests,
+            consumerHealthConsents: consumerHealthConsents
+        )
     }
 }

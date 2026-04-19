@@ -9,16 +9,34 @@ enum TrainingHistoryDeletionService {
     ) throws {
         let runID = run.id
         let workouts = runWorkouts(runID: runID, context: context)
+        let analyses = runAnalyses(runID: runID, context: context)
+        let trends = runTrends(runID: runID, context: context)
+        let proposals = runProposals(runID: runID, context: context)
+        let overlays = runOverlays(runID: runID, context: context)
+        let events = runEvents(runID: runID, context: context)
+        let checkIns = runCheckIns(runID: runID, context: context)
+        let weeklyReviews = runWeeklyReviews(runID: runID, context: context)
         let affectedExerciseNames = PersonalRecordMaintenanceService.exerciseNames(in: workouts)
 
+        CloudSyncManager.shared.captureDeletedProgramGraph(
+            programRuns: [run],
+            checkIns: checkIns,
+            weeklyReviews: weeklyReviews,
+            analyses: analyses,
+            trends: trends,
+            proposals: proposals,
+            overlays: overlays,
+            events: events
+        )
+
         delete(runOrphanOutcomes(runID: runID, context: context), context: context)
-        delete(runEvents(runID: runID, context: context), context: context)
-        delete(runOverlays(runID: runID, context: context), context: context)
-        delete(runProposals(runID: runID, context: context), context: context)
-        delete(runWeeklyReviews(runID: runID, context: context), context: context)
-        delete(runCheckIns(runID: runID, context: context), context: context)
-        delete(runAnalyses(runID: runID, context: context), context: context)
-        delete(runTrends(runID: runID, context: context), context: context)
+        delete(events, context: context)
+        delete(overlays, context: context)
+        delete(proposals, context: context)
+        delete(weeklyReviews, context: context)
+        delete(checkIns, context: context)
+        delete(analyses, context: context)
+        delete(trends, context: context)
         delete(workouts, context: context)
         context.delete(run)
 

@@ -217,9 +217,12 @@ struct ProgramRunExpandableRow: View {
         }
         .confirmationDialog("End Program?", isPresented: $showingEndConfirmation, titleVisibility: .visible) {
             Button("End Program", role: .destructive) {
+                let completedAt = Date.now
                 run.isCompleted = true
-                run.endDate = Date.now
+                run.endDate = completedAt
+                run.markSyncUpdated(at: completedAt)
                 try? modelContext.save()
+                CloudSyncManager.shared.notifyLocalMutation("Completed program run")
             }
             Button("Cancel", role: .cancel) {}
         } message: {

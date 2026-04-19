@@ -166,6 +166,8 @@ struct CheckInFormView: View {
             modelContext.insert(checkIn)
         }
 
+        CloudSyncManager.shared.notifyLocalMutation("Saved readiness check-in")
+
         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
             showSavedConfirmation = true
         }

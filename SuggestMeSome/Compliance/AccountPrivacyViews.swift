@@ -6,10 +6,12 @@
 //  readiness and future cloud-account rollout.
 //
 
+import AuthenticationServices
 import SwiftUI
 
 struct AccountSettingsView: View {
     @Environment(AccountManager.self) private var accountManager
+    @Environment(CloudSyncManager.self) private var cloudSyncManager
 
     @State private var email = ""
     @State private var displayName = ""
@@ -46,6 +48,12 @@ struct AccountSettingsView: View {
             Text(ComplianceConfiguration.cloudSyncStorageDisclosure)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            if let lastSuccessfulSyncAt = cloudSyncManager.lastSuccessfulSyncAt {
+                LabeledContent(
+                    "Last Sync",
+                    value: lastSuccessfulSyncAt.formatted(date: .abbreviated, time: .shortened)
+                )
+            }
         }
     }
 
@@ -89,37 +97,51 @@ struct AccountSettingsView: View {
         } header: {
             Text("Current Account")
         } footer: {
-            Text("Use this screen to validate account, consent, and privacy-rights flows before enabling a production backend.")
+            Text("Your local training data remains available while signed out. Cloud sync resumes when you reconnect this account.")
         }
     }
 
     private var signedOutSection: some View {
         Section {
-            Text("Create a local contract-validation account to exercise privacy-rights and deletion flows before your production backend is live.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            if accountManager.launchMode == .productionBackend {
+                Text("Connect your account with Sign in with Apple to sync workouts, programs, daily coaching, adaptive history, privacy requests, and key training preferences across devices.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
-            TextField("Display Name", text: $displayName)
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled()
-
-            TextField("Email", text: $email)
-                .textInputAutocapitalization(.never)
-                .keyboardType(.emailAddress)
-                .autocorrectionDisabled()
-
-            Button("Create Account on This Device") {
-                Task {
-                    await accountManager.createAccount(
-                        displayName: displayName,
-                        email: email
-                    )
+                SignInWithAppleButton(.signIn) { request in
+                    request.requestedScopes = [.fullName, .email]
+                } onCompletion: { result in
+                    handleAppleSignIn(result)
                 }
-            }
+                .signInWithAppleButtonStyle(.black)
+                .frame(height: 48)
+            } else {
+                Text("Create a local contract-validation account to exercise privacy-rights and deletion flows before your production backend is live.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
-            Button("Sign In to Existing Local Account") {
-                Task {
-                    await accountManager.signIn(email: email)
+                TextField("Display Name", text: $displayName)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+
+                TextField("Email", text: $email)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.emailAddress)
+                    .autocorrectionDisabled()
+
+                Button("Create Account on This Device") {
+                    Task {
+                        await accountManager.createAccount(
+                            displayName: displayName,
+                            email: email
+                        )
+                    }
+                }
+
+                Button("Sign In to Existing Local Account") {
+                    Task {
+                        await accountManager.signIn(email: email)
+                    }
                 }
             }
 
@@ -136,9 +158,11 @@ struct AccountSettingsView: View {
                 .padding(.top, 4)
             }
         } header: {
-            Text("Create or Sign In")
+            Text(accountManager.launchMode == .productionBackend ? "Connect Account" : "Create or Sign In")
         } footer: {
-            Text("This build does not transmit account data off device. Replace the local contract service with your production backend before public cloud launch.")
+            Text(accountManager.launchMode == .productionBackend
+                 ? "Sign in is optional. The app remains fully usable while signed out, and Apple Health-derived recovery data still stays local in this release."
+                 : "This build does not transmit account data off device. Replace the local contract service with your production backend before public cloud launch.")
         }
     }
 
@@ -191,6 +215,45 @@ struct AccountSettingsView: View {
             }
         }
     }
+
+    private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+                accountManager.recordExternalError("Apple sign-in did not return an Apple ID credential.")
+                return
+            }
+
+            guard let identityTokenData = credential.identityToken,
+                  let identityToken = String(data: identityTokenData, encoding: .utf8),
+                  !identityToken.isEmpty else {
+                accountManager.recordExternalError(AuthServiceError.missingAppleIdentityToken.localizedDescription)
+                return
+            }
+
+            let authorizationCode = credential.authorizationCode.flatMap {
+                String(data: $0, encoding: .utf8)
+            }
+            let formatter = PersonNameComponentsFormatter()
+            let displayName = credential.fullName.map(formatter.string)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            Task {
+                await accountManager.signInWithApple(
+                    AppleSignInIdentity(
+                        appleUserID: credential.user,
+                        identityToken: identityToken,
+                        authorizationCode: authorizationCode,
+                        email: credential.email,
+                        displayName: displayName?.isEmpty == false ? displayName : nil
+                    )
+                )
+            }
+        case .failure(let error):
+            accountManager.recordExternalError(
+                (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            )
+        }
+    }
 }
 
 struct DataExportRequestView: View {
@@ -202,7 +265,7 @@ struct DataExportRequestView: View {
     var body: some View {
         List {
             Section("Cloud Rights Requests") {
-                Text("Use these controls to record access and export requests for backend-held account and consumer health data once your production backend is connected.")
+                Text("Use these controls to submit access and export requests for backend-held account and training data. Apple Health-derived recovery data is not sent off device in this release.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -223,12 +286,14 @@ struct DataExportRequestView: View {
 
             Section {
                 Button {
-                    generateExport()
+                    Task {
+                        await generateExport()
+                    }
                 } label: {
                     if isGeneratingExport {
                         ProgressView("Generating Export…")
                     } else {
-                        Label("Generate Local Account Export", systemImage: "doc.badge.gearshape")
+                        Label("Download Cloud Account Export", systemImage: "doc.badge.gearshape")
                     }
                 }
                 .disabled(accountManager.currentUser == nil || isGeneratingExport)
@@ -237,15 +302,15 @@ struct DataExportRequestView: View {
                     ShareLink(
                         item: exportURL,
                         subject: Text("SuggestMeSome Account Export"),
-                        message: Text("Local account and privacy export from SuggestMeSome.")
+                        message: Text("Cloud account export from SuggestMeSome.")
                     ) {
                         Label("Share Export File", systemImage: "square.and.arrow.up")
                     }
                 }
             } header: {
-                Text("Local Contract Export")
+                Text("Cloud Export")
             } footer: {
-                Text("This JSON export contains the current local account profile, privacy request history, and consumer health consent records stored on this device.")
+                Text("This export comes from the account backend and contains synced account, privacy, and training records available to your connected account.")
             }
 
             if accountManager.currentAccountPrivacyRequests.isEmpty == false {
@@ -270,50 +335,33 @@ struct DataExportRequestView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func generateExport() {
-        guard let account = accountManager.currentUser else { return }
+    private func generateExport() async {
+        guard accountManager.currentUser != nil else { return }
         isGeneratingExport = true
         defer { isGeneratingExport = false }
 
-        struct ExportPayload: Codable {
-            let account: UserAccount
-            let privacyRequests: [PrivacyRequestRecord]
-            let consumerHealthConsents: [ConsumerHealthConsentRecord]
-            let generatedAt: Date
-            let launchMode: AccountBackendLaunchMode
+        do {
+            let response = try await accountManager.requestAccountExport()
+            let destination = FileManager.default.temporaryDirectory
+                .appendingPathComponent(response.fileName)
+            try response.data.write(to: destination, options: .atomic)
+            exportURL = destination
+        } catch {
+            accountManager.recordExternalError(
+                (error as? LocalizedError)?.errorDescription ?? "Export failed."
+            )
         }
-
-        let payload = ExportPayload(
-            account: account,
-            privacyRequests: accountManager.currentAccountPrivacyRequests,
-            consumerHealthConsents: accountManager.consumerHealthConsents.filter { $0.accountID == account.id },
-            generatedAt: Date(),
-            launchMode: accountManager.launchMode
-        )
-
-        let destination = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SuggestMeSome_Account_Export.json")
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-
-        guard let data = try? encoder.encode(payload) else { return }
-        try? data.write(to: destination, options: .atomic)
-        exportURL = destination
     }
 }
 
 struct PrivacyChoicesView: View {
     @Environment(AccountManager.self) private var accountManager
 
-    @State private var consumerHealthSyncEnabled = false
-
     var body: some View {
         List {
             Section("Consumer Health Sync Consent") {
-                Toggle("Allow future account sync for consumer health data", isOn: $consumerHealthSyncEnabled)
-                    .disabled(accountManager.currentUser == nil)
+                Label("Apple Health-derived recovery data stays on this device", systemImage: "iphone")
+                    .foregroundStyle(.secondary)
 
                 Text(ComplianceConfiguration.consumerHealthDataDisclosure)
                     .font(.footnote)
@@ -333,29 +381,11 @@ struct PrivacyChoicesView: View {
             } header: {
                 Text("Categories Covered")
             } footer: {
-                Text("Withdrawing consent stops future off-device syncing for these categories once a production backend is connected.")
-            }
-
-            if let consent = accountManager.currentConsumerHealthConsent {
-                Section("Current Consent Record") {
-                    LabeledContent(
-                        "Accepted",
-                        value: consent.acceptedAt.formatted(date: .abbreviated, time: .shortened)
-                    )
-                    LabeledContent("Purpose", value: consent.purpose)
-                }
+                Text("These categories describe sensitive training and wellness context. In Feature 18, synced cloud data covers training and coaching records only; Apple Health-derived recovery inputs do not leave the device.")
             }
         }
         .navigationTitle("Privacy Choices")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            consumerHealthSyncEnabled = accountManager.currentConsumerHealthConsent != nil
-        }
-        .onChange(of: consumerHealthSyncEnabled) { _, newValue in
-            Task {
-                await accountManager.setConsumerHealthConsent(granted: newValue)
-            }
-        }
     }
 }
 
@@ -383,16 +413,16 @@ struct DeleteAccountView: View {
             } header: {
                 Text("Delete Requests")
             } footer: {
-                Text("These requests are recorded locally in this validation build. Connect your production backend before relying on them for public cloud accounts.")
+                Text("Delete-data and delete-account requests are sent to the account backend for synced training and privacy records. Apple Health-derived recovery data stays on device in this release.")
             }
 
-            Section("Delete This Local Account") {
-                Button("Delete Account From This Build", role: .destructive) {
+            Section("Delete This Cloud Account") {
+                Button("Delete Cloud Account", role: .destructive) {
                     showingDeleteConfirmation = true
                 }
                 .disabled(accountManager.currentUser == nil)
 
-                Text("Deleting the local account removes the stored account profile, local privacy request history, and consumer health consent records from this device.")
+                Text("Deleting the cloud account removes backend-held account and synced training data, then signs this device out. Local training history on this device is not deleted automatically.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -400,7 +430,7 @@ struct DeleteAccountView: View {
         .navigationTitle("Delete Account")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog(
-            "Delete Account From This Build?",
+            "Delete Cloud Account?",
             isPresented: $showingDeleteConfirmation,
             titleVisibility: .visible
         ) {
@@ -411,7 +441,84 @@ struct DeleteAccountView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes the local account profile and its associated validation records from this device.")
+            Text("This deletes your backend-held account records and signs this device out. Local training history remains on device unless you delete it separately.")
+        }
+    }
+}
+
+struct CloudSyncSettingsView: View {
+    @Environment(AccountManager.self) private var accountManager
+    @Environment(CloudSyncManager.self) private var cloudSyncManager
+
+    var body: some View {
+        List {
+            Section("Status") {
+                LabeledContent("State", value: cloudSyncManager.phase.title)
+                if let email = cloudSyncManager.currentAccountEmail {
+                    LabeledContent("Account", value: email)
+                } else {
+                    LabeledContent("Account", value: "Not connected")
+                }
+                if let lastSuccessfulSyncAt = cloudSyncManager.lastSuccessfulSyncAt {
+                    LabeledContent(
+                        "Last Successful Sync",
+                        value: lastSuccessfulSyncAt.formatted(date: .abbreviated, time: .shortened)
+                    )
+                }
+                Text(cloudSyncManager.statusSummary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Button {
+                    Task {
+                        await cloudSyncManager.retryNow()
+                    }
+                } label: {
+                    Label("Retry Sync", systemImage: "arrow.clockwise")
+                }
+                .disabled(accountManager.currentUser == nil)
+            } footer: {
+                Text("Cloud sync covers workouts, programs, program runs, daily coaching records, adaptive history, privacy requests, and key training preferences. Apple Health-derived recovery data stays on device in this release.")
+            }
+
+            Section("Recent Activity") {
+                if cloudSyncManager.recentActivity.isEmpty {
+                    Text("No sync activity yet.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(cloudSyncManager.recentActivity) { record in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(record.message)
+                                    .font(.subheadline)
+                                Spacer()
+                                Text(record.level.rawValue.capitalized)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(levelColor(record.level))
+                            }
+                            Text(record.date, format: .dateTime.month().day().hour().minute())
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Cloud Sync")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func levelColor(_ level: CloudSyncActivityLevel) -> Color {
+        switch level {
+        case .info:
+            return .secondary
+        case .warning:
+            return .orange
+        case .error:
+            return .red
         }
     }
 }
