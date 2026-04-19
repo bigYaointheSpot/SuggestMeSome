@@ -3886,6 +3886,26 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 **Commits:** `cd6e6b4`, `ad76946`
 
+#### Prompt 2 [Feature 18 audit fixes for push state, dedupe safety, and delta PR maintenance] — 2026-04-19
+
+- Closed the high-risk cloud sync gaps surfaced in review without widening the architecture:
+  - split push handling from pull progress so `CloudSyncManager` only advances cursors and `lastSuccessfulSyncAt` after a successful pull
+  - introduced explicit push acknowledgements with `CloudSyncPushResponse`, atomic batch acceptance, and targeted pending-batch removal instead of clearing the whole queue
+  - kept push-applied authoritative payloads local while preserving any new pending batches enqueued during an in-flight sync
+- Hardened sync repositories against data-loss edge cases:
+  - made `LocalDailyCoachSyncStore` process active records before tombstones and safely rebind stable IDs so stale duplicate tombstones cannot delete the canonical check-in or weekly review
+  - changed training-preference sync metadata to default to the Unix epoch instead of `Date.now`, which stops unchanged preferences from being pushed on every foreground sync
+- Replaced full-history PR rebuilds with workout-delta maintenance:
+  - `LocalWorkoutSyncStore.upsertWorkoutPayloads` now returns a `WorkoutSyncUpsertSummary` describing whether workouts changed and which exercise names were touched
+  - `CloudSyncManager` now recomputes personal records only for affected exercise names after remote workout applies, avoiding full-history recomputation on every sync payload
+- Added focused regression coverage for:
+  - accepted push acknowledgement and pending-batch retention
+  - pull progress not advancing when the pull half fails
+  - canonical daily check-in and weekly review preservation across duplicate + tombstone orderings
+  - stable training-preference incremental exports and delta personal-record recomputation on insert, delete, and rename
+- Verification:
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests`
+
 ---
 
 ## Project Setup
