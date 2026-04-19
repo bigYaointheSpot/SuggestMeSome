@@ -695,6 +695,74 @@ struct Feature19CollaborationFoundationTests {
         #expect(coordinator.blueprints.first?.tags == ["peaking", "low fatigue"])
     }
 
+    @Test func lastErrorMessageClearsAfterSuccessfulRecovery() async throws {
+        let container = try makeInMemoryContainer()
+        let defaults = UserDefaults(suiteName: "Feature19Recovery.\(UUID().uuidString)")!
+        defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+
+        let collaborationClient = MockCollaborationClient()
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: collaborationClient,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+        )
+        coordinator.configure(modelContext: container.mainContext)
+        coordinator.hydrateAccountState(feature19SignedInState())
+
+        // First call fails — error banner should appear.
+        collaborationClient.throwOnNextUpdatePreferences = true
+        await coordinator.updateNotificationPreferences(
+            NotificationPreferenceUpdateRequest(
+                coachInvitesEnabled: true,
+                assignmentUpdatesEnabled: true,
+                coachNotesEnabled: true,
+                missedSessionNudgesEnabled: true,
+                checkInRemindersEnabled: true,
+                pendingProposalRemindersEnabled: true,
+                weeklyDigestsEnabled: true
+            )
+        )
+        #expect(coordinator.lastErrorMessage != nil)
+        #expect(coordinator.endpointError(.notificationPreferences) != nil)
+
+        // Retry succeeds — aggregate banner should clear alongside the endpoint.
+        await coordinator.updateNotificationPreferences(
+            NotificationPreferenceUpdateRequest(
+                coachInvitesEnabled: true,
+                assignmentUpdatesEnabled: true,
+                coachNotesEnabled: true,
+                missedSessionNudgesEnabled: true,
+                checkInRemindersEnabled: true,
+                pendingProposalRemindersEnabled: true,
+                weeklyDigestsEnabled: true
+            )
+        )
+        #expect(coordinator.lastErrorMessage == nil)
+        #expect(coordinator.endpointError(.notificationPreferences) == nil)
+    }
+
+    @Test func pushRegistrationErrorAppearsInRecentActivity() async throws {
+        let container = try makeInMemoryContainer()
+        let defaults = UserDefaults(suiteName: "Feature19PushActivity.\(UUID().uuidString)")!
+        defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: MockCollaborationClient(),
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+        )
+        coordinator.configure(modelContext: container.mainContext)
+        coordinator.hydrateAccountState(feature19SignedInState())
+
+        await coordinator.recordPushRegistrationError("APNs registration failed")
+
+        #expect(coordinator.endpointError(.pushRegistration) == "APNs registration failed")
+        #expect(coordinator.lastErrorMessage == "APNs registration failed")
+        #expect(coordinator.recentActivity.contains { $0.message == "APNs registration failed" && $0.level == .error })
+    }
+
     private func makeInMemoryContainer() throws -> ModelContainer {
         let schema = Schema([
             TrainingProgram.self,
@@ -763,6 +831,10 @@ private final class MockCollaborationClient: CloudCollaborationClient {
     var progressShareFetchCount = 0
     var rosterFetchCount = 0
     var registerDeviceCallCount = 0
+    /// When true, the next `updateNotificationPreferences` call throws and
+    /// the flag auto-resets so the retry can succeed. Used to verify
+    /// error-recovery behavior without having to fail every call.
+    var throwOnNextUpdatePreferences = false
 
     var totalRefreshFetchCount: Int {
         relationshipFetchCount +
@@ -895,6 +967,10 @@ private final class MockCollaborationClient: CloudCollaborationClient {
         try await delayedFetch(&notificationPreferenceFetchCount, value: notificationPreference)
     }
     func updateNotificationPreferences(_ request: NotificationPreferenceUpdateRequest, accessToken: String) async throws -> NotificationPreferenceDTO {
+        if throwOnNextUpdatePreferences {
+            throwOnNextUpdatePreferences = false
+            throw MockError.unused
+        }
         notificationPreference = NotificationPreferenceDTO(
             stableID: notificationPreference.stableID,
             updatedAt: Date(),
