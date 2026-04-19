@@ -14,45 +14,13 @@ struct DataExportView: View {
     @Environment(AccountManager.self) private var accountManager
     @Environment(ComplianceStateStore.self) private var complianceStateStore
 
-    @Query(sort: \Workout.date) private var allWorkouts: [Workout]
-    @Query(sort: \MuscleGroup.name) private var muscleGroups: [MuscleGroup]
-    @Query(sort: \PersonalRecord.dateAchieved) private var personalRecords: [PersonalRecord]
-    @Query(sort: \TrainingProgram.createdDate) private var trainingPrograms: [TrainingProgram]
-    @Query(sort: \ProgramRun.startDate) private var programRuns: [ProgramRun]
-    @Query(sort: \DailyCoachCheckIn.date) private var dailyCoachCheckIns: [DailyCoachCheckIn]
-    @Query(sort: \WeeklyTrainingAnalysis.weekStartDate) private var weeklyTrainingAnalyses: [WeeklyTrainingAnalysis]
-    @Query(sort: \AdaptationProposal.createdAt) private var adaptationProposals: [AdaptationProposal]
-    @Query(sort: \HealthKitDailySummary.dayStart) private var healthKitDailySummaries: [HealthKitDailySummary]
-
     @State private var backupViewModel = PortableBackupViewModel()
+    @State private var summarySnapshot = DataExportSummarySnapshot.placeholder
+    @State private var summaryRefreshTrigger = 0
     @State private var csvExportURL: URL?
     @State private var isGeneratingCSV = false
     @State private var csvStatusMessage: String?
     @State private var csvErrorMessage: String?
-
-    private var exerciseGroupLookup: [String: String] {
-        muscleGroups.reduce(into: [:]) { result, group in
-            for exercise in group.exercises {
-                result[exercise.name] = group.name
-            }
-        }
-    }
-
-    private var exerciseLibraryCount: Int {
-        muscleGroups.flatMap(\.exercises).count
-    }
-
-    private var totalWorkoutEntries: Int {
-        allWorkouts.flatMap(\.exerciseEntries).count
-    }
-
-    private var totalWorkoutSets: Int {
-        allWorkouts.flatMap(\.exerciseEntries).flatMap(\.sets).count
-    }
-
-    private var coachAndAdaptiveCount: Int {
-        dailyCoachCheckIns.count + weeklyTrainingAnalyses.count + adaptationProposals.count
-    }
 
     private var backupFeedbackItems: [(String, Color)] {
         var items: [(String, Color)] = []
@@ -76,23 +44,23 @@ struct DataExportView: View {
             Section {
                 LabeledContent(
                     "Exercise Library",
-                    value: "\(muscleGroups.count) groups / \(exerciseLibraryCount) exercises"
+                    value: "\(summarySnapshot.muscleGroupCount) groups / \(summarySnapshot.exerciseCount) exercises"
                 )
                 LabeledContent(
                     "Workout History",
-                    value: "\(allWorkouts.count) workouts / \(personalRecords.count) PRs"
+                    value: "\(summarySnapshot.workoutCount) workouts / \(summarySnapshot.personalRecordCount) PRs"
                 )
                 LabeledContent(
                     "Programs",
-                    value: "\(trainingPrograms.count) programs / \(programRuns.count) runs"
+                    value: "\(summarySnapshot.trainingProgramCount) programs / \(summarySnapshot.programRunCount) runs"
                 )
                 LabeledContent(
                     "Coach & Adaptive",
-                    value: "\(coachAndAdaptiveCount) records"
+                    value: "\(summarySnapshot.coachAndAdaptiveCount) records"
                 )
                 LabeledContent(
                     "Apple Health Cache",
-                    value: "\(healthKitDailySummaries.count) days"
+                    value: "\(summarySnapshot.healthKitDailySummaryCount) days"
                 )
                 LabeledContent(
                     "Local Account State",
@@ -154,9 +122,9 @@ struct DataExportView: View {
             }
 
             Section {
-                LabeledContent("Workouts", value: "\(allWorkouts.count)")
-                LabeledContent("Exercise Entries", value: "\(totalWorkoutEntries)")
-                LabeledContent("Total Sets", value: "\(totalWorkoutSets)")
+                LabeledContent("Workouts", value: "\(summarySnapshot.workoutCount)")
+                LabeledContent("Exercise Entries", value: "\(summarySnapshot.exerciseEntryCount)")
+                LabeledContent("Total Sets", value: "\(summarySnapshot.setCount)")
 
                 Button {
                     generateCSV()
@@ -174,7 +142,7 @@ struct DataExportView: View {
                         )
                     }
                 }
-                .disabled(isGeneratingCSV || allWorkouts.isEmpty)
+                .disabled(isGeneratingCSV || summarySnapshot.workoutCount == 0)
 
                 if let url = csvExportURL {
                     ShareLink(
@@ -188,7 +156,7 @@ struct DataExportView: View {
             } header: {
                 Text("Workout CSV Export")
             } footer: {
-                if allWorkouts.isEmpty {
+                if summarySnapshot.workoutCount == 0 {
                     Text("No workout data is available for CSV export yet.")
                 } else {
                     Text("CSV remains a human-readable workout export. Use Device Backup when you want to move all local app data to another device.")
@@ -209,6 +177,15 @@ struct DataExportView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Backup & Export")
         .navigationBarTitleDisplayMode(.large)
+        .task(id: summaryRefreshTrigger) {
+            refreshSummary()
+        }
+        .onChange(of: backupViewModel.statusMessage) { _, _ in
+            requestSummaryRefresh()
+        }
+        .onChange(of: backupViewModel.errorMessage) { _, _ in
+            requestSummaryRefresh()
+        }
         .fileImporter(
             isPresented: $backupViewModel.isPresentingImporter,
             allowedContentTypes: [.suggestMeSomeBackup, .json]
@@ -233,32 +210,12 @@ struct DataExportView: View {
         }
     }
 
-    private func buildCSV() -> String {
+    private func buildCSV(from exportData: WorkoutCSVExportData) -> String {
         var rows: [String] = ["Date,Duration,Exercise,Muscle Group,Set,Weight,Unit,Reps,PR"]
-        let groupLookup = exerciseGroupLookup
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-
-        for workout in allWorkouts {
-            let dateString = formatter.string(from: workout.date)
-            let duration = workout.formattedDuration
-            let entries = workout.exerciseEntries.sorted { $0.orderIndex < $1.orderIndex }
-
-            for entry in entries {
-                let exerciseName = csvEscape(entry.exerciseName)
-                let muscleGroupName = csvEscape(groupLookup[entry.exerciseName] ?? "")
-
-                if entry.isCardio {
-                    let seconds = entry.cardioDurationSeconds ?? 0
-                    rows.append("\(dateString),\(duration),\(exerciseName),\(muscleGroupName),1,\(seconds),sec,1,false")
-                } else {
-                    for set in entry.sets.sorted(by: { $0.setNumber < $1.setNumber }) {
-                        rows.append(
-                            "\(dateString),\(duration),\(exerciseName),\(muscleGroupName),\(set.setNumber),\(set.weight),\(entry.unit.rawValue),\(set.reps),\(set.isPR ? "true" : "false")"
-                        )
-                    }
-                }
-            }
+        for row in exportData.rows {
+            rows.append(
+                "\(row.dateString),\(row.duration),\(csvEscape(row.exerciseName)),\(csvEscape(row.muscleGroupName)),\(row.setNumber),\(row.weightValue),\(row.unitValue),\(row.repsValue),\(row.isPersonalRecord ? "true" : "false")"
+            )
         }
         return rows.joined(separator: "\n")
     }
@@ -274,7 +231,8 @@ struct DataExportView: View {
         isGeneratingCSV = true
         defer { isGeneratingCSV = false }
 
-        let csv = buildCSV()
+        let exportData = DataExportReadRepository.workoutCSVExportData(context: modelContext)
+        let csv = buildCSV(from: exportData)
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("SuggestMeSome_Workouts.csv")
 
@@ -288,6 +246,14 @@ struct DataExportView: View {
             csvStatusMessage = nil
             csvErrorMessage = "The workout CSV could not be written."
         }
+    }
+
+    private func refreshSummary() {
+        summarySnapshot = DataExportReadRepository.summarySnapshot(context: modelContext)
+    }
+
+    private func requestSummaryRefresh() {
+        summaryRefreshTrigger += 1
     }
 }
 

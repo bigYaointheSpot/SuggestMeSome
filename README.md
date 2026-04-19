@@ -3320,7 +3320,7 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ### Feature 16 — Performance, read-path cleanup, and stale-surface refresh
 
-**Status:** In Progress
+**Status:** Complete
 
 #### Prompt 1 [Launch, audit cadence, and workout draft persistence hardening] — 2026-04-18
 
@@ -3477,6 +3477,29 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt7ProgramDerivedStateTests`
 
 **Commit:** `refactor: cache generator and review derived state`
+
+---
+
+#### Prompt 8 [Export/settings lazy reads and repository drift cleanup] — 2026-04-18
+
+- Reworked export/settings reads so opening the export surface no longer materializes the app's major entity collections:
+  - added `DataExportReadRepository` with a count-only `summarySnapshot(...)` plus on-demand `workoutCSVExportData(...)` helpers
+  - `DataExportView` now refreshes a lightweight export summary snapshot from `@State` instead of binding broad `@Query` arrays for workouts, PRs, programs, coach data, and HealthKit summaries
+  - CSV row assembly now runs from repository snapshots inside the export action path, keeping the render path focused on counts and status UI
+- Narrowed repository/service reads that were still hydrating more history than each caller needed:
+  - `TrainingContextQueryService.fetchWorkouts(...)` and `fetchPersonalRecords(...)` now forward to targeted `TrainingReadRepository` helpers instead of depending on `historySnapshot(...)`
+  - `AdaptiveTrainingStateEngine` now reads only recent workouts for its recommendation snapshot instead of fetching workout history plus PR history together
+  - `WorkoutView` now uses a targeted preferred-unit lookup when drafting program sessions and a scoped `mesocycleReviewSnapshot(...)` helper for completed-block review prep
+  - `TrainingReadRepository` now exposes a narrower preferred-unit lookup, targeted standalone-workout window reads for mesocycle reviews, scoped adaptive-outcome fetches, and narrowed pending-proposal / active-overlay helpers
+- Added focused Prompt 8 coverage in `Feature16Prompt8DataExportAndReadRepositoryTests.swift`:
+  - export summary counts and CSV row snapshots match seeded model data
+  - preferred-unit lookup and mesocycle-review reads stay scoped to the relevant exercise/run window
+  - pending proposal and active overlay helpers only return the intended rows
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt8DataExportAndReadRepositoryTests`
+
+**Commit:** `refactor: lazy export reads and narrow training queries`
 
 ---
 

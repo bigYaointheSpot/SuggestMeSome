@@ -246,15 +246,13 @@ enum TrainingReadRepository {
         context: ModelContext,
         limit: Int? = nil
     ) -> [AdaptationProposal] {
-        let descriptor = proposalDescriptor(for: run)
-        var mutableDescriptor = descriptor
-        if let limit {
-            mutableDescriptor.fetchLimit = max(1, limit)
-        }
-
-        return ((try? context.fetch(mutableDescriptor)) ?? []).filter {
-            $0.proposalStatus == .pendingUserConfirmation
-        }
+        fetchPendingProposals(
+            for: run,
+            statuses: [.pendingUserConfirmation],
+            restrictToStandaloneWhenNoRun: false,
+            context: context,
+            limit: limit
+        )
     }
 
     static func fetchPendingCoachContextProposals(
@@ -262,22 +260,13 @@ enum TrainingReadRepository {
         context: ModelContext,
         limit: Int = 10
     ) -> [AdaptationProposal] {
-        var descriptor = proposalDescriptor(for: run)
-        descriptor.fetchLimit = max(limit, 50)
-
-        let rows = (try? context.fetch(descriptor)) ?? []
-        let filtered = rows.filter { proposal in
-            let isPending = proposal.proposalStatus == .pendingUserConfirmation ||
-                proposal.proposalStatus == .pendingAutoApply
-            guard isPending else { return false }
-
-            if let run {
-                return proposal.programRun?.id == run.id
-            }
-            return proposal.programRun == nil
-        }
-
-        return Array(filtered.prefix(max(1, limit)))
+        fetchPendingProposals(
+            for: run,
+            statuses: [.pendingUserConfirmation, .pendingAutoApply],
+            restrictToStandaloneWhenNoRun: true,
+            context: context,
+            limit: limit
+        )
     }
 
     static func fetchActiveOverlays(for run: ProgramRun, context: ModelContext) -> [AppliedProgramOverlay] {
@@ -291,6 +280,22 @@ enum TrainingReadRepository {
 
     static func fetchPersonalRecords(context: ModelContext) -> [PersonalRecord] {
         (try? context.fetch(FetchDescriptor<PersonalRecord>())) ?? []
+    }
+
+    static func preferredUnit(
+        for exerciseName: String,
+        context: ModelContext,
+        fallback: WeightUnit = AppPreferences.defaultWeightUnit
+    ) -> WeightUnit {
+        let normalized = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return fallback }
+
+        var descriptor = FetchDescriptor<PersonalRecord>(
+            predicate: #Predicate<PersonalRecord> { $0.exerciseName == normalized },
+            sortBy: [SortDescriptor(\PersonalRecord.dateAchieved, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first?.unit ?? fallback
     }
 
     static func fetchWorkouts(limit: Int? = nil, context: ModelContext) -> [Workout] {
@@ -320,9 +325,34 @@ enum TrainingReadRepository {
     static func fetchWorkouts(for run: ProgramRun, context: ModelContext) -> [Workout] {
         let runID = run.id
         let descriptor = FetchDescriptor<Workout>(
-            predicate: #Predicate<Workout> { $0.programRun?.id == runID }
+            predicate: #Predicate<Workout> { $0.programRun?.id == runID },
+            sortBy: [SortDescriptor(\Workout.date, order: .forward)]
         )
         return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func mesocycleReviewSnapshot(
+        for run: ProgramRun,
+        context: ModelContext
+    ) -> MesocycleReviewSnapshot? {
+        guard MesocycleReviewService.isEligible(for: run) else {
+            return nil
+        }
+
+        let programWorkouts = fetchWorkouts(for: run, context: context)
+        let reviewEndDate = run.endDate ?? programWorkouts.map(\.date).max() ?? run.startDate
+        let standaloneWorkouts = fetchStandaloneWorkouts(
+            from: run.startDate,
+            to: reviewEndDate,
+            context: context
+        )
+
+        return MesocycleReviewService.buildReview(
+            for: run,
+            programWorkouts: programWorkouts,
+            standaloneWorkouts: standaloneWorkouts,
+            personalRecords: fetchPersonalRecords(context: context)
+        )
     }
 
     private static func fetchProgramRuns(
@@ -390,13 +420,56 @@ enum TrainingReadRepository {
         return (try? context.fetch(descriptor))?.first?.fatigueStatus
     }
 
+    private static func fetchPendingProposals(
+        for run: ProgramRun?,
+        statuses: [ProposalStatus],
+        restrictToStandaloneWhenNoRun: Bool,
+        context: ModelContext,
+        limit: Int?
+    ) -> [AdaptationProposal] {
+        let fetchLimit = limit.map { max(1, $0) }
+        let baseProposals = fetchProposals(
+            for: run,
+            restrictToStandaloneWhenNoRun: restrictToStandaloneWhenNoRun,
+            context: context
+        )
+        let proposals = baseProposals.filter { proposal in
+            statuses.contains(proposal.proposalStatus)
+        }
+        guard let fetchLimit else { return proposals }
+        return Array(proposals.prefix(fetchLimit))
+    }
+
+    private static func fetchProposals(
+        for run: ProgramRun?,
+        restrictToStandaloneWhenNoRun: Bool,
+        context: ModelContext
+    ) -> [AdaptationProposal] {
+        let descriptor = proposalDescriptor(
+            for: run,
+            restrictToStandaloneWhenNoRun: restrictToStandaloneWhenNoRun
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
     private static func proposalDescriptor(
-        for run: ProgramRun?
+        for run: ProgramRun?,
+        restrictToStandaloneWhenNoRun: Bool
     ) -> FetchDescriptor<AdaptationProposal> {
         if let run {
             let runID = run.id
             return FetchDescriptor<AdaptationProposal>(
                 predicate: #Predicate<AdaptationProposal> { $0.programRun?.id == runID },
+                sortBy: [
+                    SortDescriptor(\AdaptationProposal.priority, order: .reverse),
+                    SortDescriptor(\AdaptationProposal.createdAt, order: .reverse),
+                ]
+            )
+        }
+
+        if restrictToStandaloneWhenNoRun {
+            return FetchDescriptor<AdaptationProposal>(
+                predicate: #Predicate<AdaptationProposal> { $0.programRun == nil },
                 sortBy: [
                     SortDescriptor(\AdaptationProposal.priority, order: .reverse),
                     SortDescriptor(\AdaptationProposal.createdAt, order: .reverse),
@@ -426,9 +499,12 @@ enum TrainingReadRepository {
             value: -lookbackDays,
             to: referenceDate
         ) ?? referenceDate
-        let descriptor = FetchDescriptor<ExercisePerformanceOutcome>(
+        let runID = run.id
+        let runDescriptor = FetchDescriptor<ExercisePerformanceOutcome>(
             predicate: #Predicate<ExercisePerformanceOutcome> {
-                $0.workoutDate >= lowerBound && $0.workoutDate <= referenceDate
+                $0.workoutDate >= lowerBound &&
+                $0.workoutDate <= referenceDate &&
+                $0.programRun?.id == runID
             },
             sortBy: [
                 SortDescriptor(\ExercisePerformanceOutcome.workoutDate, order: .forward),
@@ -436,12 +512,43 @@ enum TrainingReadRepository {
             ]
         )
 
-        let runID = run.id
-        return ((try? context.fetch(descriptor)) ?? []).filter { outcome in
-            if includeStandaloneOutcomes {
-                return outcome.programRun?.id == runID || outcome.programRun == nil
+        var outcomes = (try? context.fetch(runDescriptor)) ?? []
+        guard includeStandaloneOutcomes else { return outcomes }
+
+        let standaloneDescriptor = FetchDescriptor<ExercisePerformanceOutcome>(
+            predicate: #Predicate<ExercisePerformanceOutcome> {
+                $0.workoutDate >= lowerBound &&
+                $0.workoutDate <= referenceDate &&
+                $0.programRun == nil
+            },
+            sortBy: [
+                SortDescriptor(\ExercisePerformanceOutcome.workoutDate, order: .forward),
+                SortDescriptor(\ExercisePerformanceOutcome.createdAt, order: .forward),
+            ]
+        )
+
+        outcomes.append(contentsOf: (try? context.fetch(standaloneDescriptor)) ?? [])
+        return outcomes.sorted {
+            if $0.workoutDate != $1.workoutDate {
+                return $0.workoutDate < $1.workoutDate
             }
-            return outcome.programRun?.id == runID
+            return $0.createdAt < $1.createdAt
         }
+    }
+
+    private static func fetchStandaloneWorkouts(
+        from startDate: Date,
+        to endDate: Date,
+        context: ModelContext
+    ) -> [Workout] {
+        let descriptor = FetchDescriptor<Workout>(
+            predicate: #Predicate<Workout> {
+                $0.programRun == nil &&
+                $0.date >= startDate &&
+                $0.date <= endDate
+            },
+            sortBy: [SortDescriptor(\Workout.date, order: .forward)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
     }
 }

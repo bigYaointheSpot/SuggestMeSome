@@ -27,16 +27,16 @@ struct AdaptiveTrainingStateEngine {
         activeRunOverride: ProgramRun? = nil,
         referenceDate: Date = Date()
     ) -> TrainingStateSnapshot {
-        let history = TrainingReadRepository.historySnapshot(
-            context: context,
-            workoutLimit: 40
+        let recentHistory = TrainingReadRepository.fetchWorkouts(
+            limit: 40,
+            context: context
         )
         let runIndex = TrainingReadRepository.programRunIndexSnapshot(
             context: context,
             activeLimit: 2,
             completedLimit: 3
         )
-        let recentWorkouts = TrainingContextQueryService.recentWorkouts(from: history.workouts, limit: 16)
+        let recentWorkouts = TrainingContextQueryService.recentWorkouts(from: recentHistory, limit: 16)
         let activeRun = activeRunOverride ?? TrainingContextQueryService.activeProgramRuns(from: runIndex.activeRuns).first
         let preferences = preferenceLearner.learnPreferences(from: recentWorkouts)
         let fatigueStatus = resolvedFatigueStatus(activeRun: activeRun, referenceDate: referenceDate)

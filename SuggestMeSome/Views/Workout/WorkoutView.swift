@@ -548,11 +548,10 @@ struct WorkoutView: View {
     }
 
     private func draftEntries(from programWorkout: ProgramWorkoutContext) -> [DraftExerciseEntry] {
-        let allPersonalRecords = TrainingContextQueryService.fetchPersonalRecords(context: modelContext)
         return ProgramWorkoutDraftBuilder.buildEntries(from: programWorkout.exercises) { anchor in
-            TrainingContextQueryService.preferredUnit(
+            TrainingReadRepository.preferredUnit(
                 for: anchor.exerciseName,
-                in: allPersonalRecords
+                context: modelContext
             )
         }
     }
@@ -689,10 +688,9 @@ struct WorkoutView: View {
 
     private func mesocycleReviewSnapshot(for run: ProgramRun?) -> MesocycleReviewSnapshot? {
         guard let run else { return nil }
-        return TrainingContextQueryService.mesocycleReview(
+        return TrainingReadRepository.mesocycleReviewSnapshot(
             for: run,
-            workouts: TrainingContextQueryService.fetchWorkouts(context: modelContext),
-            personalRecords: TrainingContextQueryService.fetchPersonalRecords(context: modelContext)
+            context: modelContext
         )
     }
 
