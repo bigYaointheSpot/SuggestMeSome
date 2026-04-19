@@ -58,6 +58,7 @@ struct ProgramRunProgressReadSnapshot {
     let workouts: [Workout]
     let completedWorkoutCount: Int
     let completedSessionKeys: Set<ProgramSessionCompletionKey>
+    let completedWorkoutCountByWeekNumber: [Int: Int]
     let totalSessions: Int
     let nextIncompleteSession: ProgramNextSessionReadSnapshot?
     let workoutBySessionKey: [ProgramSessionCompletionKey: Workout]
@@ -84,6 +85,10 @@ struct ProgramRunProgressReadSnapshot {
                 sessionNumber: sessionNumber
             )
         )
+    }
+
+    func completedWorkoutCount(inWeek weekNumber: Int) -> Int {
+        completedWorkoutCountByWeekNumber[weekNumber] ?? 0
     }
 
     static func refreshToken(
@@ -113,6 +118,78 @@ struct ProgramRunProgressReadSnapshot {
         }
 
         return hasher.finalize()
+    }
+
+    static func build(
+        for run: ProgramRun,
+        workouts: [Workout]
+    ) -> ProgramRunProgressReadSnapshot {
+        let sortedWorkouts = workouts.sorted { $0.date < $1.date }
+        let completedSessionKeys: Set<ProgramSessionCompletionKey> = Set(sortedWorkouts.compactMap { workout in
+            guard let weekNumber = workout.programWeekNumber,
+                  let sessionNumber = workout.programSessionNumber else {
+                return nil
+            }
+            return ProgramSessionCompletionKey(
+                weekNumber: weekNumber,
+                sessionNumber: sessionNumber
+            )
+        })
+        let workoutBySessionKey = sortedWorkouts.reduce(into: [ProgramSessionCompletionKey: Workout]()) { result, workout in
+            guard let weekNumber = workout.programWeekNumber,
+                  let sessionNumber = workout.programSessionNumber else {
+                return
+            }
+            result[
+                ProgramSessionCompletionKey(
+                    weekNumber: weekNumber,
+                    sessionNumber: sessionNumber
+                )
+            ] = workout
+        }
+        let completedWorkoutCountByWeekNumber = sortedWorkouts.reduce(into: [Int: Int]()) { result, workout in
+            guard let weekNumber = workout.programWeekNumber else { return }
+            result[weekNumber, default: 0] += 1
+        }
+        let totalSessions = max(0, (run.program?.lengthInWeeks ?? 0) * (run.program?.sessionsPerWeek ?? 0))
+
+        let nextIncompleteSession: ProgramNextSessionReadSnapshot? = {
+            guard
+                let program = run.program,
+                program.lengthInWeeks > 0,
+                program.sessionsPerWeek > 0
+            else {
+                return nil
+            }
+
+            for weekNumber in 1...program.lengthInWeeks {
+                for sessionNumber in 1...program.sessionsPerWeek {
+                    let key = ProgramSessionCompletionKey(
+                        weekNumber: weekNumber,
+                        sessionNumber: sessionNumber
+                    )
+                    if !completedSessionKeys.contains(key) {
+                        return ProgramNextSessionReadSnapshot(
+                            weekNumber: weekNumber,
+                            sessionNumber: sessionNumber
+                        )
+                    }
+                }
+            }
+
+            return nil
+        }()
+
+        return ProgramRunProgressReadSnapshot(
+            run: run,
+            workouts: sortedWorkouts,
+            completedWorkoutCount: sortedWorkouts.count,
+            completedSessionKeys: completedSessionKeys,
+            completedWorkoutCountByWeekNumber: completedWorkoutCountByWeekNumber,
+            totalSessions: totalSessions,
+            nextIncompleteSession: nextIncompleteSession,
+            workoutBySessionKey: workoutBySessionKey
+        )
     }
 }
 
@@ -164,66 +241,9 @@ enum TrainingReadRepository {
         for run: ProgramRun,
         context: ModelContext
     ) -> ProgramRunProgressReadSnapshot {
-        let workouts = fetchWorkouts(for: run, context: context)
-        let completedSessionKeys: Set<ProgramSessionCompletionKey> = Set(workouts.compactMap { workout in
-            guard let weekNumber = workout.programWeekNumber,
-                  let sessionNumber = workout.programSessionNumber else {
-                return nil
-            }
-            return ProgramSessionCompletionKey(
-                weekNumber: weekNumber,
-                sessionNumber: sessionNumber
-            )
-        })
-        let workoutBySessionKey = workouts.reduce(into: [ProgramSessionCompletionKey: Workout]()) { result, workout in
-            guard let weekNumber = workout.programWeekNumber,
-                  let sessionNumber = workout.programSessionNumber else {
-                return
-            }
-            result[
-                ProgramSessionCompletionKey(
-                    weekNumber: weekNumber,
-                    sessionNumber: sessionNumber
-                )
-            ] = workout
-        }
-        let totalSessions = max(0, (run.program?.lengthInWeeks ?? 0) * (run.program?.sessionsPerWeek ?? 0))
-
-        let nextIncompleteSession: ProgramNextSessionReadSnapshot? = {
-            guard
-                let program = run.program,
-                program.lengthInWeeks > 0,
-                program.sessionsPerWeek > 0
-            else {
-                return nil
-            }
-
-            for weekNumber in 1...program.lengthInWeeks {
-                for sessionNumber in 1...program.sessionsPerWeek {
-                    let key = ProgramSessionCompletionKey(
-                        weekNumber: weekNumber,
-                        sessionNumber: sessionNumber
-                    )
-                    if !completedSessionKeys.contains(key) {
-                        return ProgramNextSessionReadSnapshot(
-                            weekNumber: weekNumber,
-                            sessionNumber: sessionNumber
-                        )
-                    }
-                }
-            }
-
-            return nil
-        }()
-
-        return ProgramRunProgressReadSnapshot(
-            run: run,
-            workouts: workouts,
-            completedWorkoutCount: workouts.count,
-            completedSessionKeys: completedSessionKeys,
-            totalSessions: totalSessions,
-            nextIncompleteSession: nextIncompleteSession,
-            workoutBySessionKey: workoutBySessionKey
+        ProgramRunProgressReadSnapshot.build(
+            for: run,
+            workouts: fetchWorkouts(for: run, context: context)
         )
     }
 

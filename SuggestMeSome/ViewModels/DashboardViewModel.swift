@@ -91,6 +91,7 @@ struct DashboardRefreshInputs {
     var streakSparkline: [Double] = []
 
     var activeLiftData: [(lift: (name: String, color: Color), points: [ChartPoint])] = []
+    var activeProgramProgressSnapshots: [UUID: ProgramRunProgressReadSnapshot] = [:]
 
     var perMuscleSaturation: [ProgramVolumeMuscle: Double] = [:]
     var recoveryPressure: TrainingStateRecoveryPressure = .neutral
@@ -114,6 +115,10 @@ struct DashboardRefreshInputs {
     var weeklyAnalyses: [WeeklyTrainingAnalysis] { refreshInputs.weeklyAnalyses }
     var healthKitInsight: ObjectiveRecoveryInsight? { latestHealthKitInsight }
     var hasCoachingData: Bool { recentAnalysis != nil || !pendingProposals.isEmpty }
+
+    func activeProgramProgressSnapshot(for run: ProgramRun) -> ProgramRunProgressReadSnapshot? {
+        activeProgramProgressSnapshots[run.id]
+    }
 
     // MARK: - Refresh
 
@@ -146,6 +151,10 @@ struct DashboardRefreshInputs {
 
     private func rebuildDerivedState() {
         let filteredWorkouts = buildFilteredWorkouts(from: refreshInputs.workouts)
+        let activeProgramProgressSnapshots = buildActiveProgramProgressSnapshots(
+            activeProgramRuns: refreshInputs.activeProgramRuns,
+            workouts: refreshInputs.workouts
+        )
         let recentAnalysis = refreshInputs.weeklyAnalyses.first { $0.isFinalized }
         let pendingProposals = refreshInputs.allProposals
             .filter { $0.proposalStatus == .pendingUserConfirmation }
@@ -217,6 +226,7 @@ struct DashboardRefreshInputs {
         )
         self.streakSparkline = workoutFrequencyBuckets.map { $0.count > 0 ? 1 : 0 }
         self.activeLiftData = activeLiftData
+        self.activeProgramProgressSnapshots = activeProgramProgressSnapshots
         self.perMuscleSaturation = latestTrainingStateSnapshot?.perMuscleStressSaturation ?? [:]
         self.recoveryPressure = latestTrainingStateSnapshot?.recoveryPressure ?? .neutral
         self.snapshotFatigueStatus = latestTrainingStateSnapshot?.fatigueStatus ?? recentAnalysis?.fatigueStatus
@@ -337,6 +347,23 @@ struct DashboardRefreshInputs {
         }
 
         return counts
+    }
+
+    private func buildActiveProgramProgressSnapshots(
+        activeProgramRuns: [ProgramRun],
+        workouts: [Workout]
+    ) -> [UUID: ProgramRunProgressReadSnapshot] {
+        let workoutsByRunID = workouts.reduce(into: [UUID: [Workout]]()) { result, workout in
+            guard let runID = workout.programRun?.id else { return }
+            result[runID, default: []].append(workout)
+        }
+
+        return activeProgramRuns.reduce(into: [UUID: ProgramRunProgressReadSnapshot]()) { result, run in
+            result[run.id] = ProgramRunProgressReadSnapshot.build(
+                for: run,
+                workouts: workoutsByRunID[run.id] ?? []
+            )
+        }
     }
 
     private func buildTimeTrainedSparkline(

@@ -10,7 +10,7 @@ import SwiftUI
 struct ActiveProgramCard: View {
     let run: ProgramRun
     let program: TrainingProgram
-    let allWorkouts: [Workout]
+    let progressSnapshot: ProgramRunProgressReadSnapshot
     let latestAnalysis: WeeklyTrainingAnalysis?
     let onContinue: () -> Void
     let onReviewProposals: (() -> Void)?
@@ -20,13 +20,9 @@ struct ActiveProgramCard: View {
         return min(max(weeks, 1), program.lengthInWeeks)
     }
 
-    private var programWorkouts: [Workout] {
-        allWorkouts.filter { $0.programRun?.id == run.id }
-    }
+    private var completedCount: Int { progressSnapshot.completedWorkoutCount }
 
-    private var completedCount: Int { programWorkouts.count }
-
-    private var totalSessions: Int { program.lengthInWeeks * program.sessionsPerWeek }
+    private var totalSessions: Int { progressSnapshot.totalSessions }
 
     private var progress: Double {
         guard totalSessions > 0 else { return 0 }
@@ -34,7 +30,7 @@ struct ActiveProgramCard: View {
     }
 
     private var thisWeekCompletedCount: Int {
-        programWorkouts.filter { $0.programWeekNumber == currentWeek }.count
+        progressSnapshot.completedWorkoutCount(inWeek: currentWeek)
     }
 
     var body: some View {

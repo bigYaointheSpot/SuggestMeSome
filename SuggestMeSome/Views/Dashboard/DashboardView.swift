@@ -830,10 +830,12 @@ struct DashboardView: View {
                 let latestAnalysis = viewModel.weeklyAnalyses.first {
                     $0.programRun?.id == run.id && $0.isFinalized
                 }
+                let progressSnapshot = viewModel.activeProgramProgressSnapshot(for: run)
+                    ?? ProgramRunProgressReadSnapshot.build(for: run, workouts: [])
                 ActiveProgramCard(
                     run: run,
                     program: program,
-                    allWorkouts: viewModel.workouts,
+                    progressSnapshot: progressSnapshot,
                     latestAnalysis: latestAnalysis,
                     onContinue: { viewModel.showingCompleteProgramSheet = true },
                     onReviewProposals: !viewModel.pendingProposals.isEmpty ? { viewModel.showingProposalReview = true } : nil

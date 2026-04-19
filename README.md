@@ -3606,6 +3606,26 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 14 [Program card and support-surface derived-state cleanup] — 2026-04-18
+
+- Moved the remaining dashboard-side active-program progress math onto the shared scoped snapshot path instead of recomputing from raw workout arrays in view code:
+  - `ProgramRunProgressReadSnapshot` now also caches per-week completed counts so summary surfaces can read "this week" progress without filtering workouts locally
+  - `DashboardViewModel` now precomputes `activeProgramProgressSnapshots` during refresh by grouping workouts per active run and building one scoped progress snapshot per run
+  - `ActiveProgramCard` now reads completed totals, total sessions, and this-week completion directly from the cached snapshot rather than filtering `allWorkouts`
+- Kept the existing dashboard visuals and actions unchanged while narrowing recomputation:
+  - Active Program progress, current-week completion, continue-workout handoff, and proposal-review affordances all behave the same
+  - inactive runs do not get unnecessary cached progress state
+- Added focused Prompt 14 coverage in `Feature16Prompt14ActiveProgramSnapshotTests.swift`:
+  - dashboard refresh caches the expected scoped active-run progress totals and next-session state
+  - inactive runs are excluded from the active program snapshot cache
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt14ActiveProgramSnapshotTests`
+
+**Commit:** `refactor: cache dashboard active program progress`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
