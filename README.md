@@ -3566,6 +3566,26 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 12 [Personal records caching and touched-area stale code cleanup] — 2026-04-18
+
+- Replaced the Personal Records render-path grouping work with a cached derived snapshot:
+  - added `PersonalRecordListSnapshot` to precompute exercise-group sections and rep-sorted rows only when PR data changes
+  - `PersonalRecordsView` now refreshes that grouped snapshot from a dedicated refresh token instead of rebuilding the grouped dictionary/sorts during view recomputation
+  - the existing Personal Records grouping, ranking, formatting, and wipe-data UX remain unchanged
+- Trimmed stale touched-area cleanup left over from the older broad-query path:
+  - removed the unused `TrainingContextQueryService.fetchWorkouts(...)` helper after the Settings/data-management flow stopped depending on it
+  - kept the touched settings/watch cleanup cohesive by collapsing the final unused read shim instead of leaving compatibility scaffolding behind
+- Added focused Prompt 12 coverage in `Feature16Prompt12PersonalRecordSnapshotTests.swift`:
+  - grouped snapshot output matches the expected exercise ordering and rep sorting
+  - the Personal Records refresh token only changes when visible PR data changes
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt12PersonalRecordSnapshotTests`
+
+**Commit:** `refactor: cache personal records and trim stale helpers`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

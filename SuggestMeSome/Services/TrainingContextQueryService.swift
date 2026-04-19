@@ -173,8 +173,4 @@ enum TrainingContextQueryService {
     static func fetchPersonalRecords(context: ModelContext) -> [PersonalRecord] {
         TrainingReadRepository.fetchPersonalRecords(context: context)
     }
-
-    static func fetchWorkouts(context: ModelContext) -> [Workout] {
-        TrainingReadRepository.fetchWorkouts(context: context)
-    }
 }
