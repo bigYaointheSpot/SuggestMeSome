@@ -3971,6 +3971,26 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests`
 
+#### Prompt 3 [Feature 19 UI polish, core-tab integration, and collaboration hardening] — 2026-04-19
+
+- Rewrote the collaboration surfaces with consumer-grade copy, async feedback, and confirmation dialogs so every mutation gives the user immediate, explicit response:
+  - introduced reusable `MutationButton`, `InlineErrorBanner`, `FormComposerScaffold`, `EmptyStateRow`, and `StatusBadge` components to keep loading, error, and empty states consistent across the hub, assignment inbox, share composers, and invite rows
+  - replaced jargon like "Blueprint Library", "Assignment Inbox", and "deterministic insights" with `Saved Programs`, `From Your Coach`, and `Smart Coaching`; rewrote footers and empty states to be warm, concrete, and action-oriented
+  - added `.refreshable` pull-to-refresh on the collaboration hub and a toolbar `ProgressView` while the coordinator is loading, plus confirmation dialogs before sharing programs or progress
+  - introduced named `VisibilityPreset`s (`Full picture`, `Coaching only`, `Minimal`) with a disclosure sheet so athletes pick intent-level sharing instead of flipping raw bitmask scopes
+- Integrated collaboration surfaces into the existing tabs so they match the app's visual language instead of standing out as bolted-on:
+  - aligned the dashboard `Smart Coaching` card with the shared `dsCardStyle` and `DSSectionHeader` pattern and hid it entirely when there are no insights
+  - retired the Programs tab's duplicate "quick access" pill row, consolidating `From Coach` and `Saved` counts into the existing create/template/smart-gen button strip (with red count badges) and surfacing `Coach Hub` as a single secondary row beneath it
+  - trimmed the Settings collaboration footer to a one-sentence summary with a `?` info button that opens a long-form explainer sheet covering what is included and how privacy works
+  - added a `hasAnyCollaboration` computed on `CollaborationCoordinator` and gated the Daily Coach cloud-updates card behind it so cold launches no longer render an empty coach card
+- Hardened the coordinator and cloud client to give each section its own error surface and survive transient network failures:
+  - introduced a `CollaborationEndpoint` enum plus an `endpointErrors` dictionary on `CollaborationCoordinator`, routing every mutation and refresh through `recordError`/`clearError` helpers while keeping the legacy `lastErrorMessage` populated for backward compatibility
+  - skipped push registration when authorization is granted but the APNs device token has not yet arrived; the delegate callback already triggers a second sync once the token is delivered
+  - added GET-only retry in `HTTPCloudCollaborationClient` (up to three attempts, 250ms/750ms/2s backoff) on transient `URLError` codes and HTTP 5xx responses, leaving POST/PUT single-shot so mutations cannot double-write
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests`
+
 ---
 
 ## Project Setup
