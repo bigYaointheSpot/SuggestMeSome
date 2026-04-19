@@ -2,6 +2,12 @@ import Foundation
 import Observation
 import SwiftData
 
+enum InvitePresentationMode: Equatable {
+    case incomingPending
+    case outgoingPending
+    case readOnly
+}
+
 enum CollaborationSyncPhase: String, Equatable {
     case signedOut
     case idle
@@ -60,6 +66,11 @@ final class CollaborationCoordinator {
     private var modelContext: ModelContext?
     private var currentAccountState: AccountBackendContractState = .empty
     private weak var cloudSyncManager: CloudSyncManager?
+    private var refreshTask: Task<Void, Never>?
+    private var refreshTaskToken = 0
+    private var lastSuccessfulRefreshAt: Date?
+
+    private let automaticRefreshMinimumInterval: TimeInterval = 15
 
     private(set) var phase: CollaborationSyncPhase = .signedOut
     private(set) var relationships: [CoachRelationship] = []
@@ -94,6 +105,13 @@ final class CollaborationCoordinator {
         currentAccountState.currentAccountID
     }
 
+    var currentAccountEmail: String? {
+        guard let currentAccountID else { return nil }
+        return normalizedEmail(
+            currentAccountState.knownAccounts.first { $0.id == currentAccountID }?.email
+        )
+    }
+
     var statusSummary: String {
         switch phase {
         case .signedOut:
@@ -119,10 +137,17 @@ final class CollaborationCoordinator {
         invites.filter { $0.status == .pending }
     }
 
+    var incomingPendingInvites: [CoachInvite] {
+        invites.filter { invitePresentationMode(for: $0) == .incomingPending }
+    }
+
+    var outgoingPendingInvites: [CoachInvite] {
+        invites.filter { invitePresentationMode(for: $0) == .outgoingPending }
+    }
+
     var inboxAssignments: [ProgramAssignment] {
         assignments.filter { assignment in
-            assignment.athleteAccountID == currentAccountID &&
-            assignment.status == .pending
+            canActOnAssignment(assignment)
         }
     }
 
@@ -148,6 +173,10 @@ final class CollaborationCoordinator {
         weeklyDigests.filter(\.isUnread)
     }
 
+    var shouldShowMyCoachEmptyState: Bool {
+        athleteRelationships.isEmpty && incomingPendingInvites.isEmpty
+    }
+
     func configure(modelContext: ModelContext) {
         self.modelContext = modelContext
         loadCache()
@@ -157,10 +186,39 @@ final class CollaborationCoordinator {
         self.cloudSyncManager = cloudSyncManager
     }
 
-    func handleAccountStateDidChange(_ state: AccountBackendContractState) async {
+    func hydrateAccountState(_ state: AccountBackendContractState) {
         currentAccountState = state
 
         guard state.currentAccountID != nil else {
+            clearInMemoryState()
+            phase = .signedOut
+            statusMessage = nil
+            lastErrorMessage = nil
+            return
+        }
+
+        loadCache()
+        if phase == .signedOut {
+            phase = .idle
+        }
+    }
+
+    func handleAccountStateDidChange(_ state: AccountBackendContractState) async {
+        let previousAccountID = currentAccountState.currentAccountID
+        let nextAccountID = state.currentAccountID
+        let accountChanged = previousAccountID != nextAccountID
+
+        if accountChanged,
+           previousAccountID != nil,
+           nextAccountID != nil,
+           let modelContext {
+            try? LocalCollaborationCacheStore(modelContext: modelContext).clearAll()
+            clearInMemoryState()
+        }
+
+        hydrateAccountState(state)
+
+        guard nextAccountID != nil else {
             clearInMemoryState()
             if let modelContext {
                 try? LocalCollaborationCacheStore(modelContext: modelContext).clearAll()
@@ -171,15 +229,40 @@ final class CollaborationCoordinator {
             return
         }
 
-        loadCache()
-        await refreshAll(reason: "Account connected")
+        guard accountChanged else { return }
+
+        await refreshAll(reason: "Account connected", force: true)
+        await syncPushRegistrationIfNeeded(
+            deviceToken: PushNotificationManager.shared.deviceTokenHex
+        )
     }
 
     func refreshOnAppDidBecomeActive() async {
-        await refreshAll(reason: "App became active")
+        await refreshAll(reason: "App became active", force: false)
     }
 
-    func refreshAll(reason: String = "Manual refresh") async {
+    func refreshAll(reason: String = "Manual refresh", force: Bool = true) async {
+        guard shouldPerformRefresh(force: force) else { return }
+
+        if let refreshTask {
+            await refreshTask.value
+            return
+        }
+
+        refreshTaskToken += 1
+        let taskToken = refreshTaskToken
+        let task = Task<Void, Never> { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performRefresh(reason: reason)
+        }
+        refreshTask = task
+        await task.value
+        if refreshTaskToken == taskToken {
+            refreshTask = nil
+        }
+    }
+
+    private func performRefresh(reason: String) async {
         guard let modelContext else { return }
         guard currentAccountID != nil else {
             phase = .signedOut
@@ -219,26 +302,26 @@ final class CollaborationCoordinator {
 
             let mergedSnapshots = mergeInsightSnapshots(primary: snapshots, roster: rosterSnapshots)
             let store = LocalCollaborationCacheStore(modelContext: modelContext)
-            try store.replaceRelationships(with: relationships)
-            try store.replaceInvites(with: invites)
-            try store.replaceAssignments(with: assignments)
-            try store.replaceNotes(with: notes)
-            try store.replaceNotificationPreference(with: notificationPreference)
-            try store.replaceInsightSnapshots(with: mergedSnapshots)
-            try store.replaceWeeklyDigests(with: digests)
-            try store.replaceBlueprints(with: blueprints)
-            try store.replaceProgramShares(with: programShares)
-            try store.replaceProgressShares(with: progressShares)
+            try store.replaceAll(
+                with: CollaborationFullRefreshPayload(
+                    relationships: relationships,
+                    invites: invites,
+                    assignments: assignments,
+                    notes: notes,
+                    notificationPreference: notificationPreference,
+                    insightSnapshots: mergedSnapshots,
+                    weeklyDigests: digests,
+                    blueprints: blueprints,
+                    programShares: programShares,
+                    progressShares: progressShares
+                )
+            )
 
             loadCache()
             phase = .idle
             statusMessage = reason
+            lastSuccessfulRefreshAt = .now
             appendActivity(.info, reason)
-
-            await handlePushAuthorizationStateChange(
-                PushNotificationManager.shared.authorizationState,
-                deviceToken: PushNotificationManager.shared.deviceTokenHex
-            )
         } catch {
             phase = .error
             lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -260,8 +343,32 @@ final class CollaborationCoordinator {
         deviceToken: String?
     ) async {
         pushAuthorizationState = authorizationState
+        await syncPushRegistrationIfNeeded(deviceToken: deviceToken)
+    }
+
+    func canWriteCoachNote(for relationship: CoachRelationship) -> Bool {
+        relationship.currentRole(for: currentAccountID) == .coach
+    }
+
+    func canActOnAssignment(_ assignment: ProgramAssignment) -> Bool {
+        assignment.athleteAccountID == currentAccountID && assignment.status == .pending
+    }
+
+    func invitePresentationMode(for invite: CoachInvite) -> InvitePresentationMode {
+        guard invite.status == .pending else { return .readOnly }
+        if isIncomingInvite(invite) {
+            return .incomingPending
+        }
+        if invite.inviterAccountID == currentAccountID {
+            return .outgoingPending
+        }
+        return .readOnly
+    }
+
+    private func syncPushRegistrationIfNeeded(deviceToken: String?) async {
         guard currentAccountID != nil else { return }
         guard let modelContext else { return }
+        guard shouldSyncPushRegistration(deviceToken: deviceToken) else { return }
 
         do {
             let accessToken = try await validAccessToken()
@@ -269,7 +376,7 @@ final class CollaborationCoordinator {
                 DevicePushRegistrationRequest(
                     deviceID: syncStateStore.deviceID(),
                     pushToken: deviceToken,
-                    authorizationStatusRawValue: authorizationState.rawValue
+                    authorizationStatusRawValue: pushAuthorizationState.rawValue
                 ),
                 accessToken: accessToken
             )
@@ -745,6 +852,49 @@ final class CollaborationCoordinator {
             at: 0
         )
         recentActivity = Array(recentActivity.prefix(20))
+    }
+
+    private func shouldPerformRefresh(force: Bool) -> Bool {
+        if force {
+            return true
+        }
+        if phase == .error {
+            return true
+        }
+        guard let lastSuccessfulRefreshAt else {
+            return true
+        }
+        return Date().timeIntervalSince(lastSuccessfulRefreshAt) >= automaticRefreshMinimumInterval
+    }
+
+    private func shouldSyncPushRegistration(deviceToken: String?) -> Bool {
+        guard let deviceRegistration else {
+            return true
+        }
+
+        return deviceRegistration.deviceID != syncStateStore.deviceID()
+            || deviceRegistration.pushToken != deviceToken
+            || deviceRegistration.authorizationStatusRawValue != pushAuthorizationState.rawValue
+            || deviceRegistration.lastRegisteredAt == nil
+            || deviceRegistration.lastErrorMessage != nil
+    }
+
+    private func isIncomingInvite(_ invite: CoachInvite) -> Bool {
+        if invite.inviteeAccountID == currentAccountID {
+            return true
+        }
+
+        guard invite.inviteeAccountID == nil else {
+            return false
+        }
+
+        return normalizedEmail(invite.inviteeEmail) == currentAccountEmail
+    }
+
+    private func normalizedEmail(_ email: String?) -> String? {
+        email?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 
     private func validAccessToken() async throws -> String {

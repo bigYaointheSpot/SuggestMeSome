@@ -612,9 +612,7 @@ final class AccountManager {
 
     func configureCollaborationCoordinator(_ coordinator: CollaborationCoordinator) {
         collaborationCoordinator = coordinator
-        Task { @MainActor in
-            await coordinator.handleAccountStateDidChange(currentState)
-        }
+        coordinator.hydrateAccountState(currentState)
     }
 
     func reloadFromPersistence() {

@@ -15,37 +15,70 @@ struct CollaborationCacheSnapshot {
     var progressShares: [ProgressShareCard]
 }
 
+struct CollaborationFullRefreshPayload {
+    var relationships: [CoachRelationshipDTO]
+    var invites: [CoachInviteDTO]
+    var assignments: [ProgramAssignmentDTO]
+    var notes: [CoachNoteDTO]
+    var notificationPreference: NotificationPreferenceDTO?
+    var insightSnapshots: [InsightSnapshotDTO]
+    var weeklyDigests: [WeeklyDigestDTO]
+    var blueprints: [SavedProgramBlueprintDTO]
+    var programShares: [ProgramShareGrantDTO]
+    var progressShares: [ProgressShareCardDTO]
+}
+
 @MainActor
 struct LocalCollaborationCacheStore {
     let modelContext: ModelContext
+    private let saveHandler: @MainActor () throws -> Void
+
+    init(
+        modelContext: ModelContext,
+        saveHandler: (@MainActor () throws -> Void)? = nil
+    ) {
+        self.modelContext = modelContext
+        self.saveHandler = saveHandler ?? { try modelContext.save() }
+    }
 
     func loadSnapshot() throws -> CollaborationCacheSnapshot {
-        CollaborationCacheSnapshot(
-            relationships: try modelContext.fetch(FetchDescriptor<CoachRelationship>())
-                .sorted { $0.updatedAt > $1.updatedAt },
-            invites: try modelContext.fetch(FetchDescriptor<CoachInvite>())
-                .sorted { $0.updatedAt > $1.updatedAt },
-            assignments: try modelContext.fetch(FetchDescriptor<ProgramAssignment>())
-                .sorted { $0.updatedAt > $1.updatedAt },
-            notes: try modelContext.fetch(FetchDescriptor<CoachNote>())
-                .sorted { lhs, rhs in
-                    if lhs.isUnread != rhs.isUnread {
-                        return lhs.isUnread && !rhs.isUnread
-                    }
-                    return lhs.updatedAt > rhs.updatedAt
-                },
+        let notes = try modelContext.fetch(
+            FetchDescriptor(sortBy: [SortDescriptor(\CoachNote.updatedAt, order: .reverse)])
+        )
+
+        return CollaborationCacheSnapshot(
+            relationships: try modelContext.fetch(
+                FetchDescriptor(sortBy: [SortDescriptor(\CoachRelationship.updatedAt, order: .reverse)])
+            ),
+            invites: try modelContext.fetch(
+                FetchDescriptor(sortBy: [SortDescriptor(\CoachInvite.updatedAt, order: .reverse)])
+            ),
+            assignments: try modelContext.fetch(
+                FetchDescriptor(sortBy: [SortDescriptor(\ProgramAssignment.updatedAt, order: .reverse)])
+            ),
+            notes: notes.sorted { lhs, rhs in
+                if lhs.isUnread != rhs.isUnread {
+                    return lhs.isUnread && !rhs.isUnread
+                }
+                return lhs.updatedAt > rhs.updatedAt
+            },
             notificationPreference: try modelContext.fetch(FetchDescriptor<NotificationPreference>()).first,
             deviceRegistration: try modelContext.fetch(FetchDescriptor<DevicePushRegistration>()).first,
-            insightSnapshots: try modelContext.fetch(FetchDescriptor<InsightSnapshot>())
-                .sorted { $0.updatedAt > $1.updatedAt },
-            weeklyDigests: try modelContext.fetch(FetchDescriptor<WeeklyDigest>())
-                .sorted { $0.updatedAt > $1.updatedAt },
-            blueprints: try modelContext.fetch(FetchDescriptor<SavedProgramBlueprint>())
-                .sorted { $0.updatedAt > $1.updatedAt },
-            programShares: try modelContext.fetch(FetchDescriptor<ProgramShareGrant>())
-                .sorted { $0.updatedAt > $1.updatedAt },
-            progressShares: try modelContext.fetch(FetchDescriptor<ProgressShareCard>())
-                .sorted { $0.updatedAt > $1.updatedAt }
+            insightSnapshots: try modelContext.fetch(
+                FetchDescriptor(sortBy: [SortDescriptor(\InsightSnapshot.updatedAt, order: .reverse)])
+            ),
+            weeklyDigests: try modelContext.fetch(
+                FetchDescriptor(sortBy: [SortDescriptor(\WeeklyDigest.updatedAt, order: .reverse)])
+            ),
+            blueprints: try modelContext.fetch(
+                FetchDescriptor(sortBy: [SortDescriptor(\SavedProgramBlueprint.updatedAt, order: .reverse)])
+            ),
+            programShares: try modelContext.fetch(
+                FetchDescriptor(sortBy: [SortDescriptor(\ProgramShareGrant.updatedAt, order: .reverse)])
+            ),
+            progressShares: try modelContext.fetch(
+                FetchDescriptor(sortBy: [SortDescriptor(\ProgressShareCard.updatedAt, order: .reverse)])
+            )
         )
     }
 
@@ -61,17 +94,149 @@ struct LocalCollaborationCacheStore {
         try deleteAll(SavedProgramBlueprint.self)
         try deleteAll(ProgramShareGrant.self)
         try deleteAll(ProgressShareCard.self)
-        try modelContext.save()
+        try persist()
+    }
+
+    func replaceAll(with payload: CollaborationFullRefreshPayload) throws {
+        try replaceRelationships(
+            with: payload.relationships,
+            existing: stableIDMap(for: CoachRelationship.self),
+            save: false
+        )
+        try replaceInvites(
+            with: payload.invites,
+            existing: stableIDMap(for: CoachInvite.self),
+            save: false
+        )
+        try replaceAssignments(
+            with: payload.assignments,
+            existing: stableIDMap(for: ProgramAssignment.self),
+            save: false
+        )
+        try replaceNotes(
+            with: payload.notes,
+            existing: stableIDMap(for: CoachNote.self),
+            save: false
+        )
+        try replaceNotificationPreference(with: payload.notificationPreference, save: false)
+        try replaceInsightSnapshots(
+            with: payload.insightSnapshots,
+            existing: stableIDMap(for: InsightSnapshot.self),
+            save: false
+        )
+        try replaceWeeklyDigests(
+            with: payload.weeklyDigests,
+            existing: stableIDMap(for: WeeklyDigest.self),
+            save: false
+        )
+        try replaceBlueprints(
+            with: payload.blueprints,
+            existing: stableIDMap(for: SavedProgramBlueprint.self),
+            save: false
+        )
+        try replaceProgramShares(
+            with: payload.programShares,
+            existing: stableIDMap(for: ProgramShareGrant.self),
+            save: false
+        )
+        try replaceProgressShares(
+            with: payload.progressShares,
+            existing: stableIDMap(for: ProgressShareCard.self),
+            save: false
+        )
+        try persist()
     }
 
     func replaceRelationships(with dtos: [CoachRelationshipDTO]) throws {
-        let existing = try stableIDMap(for: CoachRelationship.self)
-        let keep = Set(dtos.map(\.stableID))
+        try replaceRelationships(
+            with: dtos,
+            existing: stableIDMap(for: CoachRelationship.self),
+            save: true
+        )
+    }
 
-        for dto in dtos {
-            if let relationship = existing[dto.stableID] {
-                apply(dto, to: relationship)
-            } else {
+    func replaceInvites(with dtos: [CoachInviteDTO]) throws {
+        try replaceInvites(
+            with: dtos,
+            existing: stableIDMap(for: CoachInvite.self),
+            save: true
+        )
+    }
+
+    func replaceAssignments(with dtos: [ProgramAssignmentDTO]) throws {
+        try replaceAssignments(
+            with: dtos,
+            existing: stableIDMap(for: ProgramAssignment.self),
+            save: true
+        )
+    }
+
+    func replaceNotes(with dtos: [CoachNoteDTO]) throws {
+        try replaceNotes(
+            with: dtos,
+            existing: stableIDMap(for: CoachNote.self),
+            save: true
+        )
+    }
+
+    func replaceNotificationPreference(with dto: NotificationPreferenceDTO?) throws {
+        try replaceNotificationPreference(with: dto, save: true)
+    }
+
+    func replaceDeviceRegistration(with dto: DevicePushRegistrationDTO?) throws {
+        try replaceDeviceRegistration(with: dto, save: true)
+    }
+
+    func replaceInsightSnapshots(with dtos: [InsightSnapshotDTO]) throws {
+        try replaceInsightSnapshots(
+            with: dtos,
+            existing: stableIDMap(for: InsightSnapshot.self),
+            save: true
+        )
+    }
+
+    func replaceWeeklyDigests(with dtos: [WeeklyDigestDTO]) throws {
+        try replaceWeeklyDigests(
+            with: dtos,
+            existing: stableIDMap(for: WeeklyDigest.self),
+            save: true
+        )
+    }
+
+    func replaceBlueprints(with dtos: [SavedProgramBlueprintDTO]) throws {
+        try replaceBlueprints(
+            with: dtos,
+            existing: stableIDMap(for: SavedProgramBlueprint.self),
+            save: true
+        )
+    }
+
+    func replaceProgramShares(with dtos: [ProgramShareGrantDTO]) throws {
+        try replaceProgramShares(
+            with: dtos,
+            existing: stableIDMap(for: ProgramShareGrant.self),
+            save: true
+        )
+    }
+
+    func replaceProgressShares(with dtos: [ProgressShareCardDTO]) throws {
+        try replaceProgressShares(
+            with: dtos,
+            existing: stableIDMap(for: ProgressShareCard.self),
+            save: true
+        )
+    }
+
+    private func replaceRelationships(
+        with dtos: [CoachRelationshipDTO],
+        existing: [String: CoachRelationship],
+        save: Bool
+    ) throws {
+        try replaceCachedModels(
+            dtos,
+            existing: existing,
+            stableID: \.stableID,
+            create: { dto in
                 let relationship = CoachRelationship(
                     stableID: dto.stableID,
                     statusRawValue: dto.statusRawValue,
@@ -82,22 +247,23 @@ struct LocalCollaborationCacheStore {
                     visibilityScopeBitmask: dto.visibilityScopeBitmask
                 )
                 apply(dto, to: relationship)
-                modelContext.insert(relationship)
-            }
-        }
-
-        deleteMissing(existing, keepStableIDs: keep)
-        try modelContext.save()
+                return relationship
+            },
+            applyDTO: apply,
+            save: save
+        )
     }
 
-    func replaceInvites(with dtos: [CoachInviteDTO]) throws {
-        let existing = try stableIDMap(for: CoachInvite.self)
-        let keep = Set(dtos.map(\.stableID))
-
-        for dto in dtos {
-            if let invite = existing[dto.stableID] {
-                apply(dto, to: invite)
-            } else {
+    private func replaceInvites(
+        with dtos: [CoachInviteDTO],
+        existing: [String: CoachInvite],
+        save: Bool
+    ) throws {
+        try replaceCachedModels(
+            dtos,
+            existing: existing,
+            stableID: \.stableID,
+            create: { dto in
                 let invite = CoachInvite(
                     stableID: dto.stableID,
                     statusRawValue: dto.statusRawValue,
@@ -108,22 +274,23 @@ struct LocalCollaborationCacheStore {
                     visibilityScopeBitmask: dto.visibilityScopeBitmask
                 )
                 apply(dto, to: invite)
-                modelContext.insert(invite)
-            }
-        }
-
-        deleteMissing(existing, keepStableIDs: keep)
-        try modelContext.save()
+                return invite
+            },
+            applyDTO: apply,
+            save: save
+        )
     }
 
-    func replaceAssignments(with dtos: [ProgramAssignmentDTO]) throws {
-        let existing = try stableIDMap(for: ProgramAssignment.self)
-        let keep = Set(dtos.map(\.stableID))
-
-        for dto in dtos {
-            if let assignment = existing[dto.stableID] {
-                apply(dto, to: assignment)
-            } else {
+    private func replaceAssignments(
+        with dtos: [ProgramAssignmentDTO],
+        existing: [String: ProgramAssignment],
+        save: Bool
+    ) throws {
+        try replaceCachedModels(
+            dtos,
+            existing: existing,
+            stableID: \.stableID,
+            create: { dto in
                 let assignment = ProgramAssignment(
                     stableID: dto.stableID,
                     relationshipStableID: dto.relationshipStableID,
@@ -135,22 +302,23 @@ struct LocalCollaborationCacheStore {
                     statusRawValue: dto.statusRawValue
                 )
                 apply(dto, to: assignment)
-                modelContext.insert(assignment)
-            }
-        }
-
-        deleteMissing(existing, keepStableIDs: keep)
-        try modelContext.save()
+                return assignment
+            },
+            applyDTO: apply,
+            save: save
+        )
     }
 
-    func replaceNotes(with dtos: [CoachNoteDTO]) throws {
-        let existing = try stableIDMap(for: CoachNote.self)
-        let keep = Set(dtos.map(\.stableID))
-
-        for dto in dtos {
-            if let note = existing[dto.stableID] {
-                apply(dto, to: note)
-            } else {
+    private func replaceNotes(
+        with dtos: [CoachNoteDTO],
+        existing: [String: CoachNote],
+        save: Bool
+    ) throws {
+        try replaceCachedModels(
+            dtos,
+            existing: existing,
+            stableID: \.stableID,
+            create: { dto in
                 let note = CoachNote(
                     stableID: dto.stableID,
                     relationshipStableID: dto.relationshipStableID,
@@ -162,15 +330,17 @@ struct LocalCollaborationCacheStore {
                     anchorKindRawValue: dto.anchorKindRawValue
                 )
                 apply(dto, to: note)
-                modelContext.insert(note)
-            }
-        }
-
-        deleteMissing(existing, keepStableIDs: keep)
-        try modelContext.save()
+                return note
+            },
+            applyDTO: apply,
+            save: save
+        )
     }
 
-    func replaceNotificationPreference(with dto: NotificationPreferenceDTO?) throws {
+    private func replaceNotificationPreference(
+        with dto: NotificationPreferenceDTO?,
+        save: Bool
+    ) throws {
         let existing = try modelContext.fetch(FetchDescriptor<NotificationPreference>())
         if let dto {
             let preference = existing.first ?? NotificationPreference(stableID: dto.stableID)
@@ -183,10 +353,15 @@ struct LocalCollaborationCacheStore {
                 modelContext.delete(preference)
             }
         }
-        try modelContext.save()
+        if save {
+            try persist()
+        }
     }
 
-    func replaceDeviceRegistration(with dto: DevicePushRegistrationDTO?) throws {
+    private func replaceDeviceRegistration(
+        with dto: DevicePushRegistrationDTO?,
+        save: Bool
+    ) throws {
         let existing = try modelContext.fetch(FetchDescriptor<DevicePushRegistration>())
         if let dto {
             let registration = existing.first ?? DevicePushRegistration(
@@ -203,17 +378,21 @@ struct LocalCollaborationCacheStore {
                 modelContext.delete(registration)
             }
         }
-        try modelContext.save()
+        if save {
+            try persist()
+        }
     }
 
-    func replaceInsightSnapshots(with dtos: [InsightSnapshotDTO]) throws {
-        let existing = try stableIDMap(for: InsightSnapshot.self)
-        let keep = Set(dtos.map(\.stableID))
-
-        for dto in dtos {
-            if let snapshot = existing[dto.stableID] {
-                apply(dto, to: snapshot)
-            } else {
+    private func replaceInsightSnapshots(
+        with dtos: [InsightSnapshotDTO],
+        existing: [String: InsightSnapshot],
+        save: Bool
+    ) throws {
+        try replaceCachedModels(
+            dtos,
+            existing: existing,
+            stableID: \.stableID,
+            create: { dto in
                 let snapshot = InsightSnapshot(
                     stableID: dto.stableID,
                     accountID: dto.accountID,
@@ -222,22 +401,23 @@ struct LocalCollaborationCacheStore {
                     summaryText: dto.summaryText
                 )
                 apply(dto, to: snapshot)
-                modelContext.insert(snapshot)
-            }
-        }
-
-        deleteMissing(existing, keepStableIDs: keep)
-        try modelContext.save()
+                return snapshot
+            },
+            applyDTO: apply,
+            save: save
+        )
     }
 
-    func replaceWeeklyDigests(with dtos: [WeeklyDigestDTO]) throws {
-        let existing = try stableIDMap(for: WeeklyDigest.self)
-        let keep = Set(dtos.map(\.stableID))
-
-        for dto in dtos {
-            if let digest = existing[dto.stableID] {
-                apply(dto, to: digest)
-            } else {
+    private func replaceWeeklyDigests(
+        with dtos: [WeeklyDigestDTO],
+        existing: [String: WeeklyDigest],
+        save: Bool
+    ) throws {
+        try replaceCachedModels(
+            dtos,
+            existing: existing,
+            stableID: \.stableID,
+            create: { dto in
                 let digest = WeeklyDigest(
                     stableID: dto.stableID,
                     weekStart: dto.weekStart,
@@ -248,22 +428,23 @@ struct LocalCollaborationCacheStore {
                     summaryText: dto.summaryText
                 )
                 apply(dto, to: digest)
-                modelContext.insert(digest)
-            }
-        }
-
-        deleteMissing(existing, keepStableIDs: keep)
-        try modelContext.save()
+                return digest
+            },
+            applyDTO: apply,
+            save: save
+        )
     }
 
-    func replaceBlueprints(with dtos: [SavedProgramBlueprintDTO]) throws {
-        let existing = try stableIDMap(for: SavedProgramBlueprint.self)
-        let keep = Set(dtos.map(\.stableID))
-
-        for dto in dtos {
-            if let blueprint = existing[dto.stableID] {
-                apply(dto, to: blueprint)
-            } else {
+    private func replaceBlueprints(
+        with dtos: [SavedProgramBlueprintDTO],
+        existing: [String: SavedProgramBlueprint],
+        save: Bool
+    ) throws {
+        try replaceCachedModels(
+            dtos,
+            existing: existing,
+            stableID: \.stableID,
+            create: { dto in
                 let blueprint = SavedProgramBlueprint(
                     stableID: dto.stableID,
                     name: dto.name,
@@ -272,22 +453,23 @@ struct LocalCollaborationCacheStore {
                     trainingProgramSnapshotJSON: dto.trainingProgramSnapshotJSON
                 )
                 apply(dto, to: blueprint)
-                modelContext.insert(blueprint)
-            }
-        }
-
-        deleteMissing(existing, keepStableIDs: keep)
-        try modelContext.save()
+                return blueprint
+            },
+            applyDTO: apply,
+            save: save
+        )
     }
 
-    func replaceProgramShares(with dtos: [ProgramShareGrantDTO]) throws {
-        let existing = try stableIDMap(for: ProgramShareGrant.self)
-        let keep = Set(dtos.map(\.stableID))
-
-        for dto in dtos {
-            if let share = existing[dto.stableID] {
-                apply(dto, to: share)
-            } else {
+    private func replaceProgramShares(
+        with dtos: [ProgramShareGrantDTO],
+        existing: [String: ProgramShareGrant],
+        save: Bool
+    ) throws {
+        try replaceCachedModels(
+            dtos,
+            existing: existing,
+            stableID: \.stableID,
+            create: { dto in
                 let share = ProgramShareGrant(
                     stableID: dto.stableID,
                     shareKindRawValue: dto.shareKindRawValue,
@@ -298,22 +480,23 @@ struct LocalCollaborationCacheStore {
                     grantedToDisplayName: dto.grantedToDisplayName
                 )
                 apply(dto, to: share)
-                modelContext.insert(share)
-            }
-        }
-
-        deleteMissing(existing, keepStableIDs: keep)
-        try modelContext.save()
+                return share
+            },
+            applyDTO: apply,
+            save: save
+        )
     }
 
-    func replaceProgressShares(with dtos: [ProgressShareCardDTO]) throws {
-        let existing = try stableIDMap(for: ProgressShareCard.self)
-        let keep = Set(dtos.map(\.stableID))
-
-        for dto in dtos {
-            if let share = existing[dto.stableID] {
-                apply(dto, to: share)
-            } else {
+    private func replaceProgressShares(
+        with dtos: [ProgressShareCardDTO],
+        existing: [String: ProgressShareCard],
+        save: Bool
+    ) throws {
+        try replaceCachedModels(
+            dtos,
+            existing: existing,
+            stableID: \.stableID,
+            create: { dto in
                 let share = ProgressShareCard(
                     stableID: dto.stableID,
                     shareKindRawValue: dto.shareKindRawValue,
@@ -327,12 +510,11 @@ struct LocalCollaborationCacheStore {
                     payloadJSON: dto.payloadJSON
                 )
                 apply(dto, to: share)
-                modelContext.insert(share)
-            }
-        }
-
-        deleteMissing(existing, keepStableIDs: keep)
-        try modelContext.save()
+                return share
+            },
+            applyDTO: apply,
+            save: save
+        )
     }
 
     private func deleteAll<Model: PersistentModel>(_ type: Model.Type) throws {
@@ -357,6 +539,35 @@ struct LocalCollaborationCacheStore {
         for (stableID, model) in existing where !keepStableIDs.contains(stableID) {
             modelContext.delete(model)
         }
+    }
+
+    private func replaceCachedModels<Model: CollaborationCachedModel, DTO>(
+        _ dtos: [DTO],
+        existing: [String: Model],
+        stableID: (DTO) -> String,
+        create: (DTO) -> Model,
+        applyDTO: (DTO, Model) -> Void,
+        save: Bool
+    ) throws {
+        let keep = Set(dtos.map(stableID))
+
+        for dto in dtos {
+            if let model = existing[stableID(dto)] {
+                applyDTO(dto, model)
+            } else {
+                let model = create(dto)
+                modelContext.insert(model)
+            }
+        }
+
+        deleteMissing(existing, keepStableIDs: keep)
+        if save {
+            try persist()
+        }
+    }
+
+    private func persist() throws {
+        try saveHandler()
     }
 
     private func apply(_ dto: CoachRelationshipDTO, to model: CoachRelationship) {

@@ -154,7 +154,6 @@ struct SuggestMeSomeApp: App {
                         await accountManager.restoreSessionIfNeeded()
                         await purchaseManager.bootstrap()
                         await cloudSyncManager.syncOnAppDidBecomeActive()
-                        await collaborationCoordinator.refreshOnAppDidBecomeActive()
                     }
                     if maintenanceReport.shouldRunDeferredSyncMetadataAudit {
                         let modelContainer = sharedModelContainer

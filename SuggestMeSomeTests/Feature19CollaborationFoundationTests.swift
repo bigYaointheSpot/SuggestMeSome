@@ -254,6 +254,390 @@ struct Feature19CollaborationFoundationTests {
         #expect(coordinator.blueprints.count == 1)
     }
 
+    @Test func collaborationCoordinatorSeparatesIncomingAndOutgoingInvites() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature19InviteModes.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let tokenStore = InMemoryCloudSessionTokenStore(tokens: feature19Tokens())
+        let collaborationClient = MockCollaborationClient()
+        collaborationClient.invites = [
+            CoachInviteDTO(
+                stableID: "invite-incoming-account",
+                createdAt: day(1),
+                updatedAt: day(2),
+                expiresAt: day(10),
+                statusRawValue: CoachInviteStatus.pending.rawValue,
+                inviterAccountID: uuid(1),
+                inviterDisplayName: "Coach Alex",
+                inviterRoleRawValue: CollaborationRole.coach.rawValue,
+                inviteeAccountID: uuid(2),
+                inviteeEmail: "athlete@example.com",
+                inviteeDisplayName: "Athlete Sam",
+                relationshipStableID: nil,
+                visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes),
+                noteText: nil
+            ),
+            CoachInviteDTO(
+                stableID: "invite-incoming-email",
+                createdAt: day(2),
+                updatedAt: day(3),
+                expiresAt: day(10),
+                statusRawValue: CoachInviteStatus.pending.rawValue,
+                inviterAccountID: uuid(1),
+                inviterDisplayName: "Coach Alex",
+                inviterRoleRawValue: CollaborationRole.coach.rawValue,
+                inviteeAccountID: nil,
+                inviteeEmail: "Athlete@Example.com",
+                inviteeDisplayName: "Athlete Sam",
+                relationshipStableID: nil,
+                visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes),
+                noteText: nil
+            ),
+            CoachInviteDTO(
+                stableID: "invite-outgoing",
+                createdAt: day(3),
+                updatedAt: day(4),
+                expiresAt: day(10),
+                statusRawValue: CoachInviteStatus.pending.rawValue,
+                inviterAccountID: uuid(2),
+                inviterDisplayName: "Athlete Sam",
+                inviterRoleRawValue: CollaborationRole.athlete.rawValue,
+                inviteeAccountID: nil,
+                inviteeEmail: "coach@example.com",
+                inviteeDisplayName: "Coach Alex",
+                relationshipStableID: nil,
+                visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes),
+                noteText: nil
+            )
+        ]
+
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: collaborationClient,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: tokenStore,
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+        )
+        coordinator.configure(modelContext: container.mainContext)
+
+        await coordinator.handleAccountStateDidChange(feature19SignedInState())
+
+        #expect(coordinator.athleteRelationships.isEmpty)
+        #expect(coordinator.shouldShowMyCoachEmptyState == false)
+        #expect(coordinator.incomingPendingInvites.map(\.stableID) == [
+            "invite-incoming-email",
+            "invite-incoming-account"
+        ])
+        #expect(coordinator.outgoingPendingInvites.map(\.stableID) == ["invite-outgoing"])
+        #expect(
+            coordinator.invitePresentationMode(for: coordinator.incomingPendingInvites[0]) == .incomingPending
+        )
+        #expect(
+            coordinator.invitePresentationMode(for: coordinator.outgoingPendingInvites[0]) == .outgoingPending
+        )
+    }
+
+    @Test func assignmentInboxOnlyIncludesPendingAthleteAssignments() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature19Assignments.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let tokenStore = InMemoryCloudSessionTokenStore(tokens: feature19Tokens())
+        let collaborationClient = MockCollaborationClient()
+        collaborationClient.assignments = [
+            ProgramAssignmentDTO(
+                stableID: "assignment-pending",
+                createdAt: day(1),
+                updatedAt: day(4),
+                relationshipStableID: "relationship-1",
+                blueprintStableID: "blueprint-1",
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(2),
+                athleteDisplayName: "Athlete Sam",
+                statusRawValue: ProgramAssignmentStatus.pending.rawValue,
+                notesText: nil,
+                startGuidance: nil,
+                importedTrainingProgramStableID: nil,
+                importedProgramRunStableID: nil,
+                respondedAt: nil,
+                archivedAt: nil
+            ),
+            ProgramAssignmentDTO(
+                stableID: "assignment-accepted",
+                createdAt: day(1),
+                updatedAt: day(3),
+                relationshipStableID: "relationship-1",
+                blueprintStableID: "blueprint-1",
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(2),
+                athleteDisplayName: "Athlete Sam",
+                statusRawValue: ProgramAssignmentStatus.accepted.rawValue,
+                notesText: nil,
+                startGuidance: nil,
+                importedTrainingProgramStableID: "program-1",
+                importedProgramRunStableID: "run-1",
+                respondedAt: day(3),
+                archivedAt: nil
+            ),
+            ProgramAssignmentDTO(
+                stableID: "assignment-other-athlete",
+                createdAt: day(1),
+                updatedAt: day(2),
+                relationshipStableID: "relationship-2",
+                blueprintStableID: "blueprint-2",
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(3),
+                athleteDisplayName: "Athlete Jordan",
+                statusRawValue: ProgramAssignmentStatus.pending.rawValue,
+                notesText: nil,
+                startGuidance: nil,
+                importedTrainingProgramStableID: nil,
+                importedProgramRunStableID: nil,
+                respondedAt: nil,
+                archivedAt: nil
+            )
+        ]
+
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: collaborationClient,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: tokenStore,
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+        )
+        coordinator.configure(modelContext: container.mainContext)
+
+        await coordinator.handleAccountStateDidChange(feature19SignedInState())
+
+        #expect(coordinator.inboxAssignments.map(\.stableID) == ["assignment-pending"])
+        #expect(coordinator.canActOnAssignment(coordinator.inboxAssignments[0]))
+        #expect(
+            coordinator.canActOnAssignment(
+                coordinator.assignments.first { $0.stableID == "assignment-accepted" }!
+            ) == false
+        )
+    }
+
+    @Test func collaborationCoordinatorGatesCoachNotesByRelationshipRole() throws {
+        let container = try makeInMemoryContainer()
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: MockCollaborationClient(),
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: UserDefaults(suiteName: "Feature19Roles.\(UUID().uuidString)")!)
+        )
+        coordinator.configure(modelContext: container.mainContext)
+
+        let relationship = CoachRelationship(
+            stableID: "relationship-1",
+            statusRawValue: CoachRelationshipStatus.active.rawValue,
+            coachAccountID: uuid(1),
+            coachDisplayName: "Coach Alex",
+            athleteAccountID: uuid(2),
+            athleteDisplayName: "Athlete Sam",
+            visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes)
+        )
+
+        coordinator.hydrateAccountState(feature19SignedInState())
+        #expect(coordinator.canWriteCoachNote(for: relationship) == false)
+
+        coordinator.hydrateAccountState(feature19CoachState())
+        #expect(coordinator.canWriteCoachNote(for: relationship))
+    }
+
+    @Test func collaborationCoordinatorHydratesWithoutRefreshingAndForegroundRefreshesOnce() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature19Lifecycle.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let collaborationClient = MockCollaborationClient()
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: collaborationClient,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+        )
+        coordinator.configure(modelContext: container.mainContext)
+
+        coordinator.hydrateAccountState(feature19SignedInState())
+        #expect(collaborationClient.totalRefreshFetchCount == 0)
+
+        await coordinator.handleAccountStateDidChange(feature19SignedInState())
+        #expect(collaborationClient.totalRefreshFetchCount == 0)
+
+        await coordinator.refreshOnAppDidBecomeActive()
+        #expect(collaborationClient.totalRefreshFetchCount == 11)
+
+        await coordinator.handleAccountStateDidChange(feature19SignedInState())
+        #expect(collaborationClient.totalRefreshFetchCount == 11)
+    }
+
+    @Test func collaborationCoordinatorCoalescesOverlappingRefreshes() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature19RefreshCoalesce.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let collaborationClient = MockCollaborationClient()
+        collaborationClient.refreshDelayNanoseconds = 50_000_000
+
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: collaborationClient,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+        )
+        coordinator.configure(modelContext: container.mainContext)
+        coordinator.hydrateAccountState(feature19SignedInState())
+
+        async let firstRefresh: Void = coordinator.refreshAll(reason: "First foreground refresh")
+        async let secondRefresh: Void = coordinator.refreshAll(reason: "Second foreground refresh")
+        _ = await (firstRefresh, secondRefresh)
+
+        #expect(collaborationClient.totalRefreshFetchCount == 11)
+    }
+
+    @Test func collaborationCoordinatorSkipsUnchangedPushRegistration() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature19PushRegistration.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let collaborationClient = MockCollaborationClient()
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: collaborationClient,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+        )
+        coordinator.configure(modelContext: container.mainContext)
+        coordinator.hydrateAccountState(feature19SignedInState())
+
+        await coordinator.handlePushAuthorizationStateChange(.authorized, deviceToken: "device-token")
+        await coordinator.handlePushAuthorizationStateChange(.authorized, deviceToken: "device-token")
+
+        #expect(collaborationClient.registerDeviceCallCount == 1)
+    }
+
+    @Test func localCollaborationCacheStoreReplaceAllSavesOnceAndPreservesOrdering() throws {
+        let container = try makeInMemoryContainer()
+        var saveCount = 0
+        let store = LocalCollaborationCacheStore(
+            modelContext: container.mainContext,
+            saveHandler: {
+                saveCount += 1
+                try container.mainContext.save()
+            }
+        )
+
+        try store.replaceAll(
+            with: CollaborationFullRefreshPayload(
+                relationships: [
+                    CoachRelationshipDTO(
+                        stableID: "relationship-newer",
+                        createdAt: day(1),
+                        updatedAt: day(4),
+                        statusRawValue: CoachRelationshipStatus.active.rawValue,
+                        coachAccountID: uuid(1),
+                        coachDisplayName: "Coach Alex",
+                        athleteAccountID: uuid(2),
+                        athleteDisplayName: "Athlete Sam",
+                        invitedByAccountID: uuid(1),
+                        visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes),
+                        unreadCoachNoteCount: 1,
+                        pendingAssignmentCount: 0,
+                        latestInsightSnapshotAt: day(4)
+                    ),
+                    CoachRelationshipDTO(
+                        stableID: "relationship-older",
+                        createdAt: day(1),
+                        updatedAt: day(2),
+                        statusRawValue: CoachRelationshipStatus.active.rawValue,
+                        coachAccountID: uuid(3),
+                        coachDisplayName: "Coach Drew",
+                        athleteAccountID: uuid(2),
+                        athleteDisplayName: "Athlete Sam",
+                        invitedByAccountID: uuid(3),
+                        visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes),
+                        unreadCoachNoteCount: 0,
+                        pendingAssignmentCount: 0,
+                        latestInsightSnapshotAt: nil
+                    )
+                ],
+                invites: [],
+                assignments: [],
+                notes: [
+                    CoachNoteDTO(
+                        stableID: "note-unread",
+                        createdAt: day(1),
+                        updatedAt: day(2),
+                        relationshipStableID: "relationship-newer",
+                        authorAccountID: uuid(1),
+                        authorDisplayName: "Coach Alex",
+                        recipientAccountID: uuid(2),
+                        recipientDisplayName: "Athlete Sam",
+                        bodyText: "Unread note",
+                        anchorKindRawValue: CoachNoteAnchorKind.general.rawValue,
+                        anchoredWorkoutStableID: nil,
+                        anchoredProgramRunStableID: nil,
+                        anchoredWeekStart: nil,
+                        anchoredWeekEnd: nil,
+                        eventSummaryText: nil,
+                        priorityRawValue: CollaborationInsightPriority.medium.rawValue,
+                        isUnread: true,
+                        requiresReview: false
+                    ),
+                    CoachNoteDTO(
+                        stableID: "note-read-newer",
+                        createdAt: day(1),
+                        updatedAt: day(4),
+                        relationshipStableID: "relationship-newer",
+                        authorAccountID: uuid(1),
+                        authorDisplayName: "Coach Alex",
+                        recipientAccountID: uuid(2),
+                        recipientDisplayName: "Athlete Sam",
+                        bodyText: "Read note",
+                        anchorKindRawValue: CoachNoteAnchorKind.general.rawValue,
+                        anchoredWorkoutStableID: nil,
+                        anchoredProgramRunStableID: nil,
+                        anchoredWeekStart: nil,
+                        anchoredWeekEnd: nil,
+                        eventSummaryText: nil,
+                        priorityRawValue: CollaborationInsightPriority.medium.rawValue,
+                        isUnread: false,
+                        requiresReview: false
+                    )
+                ],
+                notificationPreference: NotificationPreferenceDTO(
+                    stableID: "notification-preferences::primary",
+                    updatedAt: day(3),
+                    coachInvitesEnabled: true,
+                    assignmentUpdatesEnabled: true,
+                    coachNotesEnabled: true,
+                    missedSessionNudgesEnabled: true,
+                    checkInRemindersEnabled: true,
+                    pendingProposalRemindersEnabled: true,
+                    weeklyDigestsEnabled: true
+                ),
+                insightSnapshots: [],
+                weeklyDigests: [],
+                blueprints: [],
+                programShares: [],
+                progressShares: []
+            )
+        )
+
+        let snapshot = try store.loadSnapshot()
+        #expect(saveCount == 1)
+        #expect(snapshot.relationships.map(\.stableID) == ["relationship-newer", "relationship-older"])
+        #expect(snapshot.notes.map(\.stableID) == ["note-unread", "note-read-newer"])
+    }
+
     @Test func collaborationCoordinatorSaveBlueprintEncodesProgramAndRefreshesLibrary() async throws {
         let container = try makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: "Feature19Blueprint.\(UUID().uuidString)")!
@@ -366,9 +750,40 @@ private final class MockCollaborationClient: CloudCollaborationClient {
     var programShares: [ProgramShareGrantDTO] = []
     var progressShares: [ProgressShareCardDTO] = []
     var savedBlueprintRequests: [SavedProgramBlueprintCreateRequest] = []
+    var refreshDelayNanoseconds: UInt64 = 0
+    var relationshipFetchCount = 0
+    var inviteFetchCount = 0
+    var assignmentFetchCount = 0
+    var noteFetchCount = 0
+    var notificationPreferenceFetchCount = 0
+    var insightSnapshotFetchCount = 0
+    var weeklyDigestFetchCount = 0
+    var blueprintFetchCount = 0
+    var programShareFetchCount = 0
+    var progressShareFetchCount = 0
+    var rosterFetchCount = 0
+    var registerDeviceCallCount = 0
 
-    func fetchRelationships(accessToken: String) async throws -> [CoachRelationshipDTO] { relationships }
-    func fetchInvites(accessToken: String) async throws -> [CoachInviteDTO] { invites }
+    var totalRefreshFetchCount: Int {
+        relationshipFetchCount +
+            inviteFetchCount +
+            assignmentFetchCount +
+            noteFetchCount +
+            notificationPreferenceFetchCount +
+            insightSnapshotFetchCount +
+            weeklyDigestFetchCount +
+            blueprintFetchCount +
+            programShareFetchCount +
+            progressShareFetchCount +
+            rosterFetchCount
+    }
+
+    func fetchRelationships(accessToken: String) async throws -> [CoachRelationshipDTO] {
+        try await delayedFetch(&relationshipFetchCount, value: relationships)
+    }
+    func fetchInvites(accessToken: String) async throws -> [CoachInviteDTO] {
+        try await delayedFetch(&inviteFetchCount, value: invites)
+    }
     func createInvite(_ request: CoachInviteCreateRequest, accessToken: String) async throws -> CoachInviteDTO {
         let dto = CoachInviteDTO(
             stableID: "invite-\(invites.count + 1)",
@@ -404,8 +819,12 @@ private final class MockCollaborationClient: CloudCollaborationClient {
         relationships = relationships.map { $0.stableID == stableID ? relationship : $0 }
         return relationship
     }
-    func fetchRoster(accessToken: String) async throws -> [InsightSnapshotDTO] { roster }
-    func fetchAssignments(accessToken: String) async throws -> [ProgramAssignmentDTO] { assignments }
+    func fetchRoster(accessToken: String) async throws -> [InsightSnapshotDTO] {
+        try await delayedFetch(&rosterFetchCount, value: roster)
+    }
+    func fetchAssignments(accessToken: String) async throws -> [ProgramAssignmentDTO] {
+        try await delayedFetch(&assignmentFetchCount, value: assignments)
+    }
     func createAssignment(_ request: ProgramAssignmentCreateRequest, accessToken: String) async throws -> ProgramAssignmentDTO {
         let dto = ProgramAssignmentDTO(
             stableID: "assignment-\(assignments.count + 1)",
@@ -439,7 +858,9 @@ private final class MockCollaborationClient: CloudCollaborationClient {
                 : nil
         )
     }
-    func fetchNotes(accessToken: String) async throws -> [CoachNoteDTO] { notes }
+    func fetchNotes(accessToken: String) async throws -> [CoachNoteDTO] {
+        try await delayedFetch(&noteFetchCount, value: notes)
+    }
     func createCoachNote(_ request: CoachNoteCreateRequest, accessToken: String) async throws -> CoachNoteDTO {
         let dto = CoachNoteDTO(
             stableID: "note-\(notes.count + 1)",
@@ -470,7 +891,9 @@ private final class MockCollaborationClient: CloudCollaborationClient {
         notes = notes.map { $0.stableID == stableID ? note : $0 }
         return note
     }
-    func fetchNotificationPreferences(accessToken: String) async throws -> NotificationPreferenceDTO { notificationPreference }
+    func fetchNotificationPreferences(accessToken: String) async throws -> NotificationPreferenceDTO {
+        try await delayedFetch(&notificationPreferenceFetchCount, value: notificationPreference)
+    }
     func updateNotificationPreferences(_ request: NotificationPreferenceUpdateRequest, accessToken: String) async throws -> NotificationPreferenceDTO {
         notificationPreference = NotificationPreferenceDTO(
             stableID: notificationPreference.stableID,
@@ -486,6 +909,7 @@ private final class MockCollaborationClient: CloudCollaborationClient {
         return notificationPreference
     }
     func registerDevice(_ request: DevicePushRegistrationRequest, accessToken: String) async throws -> DevicePushRegistrationDTO {
+        registerDeviceCallCount += 1
         deviceRegistration = DevicePushRegistrationDTO(
             stableID: "push-registration::\(request.deviceID)",
             updatedAt: Date(),
@@ -497,9 +921,15 @@ private final class MockCollaborationClient: CloudCollaborationClient {
         )
         return deviceRegistration
     }
-    func fetchInsightSnapshots(accessToken: String) async throws -> [InsightSnapshotDTO] { snapshots }
-    func fetchWeeklyDigests(accessToken: String) async throws -> [WeeklyDigestDTO] { digests }
-    func fetchBlueprints(accessToken: String) async throws -> [SavedProgramBlueprintDTO] { blueprints }
+    func fetchInsightSnapshots(accessToken: String) async throws -> [InsightSnapshotDTO] {
+        try await delayedFetch(&insightSnapshotFetchCount, value: snapshots)
+    }
+    func fetchWeeklyDigests(accessToken: String) async throws -> [WeeklyDigestDTO] {
+        try await delayedFetch(&weeklyDigestFetchCount, value: digests)
+    }
+    func fetchBlueprints(accessToken: String) async throws -> [SavedProgramBlueprintDTO] {
+        try await delayedFetch(&blueprintFetchCount, value: blueprints)
+    }
     func saveBlueprint(_ request: SavedProgramBlueprintCreateRequest, accessToken: String) async throws -> SavedProgramBlueprintDTO {
         savedBlueprintRequests.append(request)
         let dto = SavedProgramBlueprintDTO(
@@ -521,7 +951,9 @@ private final class MockCollaborationClient: CloudCollaborationClient {
         blueprints = [dto]
         return dto
     }
-    func fetchProgramShares(accessToken: String) async throws -> [ProgramShareGrantDTO] { programShares }
+    func fetchProgramShares(accessToken: String) async throws -> [ProgramShareGrantDTO] {
+        try await delayedFetch(&programShareFetchCount, value: programShares)
+    }
     func createProgramShare(_ request: ProgramShareGrantCreateRequest, accessToken: String) async throws -> ProgramShareGrantDTO {
         let dto = ProgramShareGrantDTO(
             stableID: "program-share-\(programShares.count + 1)",
@@ -547,7 +979,9 @@ private final class MockCollaborationClient: CloudCollaborationClient {
         programShares = programShares.map { $0.stableID == stableID ? share : $0 }
         return share
     }
-    func fetchProgressShares(accessToken: String) async throws -> [ProgressShareCardDTO] { progressShares }
+    func fetchProgressShares(accessToken: String) async throws -> [ProgressShareCardDTO] {
+        try await delayedFetch(&progressShareFetchCount, value: progressShares)
+    }
     func createProgressShare(_ request: ProgressShareCardCreateRequest, accessToken: String) async throws -> ProgressShareCardDTO {
         let dto = ProgressShareCardDTO(
             stableID: "progress-share-\(progressShares.count + 1)",
@@ -573,6 +1007,17 @@ private final class MockCollaborationClient: CloudCollaborationClient {
         share.statusRawValue = ShareGrantStatus.revoked.rawValue
         progressShares = progressShares.map { $0.stableID == stableID ? share : $0 }
         return share
+    }
+
+    private func delayedFetch<Value>(
+        _ counter: inout Int,
+        value: Value
+    ) async throws -> Value {
+        counter += 1
+        if refreshDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: refreshDelayNanoseconds)
+        }
+        return value
     }
 }
 
@@ -625,6 +1070,25 @@ private func feature19SignedInState() -> AccountBackendContractState {
             )
         ],
         currentAccountID: uuid(2),
+        privacyRequests: [],
+        consumerHealthConsents: []
+    )
+}
+
+private func feature19CoachState() -> AccountBackendContractState {
+    AccountBackendContractState(
+        knownAccounts: [
+            UserAccount(
+                id: uuid(1),
+                appleUserID: "apple-coach",
+                displayName: "Coach Alex",
+                email: "coach@example.com",
+                createdAt: day(0),
+                lastSignedInAt: day(1),
+                launchMode: .productionBackend
+            )
+        ],
+        currentAccountID: uuid(1),
         privacyRequests: [],
         consumerHealthConsents: []
     )

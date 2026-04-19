@@ -56,6 +56,14 @@ struct CollaborationHubView: View {
                     .disabled(!FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState))
                 }
 
+                if collaborationCoordinator.outgoingPendingInvites.isEmpty == false {
+                    Section("Sent Invites") {
+                        ForEach(collaborationCoordinator.outgoingPendingInvites) { invite in
+                            InviteRow(invite: invite)
+                        }
+                    }
+                }
+
                 Section("Programs & Sharing") {
                     NavigationLink {
                         AssignmentInboxView()
@@ -247,33 +255,35 @@ struct MyCoachView: View {
         List {
             if accountManager.currentUser == nil {
                 CollaborationSignedOutSection()
-            } else if collaborationCoordinator.athleteRelationships.isEmpty {
+            } else if collaborationCoordinator.shouldShowMyCoachEmptyState {
                 ContentUnavailableView(
                     "No Coach Yet",
                     systemImage: "person.crop.circle.badge.questionmark",
                     description: Text("Accept an invite or ask your coach to send one to connect training, assignments, notes, and deterministic insights.")
                 )
             } else {
-                Section("Active Coach Relationships") {
-                    ForEach(collaborationCoordinator.athleteRelationships) { relationship in
-                        NavigationLink {
-                            RelationshipDetailView(relationship: relationship)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(relationship.participantDisplayName(for: collaborationCoordinator.currentAccountID))
-                                    .font(.headline)
-                                Text("\(relationship.unreadCoachNoteCount) unread notes • \(relationship.pendingAssignmentCount) pending assignments")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
+                if collaborationCoordinator.incomingPendingInvites.isEmpty == false {
+                    Section("Pending Invites") {
+                        ForEach(collaborationCoordinator.incomingPendingInvites) { invite in
+                            InviteRow(invite: invite)
                         }
                     }
                 }
 
-                if collaborationCoordinator.pendingInvites.isEmpty == false {
-                    Section("Pending Invites") {
-                        ForEach(collaborationCoordinator.pendingInvites) { invite in
-                            InviteRow(invite: invite)
+                if collaborationCoordinator.athleteRelationships.isEmpty == false {
+                    Section("Active Coach Relationships") {
+                        ForEach(collaborationCoordinator.athleteRelationships) { relationship in
+                            NavigationLink {
+                                RelationshipDetailView(relationship: relationship)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(relationship.participantDisplayName(for: collaborationCoordinator.currentAccountID))
+                                        .font(.headline)
+                                    Text("\(relationship.unreadCoachNoteCount) unread notes • \(relationship.pendingAssignmentCount) pending assignments")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
                     }
                 }
@@ -467,14 +477,14 @@ struct AssignmentInboxView: View {
         List {
             if accountManager.currentUser == nil {
                 CollaborationSignedOutSection()
-            } else if collaborationCoordinator.assignments.isEmpty {
+            } else if collaborationCoordinator.inboxAssignments.isEmpty {
                 ContentUnavailableView(
                     "No Assignments Yet",
                     systemImage: "tray",
                     description: Text("Assignments from a coach will appear here. Accepted assignments clone a blueprint into your personal training graph and then pull through Cloud Sync.")
                 )
             } else {
-                ForEach(collaborationCoordinator.assignments) { assignment in
+                ForEach(collaborationCoordinator.inboxAssignments) { assignment in
                     Section {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(assignment.athleteAccountID == collaborationCoordinator.currentAccountID ? assignment.coachDisplayName : assignment.athleteDisplayName)
@@ -496,7 +506,7 @@ struct AssignmentInboxView: View {
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
-                            if assignment.athleteAccountID == collaborationCoordinator.currentAccountID {
+                            if collaborationCoordinator.canActOnAssignment(assignment) {
                                 HStack {
                                     Button("Accept") {
                                         Task {
@@ -647,7 +657,8 @@ struct RelationshipDetailView: View {
                 }
             }
 
-            if FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState) {
+            if FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState)
+                && collaborationCoordinator.canWriteCoachNote(for: relationship) {
                 Section("Coach Actions") {
                     Button("Write Coach Note") {
                         showingNoteComposer = true
@@ -1022,6 +1033,10 @@ private struct InviteRow: View {
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
     let invite: CoachInvite
 
+    private var presentationMode: InvitePresentationMode {
+        collaborationCoordinator.invitePresentationMode(for: invite)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -1044,7 +1059,7 @@ private struct InviteRow: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            if invite.status == .pending {
+            if presentationMode == .incomingPending {
                 HStack {
                     Button("Accept") {
                         Task {
@@ -1055,6 +1070,13 @@ private struct InviteRow: View {
                         Task {
                             await collaborationCoordinator.respondToInvite(invite, action: .declined)
                         }
+                    }
+                }
+                .buttonStyle(.bordered)
+            } else if presentationMode == .outgoingPending {
+                Button("Revoke", role: .destructive) {
+                    Task {
+                        await collaborationCoordinator.revokeInvite(invite)
                     }
                 }
                 .buttonStyle(.bordered)
