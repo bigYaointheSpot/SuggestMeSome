@@ -183,25 +183,59 @@ struct HTTPCloudCollaborationClient: CloudCollaborationClient {
             request.httpBody = try encoder.encode(body)
         }
 
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw CloudBackendClientError.invalidResponse
-            }
-            guard (200..<300).contains(httpResponse.statusCode) else {
-                throw CloudBackendClientError.httpStatus(httpResponse.statusCode)
-            }
+        let isRetryable = method.uppercased() == "GET"
+        return try await performRequest(request, retryable: isRetryable)
+    }
+
+    private func performRequest<Response: Decodable>(
+        _ request: URLRequest,
+        retryable: Bool
+    ) async throws -> Response {
+        // Exponential backoff delays for GET retries: 250ms, 750ms, 2s.
+        let retryDelaysNanos: [UInt64] = retryable
+            ? [250_000_000, 750_000_000, 2_000_000_000]
+            : []
+
+        var attempt = 0
+        while true {
             do {
-                return try decoder.decode(Response.self, from: data)
+                let (data, response) = try await session.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw CloudBackendClientError.invalidResponse
+                }
+                if (500...599).contains(httpResponse.statusCode), attempt < retryDelaysNanos.count {
+                    try await Task.sleep(nanoseconds: retryDelaysNanos[attempt])
+                    attempt += 1
+                    continue
+                }
+                guard (200..<300).contains(httpResponse.statusCode) else {
+                    throw CloudBackendClientError.httpStatus(httpResponse.statusCode)
+                }
+                do {
+                    return try decoder.decode(Response.self, from: data)
+                } catch {
+                    throw CloudBackendClientError.decodingFailure
+                }
+            } catch let error as CloudBackendClientError {
+                throw error
+            } catch let urlError as URLError where attempt < retryDelaysNanos.count && shouldRetry(urlError) {
+                try await Task.sleep(nanoseconds: retryDelaysNanos[attempt])
+                attempt += 1
+                continue
             } catch {
-                throw CloudBackendClientError.decodingFailure
+                throw CloudBackendClientError.network(
+                    (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                )
             }
-        } catch let error as CloudBackendClientError {
-            throw error
-        } catch {
-            throw CloudBackendClientError.network(
-                (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            )
+        }
+    }
+
+    private func shouldRetry(_ error: URLError) -> Bool {
+        switch error.code {
+        case .timedOut, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed:
+            return true
+        default:
+            return false
         }
     }
 }
