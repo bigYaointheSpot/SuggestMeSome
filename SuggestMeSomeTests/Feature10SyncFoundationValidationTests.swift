@@ -279,7 +279,7 @@ struct Feature10SyncFoundationValidationTests {
             comments: "First",
             entryStableIDs: ["entry-repo-1"]
         )
-        try repository.upsertWorkoutPayloads([first])
+        _ = try repository.upsertWorkoutPayloads([first])
 
         var fetched = try repository.fetchWorkoutPayloads(since: nil, includeDeleted: false)
         #expect(fetched.count == 1)
@@ -291,7 +291,7 @@ struct Feature10SyncFoundationValidationTests {
         updated.metadata.lastModifiedAt = day(2)
         updated.comments = "Updated"
         updated.exerciseEntries = []
-        try repository.upsertWorkoutPayloads([updated])
+        _ = try repository.upsertWorkoutPayloads([updated])
 
         fetched = try repository.fetchWorkoutPayloads(since: nil, includeDeleted: false)
         #expect(fetched.count == 1)

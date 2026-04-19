@@ -8,6 +8,7 @@ struct TrainingPreferencesSnapshot: Codable, Equatable {
 
 enum TrainingPreferencesStore {
     static let stableID = "training-preferences::primary"
+    private static let initialSyncLastModifiedAt = Date(timeIntervalSince1970: 0)
 
     private enum Key {
         static let globalWeightUnit = "globalWeightUnit"
@@ -29,7 +30,7 @@ enum TrainingPreferencesStore {
     static func metadata(userDefaults: UserDefaults = .standard) -> SyncRecordMetadataDTO {
         let version = max(1, userDefaults.object(forKey: Key.syncVersion) as? Int ?? 1)
         let lastModifiedAt = Date(
-            timeIntervalSince1970: userDefaults.object(forKey: Key.syncLastModifiedAt) as? Double ?? Date.now.timeIntervalSince1970
+            timeIntervalSince1970: userDefaults.object(forKey: Key.syncLastModifiedAt) as? Double ?? initialSyncLastModifiedAt.timeIntervalSince1970
         )
         let deletedAt: Date?
         if let deletedAtSeconds = userDefaults.object(forKey: Key.syncDeletedAt) as? Double {

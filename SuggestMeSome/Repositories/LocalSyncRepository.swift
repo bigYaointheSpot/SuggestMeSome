@@ -23,7 +23,7 @@ final class LocalSyncRepository:
             .fetchWorkoutPayloads(since: since, includeDeleted: includeDeleted)
     }
 
-    func upsertWorkoutPayloads(_ payloads: [WorkoutSyncDTO]) throws {
+    func upsertWorkoutPayloads(_ payloads: [WorkoutSyncDTO]) throws -> WorkoutSyncUpsertSummary {
         try LocalWorkoutSyncStore(context: context).upsertWorkoutPayloads(payloads)
     }
 

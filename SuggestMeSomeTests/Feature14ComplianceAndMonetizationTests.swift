@@ -492,11 +492,11 @@ private final class TestCloudBackendClient: CloudBackendClient {
     func push(
         _ request: CloudSyncPushRequest,
         accessToken: String
-    ) async throws -> CloudSyncResponse {
-        CloudSyncResponse(
-            serverTime: Date(timeIntervalSince1970: 1_900_000_000),
+    ) async throws -> CloudSyncPushResponse {
+        CloudSyncPushResponse(
+            acceptedBatchID: request.batchID,
             payload: CloudSyncBatchPayload(),
-            cursors: []
+            warnings: []
         )
     }
 

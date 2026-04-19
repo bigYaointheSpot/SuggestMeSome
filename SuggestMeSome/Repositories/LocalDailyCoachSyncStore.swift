@@ -18,24 +18,22 @@ struct LocalDailyCoachSyncStore {
         var checkIns = try context.stableIDMap(for: DailyCoachCheckIn.self)
         let runs = try context.stableIDMap(for: ProgramRun.self)
 
-        for payload in payloads {
+        for payload in orderedForUpsertThenDelete(payloads, deletedAt: { $0.metadata.deletedAt }) {
             let run = payload.programRunStableID.flatMap { runs[$0] }
+
+            if payload.metadata.deletedAt != nil {
+                deleteModel(stableID: payload.metadata.stableID, from: &checkIns)
+                continue
+            }
+
             let existing = checkIns[payload.metadata.stableID] ?? dedupeCheckInTarget(
                 dayStart: payload.dayStart,
                 existing: Array(checkIns.values)
             )
-
-            if payload.metadata.deletedAt != nil {
-                if let existing {
-                    context.modelContext.delete(existing)
-                    checkIns[existing.resolvedSyncStableID] = nil
-                }
-                continue
-            }
-
             if let existing {
+                let previousStableID = existing.resolvedSyncStableID
                 existing.apply(syncDTO: payload, programRun: run)
-                checkIns[payload.metadata.stableID] = existing
+                rebindModel(existing, from: previousStableID, to: payload.metadata.stableID, in: &checkIns)
             } else {
                 let checkIn = DailyCoachCheckIn(
                     id: UUID(uuidString: payload.metadata.stableID) ?? UUID(),
@@ -77,24 +75,22 @@ struct LocalDailyCoachSyncStore {
         var reviews = try context.stableIDMap(for: DailyCoachWeeklyReview.self)
         let runs = try context.stableIDMap(for: ProgramRun.self)
 
-        for payload in payloads {
+        for payload in orderedForUpsertThenDelete(payloads, deletedAt: { $0.metadata.deletedAt }) {
             let run = payload.programRunStableID.flatMap { runs[$0] }
+
+            if payload.metadata.deletedAt != nil {
+                deleteModel(stableID: payload.metadata.stableID, from: &reviews)
+                continue
+            }
+
             let existing = reviews[payload.metadata.stableID] ?? dedupeWeeklyReviewTarget(
                 payload: payload,
                 existing: Array(reviews.values)
             )
-
-            if payload.metadata.deletedAt != nil {
-                if let existing {
-                    context.modelContext.delete(existing)
-                    reviews[existing.resolvedSyncStableID] = nil
-                }
-                continue
-            }
-
             if let existing {
+                let previousStableID = existing.resolvedSyncStableID
                 existing.apply(syncDTO: payload, programRun: run)
-                reviews[payload.metadata.stableID] = existing
+                rebindModel(existing, from: previousStableID, to: payload.metadata.stableID, in: &reviews)
             } else {
                 let review = DailyCoachWeeklyReview(
                     id: UUID(uuidString: payload.metadata.stableID) ?? UUID(),
@@ -173,5 +169,33 @@ struct LocalDailyCoachSyncStore {
             review.weekStart == payload.weekStart &&
             review.programRun?.resolvedSyncStableID == payload.programRunStableID
         }
+    }
+
+    private func orderedForUpsertThenDelete<Payload>(
+        _ payloads: [Payload],
+        deletedAt: (Payload) -> Date?
+    ) -> [Payload] {
+        payloads.filter { deletedAt($0) == nil } + payloads.filter { deletedAt($0) != nil }
+    }
+
+    private func rebindModel<T: SyncTrackableModel>(
+        _ model: T,
+        from previousStableID: String,
+        to stableID: String,
+        in map: inout [String: T]
+    ) {
+        if previousStableID != stableID {
+            map[previousStableID] = nil
+        }
+        map[stableID] = model
+    }
+
+    private func deleteModel<T: SyncTrackableModel & PersistentModel>(
+        stableID: String,
+        from map: inout [String: T]
+    ) {
+        guard let existing = map[stableID] else { return }
+        context.modelContext.delete(existing)
+        map[stableID] = nil
     }
 }

@@ -107,8 +107,9 @@ final class CloudSyncStateStore {
         setPendingBatches(batches)
     }
 
-    func removePendingBatch(id: UUID) {
-        setPendingBatches(pendingBatches().filter { $0.id != id })
+    func removePendingBatches(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        setPendingBatches(pendingBatches().filter { ids.contains($0.id) == false })
     }
 
     func activity() -> [CloudSyncActivityRecord] {

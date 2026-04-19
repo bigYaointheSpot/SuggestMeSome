@@ -1,8 +1,13 @@
 import Foundation
 
+struct WorkoutSyncUpsertSummary: Equatable {
+    var affectedExerciseNames: Set<String> = []
+    var didChangeWorkouts = false
+}
+
 protocol WorkoutSyncRepository {
     func fetchWorkoutPayloads(since: Date?, includeDeleted: Bool) throws -> [WorkoutSyncDTO]
-    func upsertWorkoutPayloads(_ payloads: [WorkoutSyncDTO]) throws
+    func upsertWorkoutPayloads(_ payloads: [WorkoutSyncDTO]) throws -> WorkoutSyncUpsertSummary
     func markWorkoutDeleted(stableID: String, deletedAt: Date) throws
 }
 

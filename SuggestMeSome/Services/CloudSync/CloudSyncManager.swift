@@ -224,7 +224,7 @@ final class CloudSyncManager {
             payload: try buildFullPayload(repository: repository)
         )
         let response = try await backendClient.bootstrap(request, accessToken: accessToken)
-        try applyAuthoritativeResponse(response, repository: repository, context: context)
+        try applyPullResponse(response, repository: repository, context: context)
         stateStore.setBootstrappedAccountID(currentAccountState.currentAccountID)
     }
 
@@ -233,7 +233,12 @@ final class CloudSyncManager {
         context: ModelContext
     ) async throws {
         let repository = localRepository(context: context)
-        var payload = mergePendingBatches(into: try buildIncrementalPayload(repository: repository))
+        let pendingBatches = stateStore.pendingBatches()
+        let submittedPendingBatchIDs = Set(pendingBatches.map(\.id))
+        let payload = mergePendingBatches(
+            pendingBatches,
+            into: try buildIncrementalPayload(repository: repository)
+        )
 
         if !payload.isEmpty {
             phase = .pushing
@@ -243,9 +248,16 @@ final class CloudSyncManager {
                 payload: payload
             )
             let response = try await backendClient.push(request, accessToken: accessToken)
-            try applyAuthoritativeResponse(response, repository: repository, context: context)
-            stateStore.setPendingBatches([])
-            payload = CloudSyncBatchPayload()
+            guard response.acceptedBatchID == request.batchID else {
+                throw CloudBackendClientError.invalidResponse
+            }
+            try applyAuthoritativePayload(
+                response.payload,
+                repository: repository,
+                context: context
+            )
+            appendWarnings(response.warnings)
+            stateStore.removePendingBatches(ids: submittedPendingBatchIDs)
         }
 
         phase = .pulling
@@ -256,7 +268,7 @@ final class CloudSyncManager {
             ),
             accessToken: accessToken
         )
-        try applyAuthoritativeResponse(pullResponse, repository: repository, context: context)
+        try applyPullResponse(pullResponse, repository: repository, context: context)
     }
 
     private func buildFullPayload(repository: LocalSyncRepository) throws -> CloudSyncBatchPayload {
@@ -296,46 +308,67 @@ final class CloudSyncManager {
         )
     }
 
-    private func mergePendingBatches(into payload: CloudSyncBatchPayload) -> CloudSyncBatchPayload {
-        stateStore.pendingBatches().reduce(payload) { partialResult, pending in
+    private func mergePendingBatches(
+        _ pendingBatches: [PendingCloudSyncBatch],
+        into payload: CloudSyncBatchPayload
+    ) -> CloudSyncBatchPayload {
+        pendingBatches.reduce(payload) { partialResult, pending in
             var merged = partialResult
             merged.merge(with: pending.payload)
             return merged
         }
     }
 
-    private func applyAuthoritativeResponse(
+    private func applyPullResponse(
         _ response: CloudSyncResponse,
         repository: LocalSyncRepository,
         context: ModelContext
     ) throws {
-        try repository.upsertTrainingProgramPayloads(response.payload.trainingPrograms)
-        try repository.upsertProgramRunPayloads(response.payload.programRuns)
-        try repository.upsertWorkoutPayloads(response.payload.workouts)
-        try repository.upsertWeeklyTrainingAnalysisPayloads(response.payload.weeklyTrainingAnalyses)
-        try repository.upsertLiftPerformanceTrendPayloads(response.payload.liftPerformanceTrends)
-        try repository.upsertDailyCheckInPayloads(response.payload.dailyCoachCheckIns)
-        try repository.upsertWeeklyReviewPayloads(response.payload.dailyCoachWeeklyReviews)
-        try repository.upsertAdaptationProposalPayloads(response.payload.adaptationProposals)
-        try repository.upsertAppliedOverlayPayloads(response.payload.appliedProgramOverlays)
-        try repository.upsertAdaptationEventPayloads(response.payload.adaptationEvents)
-        if let trainingPreferences = response.payload.trainingPreferences {
+        try applyAuthoritativePayload(response.payload, repository: repository, context: context)
+        appendWarnings(response.warnings)
+        commitPullProgress(response)
+    }
+
+    private func applyAuthoritativePayload(
+        _ payload: CloudSyncBatchPayload,
+        repository: LocalSyncRepository,
+        context: ModelContext
+    ) throws {
+        try repository.upsertTrainingProgramPayloads(payload.trainingPrograms)
+        try repository.upsertProgramRunPayloads(payload.programRuns)
+        let workoutSummary = try repository.upsertWorkoutPayloads(payload.workouts)
+        try repository.upsertWeeklyTrainingAnalysisPayloads(payload.weeklyTrainingAnalyses)
+        try repository.upsertLiftPerformanceTrendPayloads(payload.liftPerformanceTrends)
+        try repository.upsertDailyCheckInPayloads(payload.dailyCoachCheckIns)
+        try repository.upsertWeeklyReviewPayloads(payload.dailyCoachWeeklyReviews)
+        try repository.upsertAdaptationProposalPayloads(payload.adaptationProposals)
+        try repository.upsertAppliedOverlayPayloads(payload.appliedProgramOverlays)
+        try repository.upsertAdaptationEventPayloads(payload.adaptationEvents)
+        if let trainingPreferences = payload.trainingPreferences {
             try repository.upsertTrainingPreferencesPayload(trainingPreferences)
         }
 
-        if response.payload.workouts.isEmpty == false {
-            try rebuildPersonalRecords(context: context)
+        if workoutSummary.didChangeWorkouts, workoutSummary.affectedExerciseNames.isEmpty == false {
+            try PersonalRecordMaintenanceService.recomputePRs(
+                for: workoutSummary.affectedExerciseNames,
+                context: context
+            )
+            try context.save()
         }
 
         if shouldRunAdaptiveBackfill(context: context) {
             try backfillAdaptiveHistory(context: context)
         }
+    }
 
+    private func commitPullProgress(_ response: CloudSyncResponse) {
         stateStore.setCursors(response.cursors)
         stateStore.setLastSuccessfulSyncAt(response.serverTime)
         lastSuccessfulSyncAt = response.serverTime
+    }
 
-        for warning in response.warnings {
+    private func appendWarnings(_ warnings: [CloudSyncWarningDTO]) {
+        for warning in warnings {
             appendActivity(.warning, warning.message)
         }
     }
@@ -361,28 +394,17 @@ final class CloudSyncManager {
         guard !workouts.isEmpty else { return }
 
         for workout in workouts where workout.sourceType != .healthKitImported {
-            try SessionOutcomeInferenceService.persistOutcomes(for: workout, context: context)
+            SessionOutcomeInferenceService.persistOutcomes(for: workout, context: context)
         }
 
         if let latestWorkout = workouts.last {
-            try WeeklyTrainingAnalysisService.analyzeCompletedWeeks(
+            WeeklyTrainingAnalysisService.analyzeCompletedWeeks(
                 triggeredBy: latestWorkout,
                 context: context
             )
         }
 
         appendActivity(.info, "Backfilled adaptive history from existing workouts")
-    }
-
-    private func rebuildPersonalRecords(context: ModelContext) throws {
-        let workouts = TrainingReadRepository.fetchWorkouts(context: context)
-        let exerciseNames = PersonalRecordMaintenanceService.exerciseNames(in: workouts)
-        try PersonalRecordMaintenanceService.clearAllPRData(context: context)
-        try PersonalRecordMaintenanceService.recomputePRs(
-            for: exerciseNames,
-            context: context
-        )
-        try context.save()
     }
 
     private func validAccessToken() async throws -> String {

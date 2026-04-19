@@ -265,6 +265,12 @@ struct CloudSyncPullRequest: Codable, Equatable {
     var cursors: [CloudSyncCollectionCursorDTO]
 }
 
+struct CloudSyncPushResponse: Codable, Equatable {
+    var acceptedBatchID: UUID
+    var payload: CloudSyncBatchPayload
+    var warnings: [CloudSyncWarningDTO] = []
+}
+
 struct CloudSyncResponse: Codable, Equatable {
     var serverTime: Date
     var payload: CloudSyncBatchPayload

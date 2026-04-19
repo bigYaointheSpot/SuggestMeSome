@@ -30,7 +30,7 @@ protocol CloudBackendClient {
     func exchangeAppleIdentity(_ request: CloudAuthExchangeRequest) async throws -> CloudAuthSessionResponse
     func refreshSession(_ request: CloudSessionRefreshRequest) async throws -> CloudAuthSessionResponse
     func bootstrap(_ request: CloudSyncBootstrapRequest, accessToken: String) async throws -> CloudSyncResponse
-    func push(_ request: CloudSyncPushRequest, accessToken: String) async throws -> CloudSyncResponse
+    func push(_ request: CloudSyncPushRequest, accessToken: String) async throws -> CloudSyncPushResponse
     func pull(_ request: CloudSyncPullRequest, accessToken: String) async throws -> CloudSyncResponse
     func submitPrivacyRequest(
         _ type: PrivacyRequestType,
@@ -87,7 +87,7 @@ struct HTTPCloudBackendClient: CloudBackendClient {
         )
     }
 
-    func push(_ request: CloudSyncPushRequest, accessToken: String) async throws -> CloudSyncResponse {
+    func push(_ request: CloudSyncPushRequest, accessToken: String) async throws -> CloudSyncPushResponse {
         try await send(
             path: "sync/push",
             method: "POST",

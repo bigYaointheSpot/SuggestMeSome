@@ -19,15 +19,18 @@ struct LocalWorkoutSyncStore {
         }
     }
 
-    func upsertWorkoutPayloads(_ payloads: [WorkoutSyncDTO]) throws {
-        guard !payloads.isEmpty else { return }
+    func upsertWorkoutPayloads(_ payloads: [WorkoutSyncDTO]) throws -> WorkoutSyncUpsertSummary {
+        guard !payloads.isEmpty else { return WorkoutSyncUpsertSummary() }
 
         var existingWorkouts = try context.stableIDMap(for: Workout.self)
         let programRuns = try context.stableIDMap(for: ProgramRun.self)
+        var summary = WorkoutSyncUpsertSummary()
 
         for payload in payloads {
             if payload.metadata.deletedAt != nil {
                 if let existing = existingWorkouts[payload.metadata.stableID] {
+                    summary.affectedExerciseNames.formUnion(exerciseNames(in: existing))
+                    summary.didChangeWorkouts = true
                     context.modelContext.delete(existing)
                     existingWorkouts[payload.metadata.stableID] = nil
                 }
@@ -35,10 +38,14 @@ struct LocalWorkoutSyncStore {
             }
 
             let programRun = payload.programRunStableID.flatMap { programRuns[$0] }
+            summary.affectedExerciseNames.formUnion(exerciseNames(in: payload))
             if let existing = existingWorkouts[payload.metadata.stableID] {
+                summary.affectedExerciseNames.formUnion(exerciseNames(in: existing))
+                summary.didChangeWorkouts = true
                 existing.apply(syncDTO: payload, programRun: programRun)
                 try upsertExerciseEntries(payload.exerciseEntries, into: existing)
             } else {
+                summary.didChangeWorkouts = true
                 let workout = Workout.fromSyncDTO(payload, programRun: programRun)
                 context.modelContext.insert(workout)
                 insertExerciseGraph(for: workout)
@@ -47,6 +54,7 @@ struct LocalWorkoutSyncStore {
         }
 
         try context.save()
+        return summary
     }
 
     func markWorkoutDeleted(stableID: String, deletedAt: Date) throws {
@@ -159,5 +167,13 @@ struct LocalWorkoutSyncStore {
                 sortBy: sortBy
             )
         }
+    }
+
+    private func exerciseNames(in workout: Workout) -> Set<String> {
+        Set(workout.exerciseEntries.map(\.exerciseName))
+    }
+
+    private func exerciseNames(in payload: WorkoutSyncDTO) -> Set<String> {
+        Set(payload.exerciseEntries.map(\.exerciseName))
     }
 }
