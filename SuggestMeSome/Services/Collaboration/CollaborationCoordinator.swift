@@ -85,6 +85,31 @@ final class CollaborationCoordinator {
 
     private let automaticRefreshMinimumInterval: TimeInterval = 15
 
+    // MARK: - Derived-view caches
+    //
+    // These @ObservationIgnored holders memoize the filter work used by
+    // coachRelationships, athleteRelationships, incomingPendingInvites,
+    // outgoingPendingInvites, coachRosterSnapshots, and hasAnyCollaboration
+    // so filters don't rerun on every SwiftUI body call. Each holder is
+    // invalidated inside `loadCache()` and `clearInMemoryState()` — the
+    // only places where the source arrays mutate.
+
+    @ObservationIgnored private let coachRelationshipsCache = CachedDerivation<[CoachRelationship]>()
+    @ObservationIgnored private let athleteRelationshipsCache = CachedDerivation<[CoachRelationship]>()
+    @ObservationIgnored private let incomingPendingInvitesCache = CachedDerivation<[CoachInvite]>()
+    @ObservationIgnored private let outgoingPendingInvitesCache = CachedDerivation<[CoachInvite]>()
+    @ObservationIgnored private let coachRosterSnapshotsCache = CachedDerivation<[InsightSnapshot]>()
+    @ObservationIgnored private let hasAnyCollaborationCache = CachedDerivation<Bool>()
+
+    private func invalidateDerivedCaches() {
+        coachRelationshipsCache.invalidate()
+        athleteRelationshipsCache.invalidate()
+        incomingPendingInvitesCache.invalidate()
+        outgoingPendingInvitesCache.invalidate()
+        coachRosterSnapshotsCache.invalidate()
+        hasAnyCollaborationCache.invalidate()
+    }
+
     private(set) var phase: CollaborationSyncPhase = .signedOut
     private(set) var relationships: [CoachRelationship] = []
     private(set) var invites: [CoachInvite] = []
@@ -159,11 +184,15 @@ final class CollaborationCoordinator {
     }
 
     var coachRelationships: [CoachRelationship] {
-        relationships.filter { $0.currentRole(for: currentAccountID) == .coach }
+        coachRelationshipsCache.get {
+            relationships.filter { $0.currentRole(for: currentAccountID) == .coach }
+        }
     }
 
     var athleteRelationships: [CoachRelationship] {
-        relationships.filter { $0.currentRole(for: currentAccountID) == .athlete }
+        athleteRelationshipsCache.get {
+            relationships.filter { $0.currentRole(for: currentAccountID) == .athlete }
+        }
     }
 
     var pendingInvites: [CoachInvite] {
@@ -171,11 +200,15 @@ final class CollaborationCoordinator {
     }
 
     var incomingPendingInvites: [CoachInvite] {
-        invites.filter { invitePresentationMode(for: $0) == .incomingPending }
+        incomingPendingInvitesCache.get {
+            invites.filter { invitePresentationMode(for: $0) == .incomingPending }
+        }
     }
 
     var outgoingPendingInvites: [CoachInvite] {
-        invites.filter { invitePresentationMode(for: $0) == .outgoingPending }
+        outgoingPendingInvitesCache.get {
+            invites.filter { invitePresentationMode(for: $0) == .outgoingPending }
+        }
     }
 
     var inboxAssignments: [ProgramAssignment] {
@@ -185,12 +218,14 @@ final class CollaborationCoordinator {
     }
 
     var coachRosterSnapshots: [InsightSnapshot] {
-        let coachRelationshipIDs = Set(coachRelationships.map(\.stableID))
-        return insightSnapshots.filter { snapshot in
-            if let relationshipStableID = snapshot.relationshipStableID {
-                return coachRelationshipIDs.contains(relationshipStableID)
+        coachRosterSnapshotsCache.get {
+            let coachRelationshipIDs = Set(coachRelationships.map(\.stableID))
+            return insightSnapshots.filter { snapshot in
+                if let relationshipStableID = snapshot.relationshipStableID {
+                    return coachRelationshipIDs.contains(relationshipStableID)
+                }
+                return false
             }
-            return false
         }
     }
 
@@ -211,12 +246,14 @@ final class CollaborationCoordinator {
     }
 
     var hasAnyCollaboration: Bool {
-        !relationships.isEmpty
-            || !incomingPendingInvites.isEmpty
-            || !outgoingPendingInvites.isEmpty
-            || !unreadCoachNotes.isEmpty
-            || !unreadDigests.isEmpty
-            || !athleteFacingSnapshots.isEmpty
+        hasAnyCollaborationCache.get {
+            !relationships.isEmpty
+                || !incomingPendingInvites.isEmpty
+                || !outgoingPendingInvites.isEmpty
+                || !unreadCoachNotes.isEmpty
+                || !unreadDigests.isEmpty
+                || !athleteFacingSnapshots.isEmpty
+        }
     }
 
     func configure(modelContext: ModelContext) {
@@ -876,6 +913,7 @@ final class CollaborationCoordinator {
         blueprints = snapshot.blueprints
         programShares = snapshot.programShares
         progressShares = snapshot.progressShares
+        invalidateDerivedCaches()
     }
 
     private func clearInMemoryState() {
@@ -890,6 +928,7 @@ final class CollaborationCoordinator {
         blueprints = []
         programShares = []
         progressShares = []
+        invalidateDerivedCaches()
     }
 
     private func appendActivity(_ level: CollaborationActivityLevel, _ message: String) {
