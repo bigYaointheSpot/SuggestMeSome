@@ -130,6 +130,9 @@ struct SuggestMeSomeApp: App {
                     let maintenanceReport = PersistenceMaintenanceCoordinator.runBlockingStartupMaintenance(
                         context: sharedModelContainer.mainContext
                     )
+                    _ = CollaborationCacheMigrator.dedupIfNeeded(
+                        context: sharedModelContainer.mainContext
+                    )
                     HealthKitSettingsStorage.migrateLegacyRecoverySyncTimestampIfNeeded(
                         context: sharedModelContainer.mainContext
                     )

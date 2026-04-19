@@ -305,7 +305,7 @@ enum CollaborationVisibilityScope: String, Codable, CaseIterable, Identifiable {
 @Model
 final class CoachRelationship {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var createdAt: Date
     var updatedAt: Date
     var statusRawValue: String
@@ -387,7 +387,7 @@ final class CoachRelationship {
 @Model
 final class CoachInvite {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var createdAt: Date
     var updatedAt: Date
     var expiresAt: Date?
@@ -452,7 +452,7 @@ final class CoachInvite {
 @Model
 final class ProgramAssignment {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var createdAt: Date
     var updatedAt: Date
     var relationshipStableID: String
@@ -515,7 +515,7 @@ final class ProgramAssignment {
 @Model
 final class CoachNote {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var createdAt: Date
     var updatedAt: Date
     var relationshipStableID: String
@@ -588,7 +588,7 @@ final class CoachNote {
 @Model
 final class NotificationPreference {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var updatedAt: Date
     var coachInvitesEnabled: Bool
     var assignmentUpdatesEnabled: Bool
@@ -645,7 +645,7 @@ final class NotificationPreference {
 @Model
 final class DevicePushRegistration {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var updatedAt: Date
     var deviceID: String
     var pushToken: String?
@@ -681,7 +681,7 @@ final class DevicePushRegistration {
 @Model
 final class InsightSnapshot {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var createdAt: Date
     var updatedAt: Date
     var relationshipStableID: String?
@@ -762,7 +762,7 @@ final class InsightSnapshot {
 @Model
 final class WeeklyDigest {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var createdAt: Date
     var updatedAt: Date
     var weekStart: Date
@@ -816,7 +816,7 @@ final class WeeklyDigest {
 @Model
 final class SavedProgramBlueprint {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var createdAt: Date
     var updatedAt: Date
     var name: String
@@ -873,7 +873,7 @@ final class SavedProgramBlueprint {
 @Model
 final class ProgramShareGrant {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var createdAt: Date
     var updatedAt: Date
     var relationshipStableID: String?
@@ -931,7 +931,7 @@ final class ProgramShareGrant {
 @Model
 final class ProgressShareCard {
     var id: UUID
-    var stableID: String
+    @Attribute(.unique) var stableID: String
     var createdAt: Date
     var updatedAt: Date
     var relationshipStableID: String?

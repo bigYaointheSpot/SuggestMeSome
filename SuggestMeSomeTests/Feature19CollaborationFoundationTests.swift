@@ -742,6 +742,109 @@ struct Feature19CollaborationFoundationTests {
         #expect(coordinator.endpointError(.notificationPreferences) == nil)
     }
 
+    @Test func cacheDedupKeepsNewestPerStableID() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let defaults = UserDefaults(suiteName: "Feature19Dedup.\(UUID().uuidString)")!
+        defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+
+        let sharedStableID = "relationship-dup"
+        let older = CoachRelationship(
+            stableID: sharedStableID,
+            createdAt: day(1),
+            updatedAt: day(1),
+            statusRawValue: CoachRelationshipStatus.invited.rawValue,
+            coachAccountID: uuid(1),
+            coachDisplayName: "Coach (stale)",
+            athleteAccountID: uuid(2),
+            athleteDisplayName: "Athlete Sam",
+            visibilityScopeBitmask: 0
+        )
+        let newer = CoachRelationship(
+            stableID: sharedStableID,
+            createdAt: day(1),
+            updatedAt: day(5),
+            statusRawValue: CoachRelationshipStatus.active.rawValue,
+            coachAccountID: uuid(1),
+            coachDisplayName: "Coach (fresh)",
+            athleteAccountID: uuid(2),
+            athleteDisplayName: "Athlete Sam",
+            visibilityScopeBitmask: 0
+        )
+        // Insert without saving to avoid tripping the new @Attribute(.unique)
+        // constraint; the migrator runs against the in-memory state and
+        // removes the duplicate before any save.
+        context.insert(older)
+        context.insert(newer)
+
+        let report = CollaborationCacheMigrator.dedupIfNeeded(
+            context: context,
+            userDefaults: defaults
+        )
+
+        #expect(report.didRun)
+        #expect(report.removedCountsByModel["CoachRelationship"] == 1)
+
+        let remaining = try context.fetch(FetchDescriptor<CoachRelationship>())
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.coachDisplayName == "Coach (fresh)")
+
+        // Subsequent call is a no-op thanks to the @AppStorage flag.
+        let secondReport = CollaborationCacheMigrator.dedupIfNeeded(
+            context: context,
+            userDefaults: defaults
+        )
+        #expect(secondReport == .skipped)
+    }
+
+    @Test func uniqueStableIDRejectsDuplicateInsertOnSave() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+
+        let first = CoachNote(
+            stableID: "note-unique",
+            createdAt: day(1),
+            updatedAt: day(1),
+            relationshipStableID: "relationship-1",
+            authorAccountID: uuid(1),
+            authorDisplayName: "Coach Alex",
+            recipientAccountID: uuid(2),
+            recipientDisplayName: "Athlete Sam",
+            bodyText: "First",
+            anchorKindRawValue: CoachNoteAnchorKind.general.rawValue,
+            priorityRawValue: CollaborationInsightPriority.medium.rawValue,
+            isUnread: true,
+            requiresReview: false
+        )
+        context.insert(first)
+        try context.save()
+
+        let duplicate = CoachNote(
+            stableID: "note-unique",
+            createdAt: day(1),
+            updatedAt: day(2),
+            relationshipStableID: "relationship-1",
+            authorAccountID: uuid(1),
+            authorDisplayName: "Coach Alex",
+            recipientAccountID: uuid(2),
+            recipientDisplayName: "Athlete Sam",
+            bodyText: "Second",
+            anchorKindRawValue: CoachNoteAnchorKind.general.rawValue,
+            priorityRawValue: CollaborationInsightPriority.medium.rawValue,
+            isUnread: true,
+            requiresReview: false
+        )
+        context.insert(duplicate)
+        try context.save()
+
+        // SwiftData's @Attribute(.unique) coalesces duplicates into the
+        // single row keyed by stableID instead of preserving both.
+        let rows = try context.fetch(FetchDescriptor<CoachNote>(
+            predicate: #Predicate { $0.stableID == "note-unique" }
+        ))
+        #expect(rows.count == 1)
+    }
+
     @Test func pushRegistrationErrorAppearsInRecentActivity() async throws {
         let container = try makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: "Feature19PushActivity.\(UUID().uuidString)")!
