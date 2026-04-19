@@ -37,10 +37,11 @@ struct DailyCoachDerivedState {
         weeklyReviews: [],
         healthKitDailySummaries: [],
         completedRuns: [],
-        personalRecords: [],
         healthKitEnabled: false,
         useHealthKitInDailyCoach: false,
         recoveryLastSyncTimestamp: 0,
+        latestCompletedReviewSnapshot: nil,
+        longHorizonSummary: nil,
         now: .distantPast
     )
 
@@ -54,10 +55,11 @@ struct DailyCoachDerivedState {
         weeklyReviews: [DailyCoachWeeklyReview],
         healthKitDailySummaries: [HealthKitDailySummary],
         completedRuns: [ProgramRun],
-        personalRecords: [PersonalRecord],
         healthKitEnabled: Bool,
         useHealthKitInDailyCoach: Bool,
         recoveryLastSyncTimestamp: Double,
+        latestCompletedReviewSnapshot: MesocycleReviewSnapshot? = nil,
+        longHorizonSummary: LongHorizonAdaptationSummary? = nil,
         now: Date = .now
     ) -> DailyCoachDerivedState {
         let focusRun = TrainingContextQueryService.activeProgramRuns(from: activeRuns).first
@@ -124,22 +126,6 @@ struct DailyCoachDerivedState {
             return context.overlaysAffectingTodayCount > 0
         }()
         let latestCompletedRun = TrainingContextQueryService.latestCompletedRun(from: completedRuns)
-        let latestCompletedReviewSnapshot = TrainingContextQueryService.latestCompletedMesocycleReview(
-            from: completedRuns,
-            workouts: recentWorkouts,
-            personalRecords: personalRecords
-        )
-        let longHorizonSummary: LongHorizonAdaptationSummary? = {
-            guard let latestCompletedRun else { return nil }
-            let summary = TrainingContextQueryService.longHorizonAdaptationSummary(
-                endingWith: latestCompletedRun,
-                allRuns: completedRuns,
-                workouts: recentWorkouts,
-                personalRecords: personalRecords,
-                maxBlocks: 3
-            )
-            return summary.blockCount > 0 ? summary : nil
-        }()
 
         return DailyCoachDerivedState(
             focusRun: focusRun,
@@ -1636,6 +1622,8 @@ struct DailyCoachView: View {
     // MARK: - Session Launch Helpers
 
     private func refreshDerivedState(now: Date = .now) {
+        let latestCompletedReviewSnapshot = resolvedLatestCompletedReviewSnapshot()
+        let longHorizonSummary = resolvedLongHorizonSummary()
         let refreshedState = DailyCoachDerivedState.build(
             activeRuns: activeRuns,
             recentWorkouts: recentWorkouts,
@@ -1646,10 +1634,11 @@ struct DailyCoachView: View {
             weeklyReviews: weeklyReviews,
             healthKitDailySummaries: healthKitDailySummaries,
             completedRuns: completedRuns,
-            personalRecords: personalRecords,
             healthKitEnabled: healthKitEnabled,
             useHealthKitInDailyCoach: useHealthKitInDailyCoach,
             recoveryLastSyncTimestamp: recoveryLastSyncTimestamp,
+            latestCompletedReviewSnapshot: latestCompletedReviewSnapshot,
+            longHorizonSummary: longHorizonSummary,
             now: now
         )
         derivedState = refreshedState
@@ -1903,13 +1892,34 @@ struct DailyCoachView: View {
     }
 
     private func draftEntries(for exercises: [ProgramSessionExercise]) -> [DraftExerciseEntry] {
-        let allPersonalRecords = TrainingContextQueryService.fetchPersonalRecords(context: modelContext)
         return ProgramWorkoutDraftBuilder.buildEntries(from: exercises) { anchor in
-            TrainingContextQueryService.preferredUnit(
+            TrainingReadRepository.preferredUnit(
                 for: anchor.exerciseName,
-                in: allPersonalRecords
+                context: modelContext
             )
         }
+    }
+
+    private func resolvedLatestCompletedReviewSnapshot() -> MesocycleReviewSnapshot? {
+        guard let latestCompletedRun = TrainingContextQueryService.latestCompletedRun(from: completedRuns) else {
+            return nil
+        }
+        return TrainingReadRepository.mesocycleReviewSnapshot(
+            for: latestCompletedRun,
+            context: modelContext
+        )
+    }
+
+    private func resolvedLongHorizonSummary() -> LongHorizonAdaptationSummary? {
+        guard let latestCompletedRun = TrainingContextQueryService.latestCompletedRun(from: completedRuns) else {
+            return nil
+        }
+        let summary = TrainingReadRepository.longHorizonAdaptationSummary(
+            endingWith: latestCompletedRun,
+            maxBlocks: 3,
+            context: modelContext
+        )
+        return summary.blockCount > 0 ? summary : nil
     }
 
     private func prepareReviewSheet() {

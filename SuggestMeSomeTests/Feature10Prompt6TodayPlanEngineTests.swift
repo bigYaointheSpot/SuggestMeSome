@@ -999,7 +999,6 @@ struct Feature10Prompt6TodayPlanEngineTests {
             weeklyReviews: [review],
             healthKitDailySummaries: [],
             completedRuns: [],
-            personalRecords: [],
             healthKitEnabled: false,
             useHealthKitInDailyCoach: false,
             recoveryLastSyncTimestamp: 0,

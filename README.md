@@ -3626,6 +3626,28 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 15 [Mesocycle review and training-context read-layer consolidation] — 2026-04-18
+
+- Narrowed the mesocycle review and long-horizon read path so the review entry points fetch scoped data instead of rebuilding from app-wide arrays:
+  - `TrainingReadRepository.mesocycleReviewSnapshot(...)` now limits personal-record reads to the review window instead of pulling the full PR history
+  - `TrainingReadRepository.longHorizonAdaptationSummary(...)` now builds long-horizon summaries from repository-fetched completed-run review blocks, reusing the same deterministic summary logic through a precomputed `LongHorizonAdaptationBlock` seam
+  - `TrainingContextQueryService` was trimmed back to pure array/query helpers by removing the leftover `ModelContext` wrapper methods that were just forwarding into the read repository
+- Reduced stale support-surface work in the Programs and Daily Coach tabs:
+  - `TrainingProgramsTab` no longer observes all personal records just to decide whether a completed run can navigate to block review; row snapshots now keep a lightweight `blockReviewAvailable` flag and the full `MesocycleReviewSnapshot` loads lazily in `ProgramRunBlockReviewScreen`
+  - `DailyCoachView` now resolves latest completed-block review and long-horizon summary through scoped repository reads during derived-state refresh, while keeping the existing coach output unchanged
+  - program-workout draft unit selection in Daily Coach now uses the repository’s per-exercise preferred-unit lookup instead of prefetching the full PR history
+- Added focused Prompt 15 coverage in `Feature16Prompt15ScopedMesocycleReviewTests.swift`:
+  - scoped mesocycle review snapshots match the prior broad-array review output
+  - scoped long-horizon summaries match the prior broad-array summary output
+  - updated `Feature16Prompt6TrainingProgramsSnapshotTests.swift` to verify the lighter block-review availability path
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt15ScopedMesocycleReviewTests -only-testing:SuggestMeSomeTests/Feature16Prompt6TrainingProgramsSnapshotTests`
+
+**Commit:** `refactor: scope mesocycle review reads`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

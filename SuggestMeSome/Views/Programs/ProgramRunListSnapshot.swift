@@ -60,7 +60,7 @@ struct ProgramRunRowSnapshot {
     let pendingProposalCount: Int
     let adaptationEventCount: Int
     let sourceLabel: String
-    let blockReviewSnapshot: MesocycleReviewSnapshot?
+    let blockReviewAvailable: Bool
     let completedWorkoutBySessionKey: [ProgramRunSessionPreviewKey: Workout]
 
     static func fallback(for run: ProgramRun) -> ProgramRunRowSnapshot {
@@ -70,7 +70,7 @@ struct ProgramRunRowSnapshot {
             pendingProposalCount: 0,
             adaptationEventCount: 0,
             sourceLabel: programSourceLabel(for: run.program?.source),
-            blockReviewSnapshot: nil,
+            blockReviewAvailable: MesocycleReviewService.isEligible(for: run),
             completedWorkoutBySessionKey: [:]
         )
     }
@@ -107,7 +107,6 @@ struct ProgramRunListSnapshot {
     static func build(
         programRuns: [ProgramRun],
         workouts: [Workout],
-        personalRecords: [PersonalRecord],
         proposals: [AdaptationProposal],
         events: [AdaptationEventHistory]
     ) -> ProgramRunListSnapshot {
@@ -161,11 +160,7 @@ struct ProgramRunListSnapshot {
                 pendingProposalCount: pendingProposalCountByRunID[run.id] ?? 0,
                 adaptationEventCount: adaptationEventCountByRunID[run.id] ?? 0,
                 sourceLabel: ProgramRunRowSnapshot.fallback(for: run).sourceLabel,
-                blockReviewSnapshot: TrainingContextQueryService.mesocycleReview(
-                    for: run,
-                    workouts: workouts,
-                    personalRecords: personalRecords
-                ),
+                blockReviewAvailable: MesocycleReviewService.isEligible(for: run),
                 completedWorkoutBySessionKey: completedWorkoutBySessionKey
             )
         }
@@ -179,7 +174,6 @@ struct ProgramRunListSnapshot {
     static func refreshToken(
         programRuns: [ProgramRun],
         workouts: [Workout],
-        personalRecords: [PersonalRecord],
         proposals: [AdaptationProposal],
         events: [AdaptationEventHistory],
         overlays: [AppliedProgramOverlay]
@@ -213,20 +207,6 @@ struct ProgramRunListSnapshot {
             hasher.combine(workout.programRun?.id)
             hasher.combine(workout.programWeekNumber)
             hasher.combine(workout.programSessionNumber)
-        }
-
-        for record in personalRecords.sorted(by: { lhs, rhs in
-            if lhs.dateAchieved != rhs.dateAchieved {
-                return lhs.dateAchieved > rhs.dateAchieved
-            }
-            return lhs.id.uuidString > rhs.id.uuidString
-        }) {
-            hasher.combine(record.id)
-            hasher.combine(record.exerciseName)
-            hasher.combine(record.repCount)
-            hasher.combine(record.weight)
-            hasher.combine(record.dateAchieved)
-            hasher.combine(record.syncVersion)
         }
 
         for proposal in proposals.sorted(by: { lhs, rhs in

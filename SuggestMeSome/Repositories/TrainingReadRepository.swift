@@ -472,6 +472,20 @@ enum TrainingReadRepository {
         (try? context.fetch(FetchDescriptor<PersonalRecord>())) ?? []
     }
 
+    static func fetchPersonalRecords(
+        from startDate: Date,
+        to endDate: Date,
+        context: ModelContext
+    ) -> [PersonalRecord] {
+        let descriptor = FetchDescriptor<PersonalRecord>(
+            predicate: #Predicate<PersonalRecord> {
+                $0.dateAchieved >= startDate && $0.dateAchieved <= endDate
+            },
+            sortBy: [SortDescriptor(\PersonalRecord.dateAchieved, order: .reverse)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
     static func preferredUnit(
         for exerciseName: String,
         context: ModelContext,
@@ -521,6 +535,34 @@ enum TrainingReadRepository {
         return (try? context.fetch(descriptor)) ?? []
     }
 
+    static func longHorizonAdaptationSummary(
+        endingWith anchorRun: ProgramRun? = nil,
+        maxBlocks: Int = 3,
+        context: ModelContext
+    ) -> LongHorizonAdaptationSummary {
+        let completedRuns = fetchProgramRuns(
+            isCompleted: true,
+            limit: nil,
+            context: context
+        )
+        let selectedRuns = LongHorizonAdaptationSummaryService.selectedCompletedRuns(
+            endingWith: anchorRun,
+            completedRuns: completedRuns,
+            maxBlocks: maxBlocks
+        )
+        let blocks = selectedRuns.compactMap { run -> LongHorizonAdaptationBlock? in
+            guard let review = mesocycleReviewSnapshot(for: run, context: context) else {
+                return nil
+            }
+            return LongHorizonAdaptationBlock(run: run, review: review)
+        }
+
+        return LongHorizonAdaptationSummaryService.buildSummary(
+            endingWith: anchorRun,
+            blocks: blocks
+        )
+    }
+
     static func mesocycleReviewSnapshot(
         for run: ProgramRun,
         context: ModelContext
@@ -536,12 +578,17 @@ enum TrainingReadRepository {
             to: reviewEndDate,
             context: context
         )
+        let personalRecords = fetchPersonalRecords(
+            from: run.startDate,
+            to: reviewEndDate,
+            context: context
+        )
 
         return MesocycleReviewService.buildReview(
             for: run,
             programWorkouts: programWorkouts,
             standaloneWorkouts: standaloneWorkouts,
-            personalRecords: fetchPersonalRecords(context: context)
+            personalRecords: personalRecords
         )
     }
 

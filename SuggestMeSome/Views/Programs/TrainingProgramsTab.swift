@@ -5,7 +5,6 @@ struct TrainingProgramsTab: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var programRuns: [ProgramRun]
     @Query(sort: \Workout.date, order: .reverse) private var allWorkouts: [Workout]
-    @Query(sort: \PersonalRecord.dateAchieved, order: .reverse) private var personalRecords: [PersonalRecord]
     @Query private var allProposals: [AdaptationProposal]
     @Query private var allEvents: [AdaptationEventHistory]
     @Query(sort: \AppliedProgramOverlay.appliedAt, order: .reverse) private var allOverlays: [AppliedProgramOverlay]
@@ -18,7 +17,6 @@ struct TrainingProgramsTab: View {
         ProgramRunListSnapshot.refreshToken(
             programRuns: programRuns,
             workouts: allWorkouts,
-            personalRecords: personalRecords,
             proposals: allProposals,
             events: allEvents,
             overlays: allOverlays
@@ -126,7 +124,6 @@ struct TrainingProgramsTab: View {
         listSnapshot = ProgramRunListSnapshot.build(
             programRuns: programRuns,
             workouts: allWorkouts,
-            personalRecords: personalRecords,
             proposals: allProposals,
             events: allEvents
         )
@@ -397,9 +394,9 @@ struct ProgramRunExpandableRow: View {
 
     private var blockReviewRow: some View {
         Group {
-            if let blockReviewSnapshot = snapshot.blockReviewSnapshot {
+            if snapshot.blockReviewAvailable {
                 NavigationLink {
-                    MesocycleReviewView(snapshot: blockReviewSnapshot)
+                    ProgramRunBlockReviewScreen(run: run)
                 } label: {
                     blockReviewRowLabel
                 }
@@ -649,6 +646,38 @@ struct ProgramRunExpandableRow: View {
             .task(id: previewKey) {
                 loadSessionPreview(previewKey)
             }
+        }
+    }
+}
+
+private struct ProgramRunBlockReviewScreen: View {
+    let run: ProgramRun
+
+    @Environment(\.modelContext) private var modelContext
+    @State private var snapshot: MesocycleReviewSnapshot?
+    @State private var hasLoadedSnapshot = false
+
+    var body: some View {
+        Group {
+            if let snapshot {
+                MesocycleReviewView(snapshot: snapshot)
+            } else if hasLoadedSnapshot {
+                ContentUnavailableView(
+                    "Block Review Unavailable",
+                    systemImage: "chart.bar.doc.horizontal",
+                    description: Text("This block review could not be loaded right now.")
+                )
+            } else {
+                ProgressView("Loading Block Review...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: run.id) {
+            snapshot = TrainingReadRepository.mesocycleReviewSnapshot(
+                for: run,
+                context: modelContext
+            )
+            hasLoadedSnapshot = true
         }
     }
 }

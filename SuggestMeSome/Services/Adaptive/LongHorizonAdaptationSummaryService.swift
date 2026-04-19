@@ -7,27 +7,17 @@
 
 import Foundation
 
+struct LongHorizonAdaptationBlock {
+    let run: ProgramRun
+    let review: MesocycleReviewSnapshot
+}
+
 enum LongHorizonAdaptationSummaryService {
-    private struct EvaluatedBlock {
-        let run: ProgramRun
-        let review: MesocycleReviewSnapshot
-
-        var endDate: Date {
-            run.endDate ?? review.endDate
-        }
-
-        var sessionsPerWeek: Int? {
-            run.program?.sessionsPerWeek
-        }
-    }
-
-    static func buildSummary(
+    static func selectedCompletedRuns(
         endingWith anchorRun: ProgramRun? = nil,
         completedRuns: [ProgramRun],
-        allWorkouts: [Workout],
-        personalRecords: [PersonalRecord] = [],
         maxBlocks: Int = 3
-    ) -> LongHorizonAdaptationSummary {
+    ) -> [ProgramRun] {
         let sortedRuns = completedRuns
             .filter(\.isCompleted)
             .sorted { lhs, rhs in
@@ -44,8 +34,52 @@ enum LongHorizonAdaptationSummaryService {
             guard let anchorDate else { return true }
             return (run.endDate ?? run.startDate) <= anchorDate
         }
-        let selectedRuns = Array(boundedRuns.suffix(max(1, maxBlocks)))
-        let blocks = selectedRuns.map { run in
+        return Array(boundedRuns.suffix(max(1, maxBlocks)))
+    }
+
+    static func buildSummary(
+        endingWith anchorRun: ProgramRun? = nil,
+        blocks: [LongHorizonAdaptationBlock]
+    ) -> LongHorizonAdaptationSummary {
+        let evaluatedBlocks = blocks.map { block in
+            EvaluatedBlock(run: block.run, review: block.review)
+        }
+        return buildSummary(
+            endingWith: anchorRun,
+            evaluatedBlocks: evaluatedBlocks
+        )
+    }
+
+    private struct EvaluatedBlock {
+        let run: ProgramRun
+        let review: MesocycleReviewSnapshot
+
+        init(run: ProgramRun, review: MesocycleReviewSnapshot) {
+            self.run = run
+            self.review = review
+        }
+        var endDate: Date {
+            run.endDate ?? review.endDate
+        }
+
+        var sessionsPerWeek: Int? {
+            run.program?.sessionsPerWeek
+        }
+    }
+
+    static func buildSummary(
+        endingWith anchorRun: ProgramRun? = nil,
+        completedRuns: [ProgramRun],
+        allWorkouts: [Workout],
+        personalRecords: [PersonalRecord] = [],
+        maxBlocks: Int = 3
+    ) -> LongHorizonAdaptationSummary {
+        let selectedRuns = selectedCompletedRuns(
+            endingWith: anchorRun,
+            completedRuns: completedRuns,
+            maxBlocks: maxBlocks
+        )
+        let evaluatedBlocks = selectedRuns.map { run in
             EvaluatedBlock(
                 run: run,
                 review: MesocycleReviewService.buildReview(
@@ -55,6 +89,16 @@ enum LongHorizonAdaptationSummaryService {
                 )
             )
         }
+        return buildSummary(
+            endingWith: anchorRun,
+            evaluatedBlocks: evaluatedBlocks
+        )
+    }
+
+    private static func buildSummary(
+        endingWith anchorRun: ProgramRun? = nil,
+        evaluatedBlocks blocks: [EvaluatedBlock]
+    ) -> LongHorizonAdaptationSummary {
 
         guard !blocks.isEmpty else {
             let insight = LongHorizonAdaptationInsight(

@@ -36,15 +36,6 @@ struct Feature16Prompt6TrainingProgramsSnapshotTests {
             exerciseName: "Bench Press",
             isPR: true
         )
-        let personalRecords = [
-            PersonalRecord(
-                exerciseName: "Bench Press",
-                repCount: 5,
-                weight: 225,
-                unit: .lbs,
-                dateAchieved: day(-3)
-            )
-        ]
         let proposals = [
             AdaptationProposal(
                 programRun: activeRun,
@@ -89,7 +80,6 @@ struct Feature16Prompt6TrainingProgramsSnapshotTests {
         let snapshot = ProgramRunListSnapshot.build(
             programRuns: [completedRun, activeRun],
             workouts: [activeWorkout, completedWorkout],
-            personalRecords: personalRecords,
             proposals: proposals,
             events: events
         )
@@ -106,7 +96,7 @@ struct Feature16Prompt6TrainingProgramsSnapshotTests {
 
         let completedSnapshot = snapshot.snapshot(for: completedRun)
         #expect(completedSnapshot.sourceLabel == "Smart Generated")
-        #expect(completedSnapshot.blockReviewSnapshot != nil)
+        #expect(completedSnapshot.blockReviewAvailable)
     }
 
     @Test func programRunListRefreshTokenChangesWhenOverlayChanges() {
@@ -140,7 +130,6 @@ struct Feature16Prompt6TrainingProgramsSnapshotTests {
         let initialToken = ProgramRunListSnapshot.refreshToken(
             programRuns: [run],
             workouts: [],
-            personalRecords: [],
             proposals: [],
             events: [],
             overlays: [baseOverlay]
@@ -148,7 +137,6 @@ struct Feature16Prompt6TrainingProgramsSnapshotTests {
         let updatedToken = ProgramRunListSnapshot.refreshToken(
             programRuns: [run],
             workouts: [],
-            personalRecords: [],
             proposals: [],
             events: [],
             overlays: [updatedOverlay]

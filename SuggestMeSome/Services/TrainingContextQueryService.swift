@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import SwiftData
 
 enum TrainingContextQueryService {
     static func recentWorkouts(from workouts: [Workout], limit: Int) -> [Workout] {
@@ -111,20 +110,6 @@ enum TrainingContextQueryService {
             ?? sorted.first { $0.programRun == nil }
     }
 
-    static func completedWorkoutCount(for run: ProgramRun, context: ModelContext) throws -> Int {
-        TrainingReadRepository.programRunProgressSnapshot(
-            for: run,
-            context: context
-        ).completedWorkoutCount
-    }
-
-    static func completedSessionKeys(
-        for run: ProgramRun,
-        context: ModelContext
-    ) -> Set<ProgramSessionCompletionKey> {
-        ReadQueryRepository.completedProgramSessionKeys(for: run, context: context)
-    }
-
     static func isProgramSessionCompleted(
         run: ProgramRun,
         weekNumber: Int,
@@ -168,9 +153,5 @@ enum TrainingContextQueryService {
 
     static func adaptationEventCount(for run: ProgramRun, events: [AdaptationEventHistory]) -> Int {
         events.filter { $0.programRun?.id == run.id }.count
-    }
-
-    static func fetchPersonalRecords(context: ModelContext) -> [PersonalRecord] {
-        TrainingReadRepository.fetchPersonalRecords(context: context)
     }
 }
