@@ -182,10 +182,10 @@ struct TrainingProgramsTab: View {
     private var programRunList: some View {
         if listSnapshot.orderedRuns.isEmpty {
             if programRuns.isEmpty {
-                ContentUnavailableView(
-                    "No Programs Yet",
+                DSEmptyState(
                     systemImage: "list.clipboard",
-                    description: Text("Create or start a program above to track your progress.")
+                    title: "No Programs Yet",
+                    message: "Create or start a program above to track your progress."
                 )
                 .frame(maxHeight: .infinity)
             } else {
@@ -765,10 +765,10 @@ private struct ProgramRunBlockReviewScreen: View {
             if let snapshot {
                 MesocycleReviewView(snapshot: snapshot)
             } else if hasLoadedSnapshot {
-                ContentUnavailableView(
-                    "Block Review Unavailable",
+                DSEmptyState(
                     systemImage: "chart.bar.doc.horizontal",
-                    description: Text("This block review could not be loaded right now.")
+                    title: "Block Review Unavailable",
+                    message: "This block review could not be loaded right now."
                 )
             } else {
                 ProgressView("Loading Block Review...")

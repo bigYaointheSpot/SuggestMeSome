@@ -47,6 +47,16 @@ struct ContentView: View {
     @State private var selectedTab: Int = MainTab.dailyCoach.rawValue
     @State private var showingActiveWorkout = false
     @AppStorage("appColorScheme") private var appColorScheme: String = "system"
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+
+    private var onboardingPresented: Binding<Bool> {
+        Binding(
+            get: { !hasCompletedOnboarding },
+            set: { newValue in
+                if !newValue { hasCompletedOnboarding = true }
+            }
+        )
+    }
 
     private var preferredColorScheme: ColorScheme? {
         AppAppearancePreferenceService.preferredColorScheme(for: appColorScheme)
@@ -94,6 +104,9 @@ struct ContentView: View {
         }
         .tint(.indigo)
         .preferredColorScheme(preferredColorScheme)
+        .fullScreenCover(isPresented: onboardingPresented) {
+            OnboardingFlowView()
+        }
         .sheet(isPresented: $showingActiveWorkout) {
             NavigationStack {
                 WorkoutView()

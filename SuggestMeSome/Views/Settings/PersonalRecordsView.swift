@@ -96,10 +96,10 @@ struct PersonalRecordsView: View {
     var body: some View {
         Group {
             if records.isEmpty {
-                ContentUnavailableView(
-                    "No Personal Records Yet",
+                DSEmptyState(
                     systemImage: "trophy",
-                    description: Text("PRs are recorded automatically when you hit a new best weight for a given rep count.")
+                    title: "No Personal Records Yet",
+                    message: "PRs are recorded automatically when you hit a new best weight for a given rep count."
                 )
             } else {
                 List {

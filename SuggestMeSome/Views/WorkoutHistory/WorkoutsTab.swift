@@ -329,14 +329,12 @@ struct WorkoutsTab: View {
     @ViewBuilder
     private var workoutList: some View {
         if derivedState.filteredWorkouts.isEmpty {
-            ContentUnavailableView(
-                derivedState.activeFilterSummary.isFiltered ? "No Matching Workouts" : "No Workouts Yet",
+            DSEmptyState(
                 systemImage: "dumbbell.fill",
-                description: Text(
-                    derivedState.activeFilterSummary.isFiltered
-                        ? "Try adjusting your filters."
-                        : "Tap New Workout above to begin."
-                )
+                title: derivedState.activeFilterSummary.isFiltered ? "No Matching Workouts" : "No Workouts Yet",
+                message: derivedState.activeFilterSummary.isFiltered
+                    ? "Try adjusting your filters."
+                    : "Tap New Workout above to begin."
             )
             .frame(maxHeight: .infinity)
         } else {
