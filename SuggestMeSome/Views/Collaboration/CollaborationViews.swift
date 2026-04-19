@@ -23,7 +23,7 @@ struct CollaborationHubView: View {
             } else {
                 if let errorMessage = collaborationCoordinator.lastErrorMessage {
                     Section {
-                        InlineErrorBanner(message: errorMessage) {
+                        CollaborationErrorBanner(message: errorMessage) {
                             await collaborationCoordinator.refreshAll(reason: "Retry from collaboration hub", force: true)
                         }
                         .listRowInsets(EdgeInsets())
@@ -1531,7 +1531,7 @@ private struct ProgramShareComposerView: View {
     var body: some View {
         Form {
             if let errorMessage {
-                InlineErrorBanner(message: errorMessage, retry: nil)
+                CollaborationErrorBanner(message: errorMessage, retry: nil)
             }
             Section("Send to") {
                 Picker("Recipient", selection: $selectedRelationshipID) {
@@ -1627,7 +1627,7 @@ private struct ProgressShareComposerView: View {
     var body: some View {
         Form {
             if let errorMessage {
-                InlineErrorBanner(message: errorMessage, retry: nil)
+                CollaborationErrorBanner(message: errorMessage, retry: nil)
             }
             Section("Snapshot") {
                 Text(snapshot.headline)
@@ -1727,7 +1727,7 @@ private struct FormComposerScaffold<Content: View>: View {
     var body: some View {
         Form {
             if let errorMessage {
-                InlineErrorBanner(message: errorMessage, retry: nil)
+                CollaborationErrorBanner(message: errorMessage, retry: nil)
             }
             content()
         }
@@ -1839,7 +1839,7 @@ private struct StatusBadge: View {
     }
 }
 
-private struct InlineErrorBanner: View {
+private struct CollaborationErrorBanner: View {
     let message: String
     let retry: (() async -> Void)?
 
