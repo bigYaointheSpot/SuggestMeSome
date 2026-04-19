@@ -11,6 +11,26 @@
 
 import Foundation
 
+/// Serializes concurrent collaboration refresh requests into a single
+/// in-flight Task.
+///
+/// The coordinator's refresh path is driven by several independent triggers
+/// — app launch, foreground transitions, manual pull-to-refresh, post-mutation
+/// reloads. Without coalescing, two overlapping refreshes would both fan out
+/// across every collaboration endpoint and race for cache writes.
+///
+/// `coalesce(_:)` guarantees the first caller runs the work; every caller
+/// that arrives while the Task is still executing awaits the same result
+/// instead of kicking off a second pass. The class stays `@MainActor` because
+/// the work it wraps reads and writes main-actor-bound state (ModelContext,
+/// coordinator view properties); promoting it to a Swift actor would force
+/// boundary hops with no isolation benefit.
+///
+/// ## Invalidation triggers
+/// - Account sign-in / sign-out transitions call through `refreshAll(...)`
+///   after the coordinator reseats its account state, so the new account's
+///   refresh runs with the new tokens.
+/// - Foreground and manual refreshes share the same slot.
 @MainActor
 final class CollaborationRefreshCoalescer {
     private var inFlight: Task<Void, Never>?

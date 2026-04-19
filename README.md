@@ -4030,6 +4030,40 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature20UIModernizationTests`
 
+#### Prompt 5 [Feature 19 closeout — coordinator refactor, data integrity, premium gate, shared DS fold] — 2026-04-19
+
+- Locked in the two real audit bugs from Prompt 3 with regression coverage even though both fixes shipped in a6c137a; the tests now pin the contract so the coordinator split can evolve safely:
+  - `lastErrorMessageClearsAfterSuccessfulRecovery` drives a failing `updateNotificationPreferences` followed by a succeeding retry and asserts the aggregate banner clears alongside the endpoint error
+  - `pushRegistrationErrorAppearsInRecentActivity` asserts `recordPushRegistrationError` routes through the shared helper so the failure lands in the activity log
+- Hardened collaboration-cache data integrity without a full `@Relationship` reshape:
+  - added `CollaborationCacheMigrator`, a one-shot dedup pass gated by `@AppStorage("collaboration.cacheDedupV1")` that keeps the newest row per `stableID` across all 11 collaboration tables — runs inside the existing blocking startup-maintenance path so it executes before any collaboration operations
+  - added `@Attribute(.unique)` on every collaboration model's `stableID` so duplicate inserts now coalesce to a single row at save time
+  - added `LocalCollaborationCacheStore.deleteRelationshipCascade(stableID:)` for explicit relationship teardown and an orphan sweep inside `replaceAll(with:)` that removes dependent rows whose parent relationship is missing from the fresh payload — mirrors what a full `@Relationship(deleteRule: .cascade)` conversion would give us while keeping the denormalized string FKs
+- Began the Phase 3 coordinator split by extracting shared infrastructure behind the existing facade so the public coordinator API stays byte-identical:
+  - new `CollaborationRefreshCoalescer` serializes overlapping refresh requests into one in-flight Task and replaces the coordinator's `refreshTask`/`refreshTaskToken` pair
+  - new `CollaborationErrorTracker` owns `endpointErrors`, `lastErrorMessage`, and `recentActivity` with `recordError`/`clearError`/`logActivity` helpers; the coordinator forwards its view-facing properties through @Observable-tracked computed properties so SwiftUI observation propagates transparently
+  - new `CachedDerivation` memoizes six of the coordinator's heaviest derived views — `coachRelationships`, `athleteRelationships`, `incomingPendingInvites`, `outgoingPendingInvites`, `coachRosterSnapshots`, `hasAnyCollaboration` — so their filter / Set-construction work runs once per source-data change instead of on every SwiftUI body call; invalidation hooks into `loadCache()` and `clearInMemoryState()`
+- Added a defense-in-depth coordinator-level premium gate on every collaboration write:
+  - `ensurePremiumAccess(for:)` checks `FeatureAccessPolicy.decision(for: .coachCollaboration, ...)` via an injectable `entitlementStateProvider` and records a friendly error through the shared tracker when access is denied
+  - applied at the top of `createCoachInvite`, `respondToInvite`, `revokeInvite`, `updateRelationshipScopes`, `saveBlueprint`, `createAssignment`, `updateAssignmentStatus`, `createCoachNote`, `markNoteRead`, `createProgramShare`, `revokeProgramShare`, `createProgressShare`, `revokeProgressShare`, and `updateNotificationPreferences` — a mis-wired view can no longer bypass the gate and fire a network call
+- Folded the private `MutationButton`, `CollaborationErrorBanner`, and `EmptyStateRow` structs in `CollaborationViews.swift` into the shared `AsyncActionButton`, `InlineErrorBanner`, and `DSEmptyState` components landed in Prompt 4:
+  - added a title-string convenience init on `AsyncActionButton` and removed its hardcoded ProgressView tint so it renders under any button style (prominent, bordered, borderless)
+  - extended `InlineErrorBanner` with an async-retry closure, a configurable retry button label, and a sync-retry convenience
+  - button-style modifiers move to the call sites for consistency with the rest of the app; visual parity preserved across invite rows, assignment cards, relationship detail, and the hub error banner
+- Added DocC header blocks on each new collaboration helper (`CollaborationRefreshCoalescer`, `CollaborationErrorTracker`, `CachedDerivation`, `CollaborationCacheMigrator`) documenting responsibility, dependencies, and invalidation triggers so future contributors don't re-introduce the god-object shape
+- Explicit deferrals:
+  - full sub-store extraction (Relationships, Assignments, Notes, Insights, Shares, Blueprints) remains architectural cleanup with no behavior change — queued for Feature 20
+  - full `@Relationship(deleteRule: .cascade, inverse:)` conversion of the denormalized string FKs stays deferred in favor of the orphan-sweep approach, which delivers the same UX guarantees without a schema reshape
+- Added focused validation for:
+  - `lastErrorMessage` clears after a successful recovery and push-registration errors surface in the activity log
+  - cache dedup keeps the newest row per `stableID` and short-circuits on subsequent launches; unique constraint rejects duplicate inserts at save time
+  - relationship delete cascade removes dependent invites, assignments, notes, insights, digests, program shares, and progress shares; full refresh sweeps orphans whose parent isn't in the fresh payload
+  - refresh coalescer runs the first closure exactly once when two concurrent callers arrive
+  - coach mutation is blocked and a friendly error surfaces when the entitlement state is `.free`
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests`
+
 ---
 
 ## Project Setup

@@ -14,6 +14,25 @@
 import Foundation
 import SwiftData
 
+/// One-shot cleanup that de-duplicates collaboration cache rows ahead of
+/// the `@Attribute(.unique)` constraint on every collaboration model's
+/// `stableID`.
+///
+/// Runs inside `PersistenceMaintenanceCoordinator.runBlockingStartupMaintenance`,
+/// gated by the `collaboration.cacheDedupV1` `@AppStorage` flag so it
+/// executes at most once per install. Each per-model pass keeps the row
+/// with the newest `updatedAt` (ties resolve by first-seen) and deletes
+/// the rest, then a single `ModelContext.save()` commits the cleanup.
+/// Existing rows should never contain duplicates in practice — server
+/// writes are stableID-keyed and the coordinator's `replaceAll(...)`
+/// upserts by stableID — but shipping this migrator ahead of the unique
+/// constraint protects users whose cache drifted before the constraint
+/// landed.
+///
+/// ## Bumping the version
+/// If a future schema change needs to re-run the cleanup pass, bump the
+/// `dedupFlagKey` suffix (V1 → V2) so previously-migrated installs run
+/// through the logic again.
 enum CollaborationCacheMigrator {
     /// UserDefaults key tracking whether the dedup pass has already run.
     /// Bump the version suffix (V1 → V2) if the migration logic ever needs

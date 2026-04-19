@@ -11,6 +11,27 @@
 
 import Foundation
 
+/// Single source of truth for per-endpoint collaboration errors, the
+/// aggregate banner string, and the recent-activity log.
+///
+/// `CollaborationCoordinator` holds one `CollaborationErrorTracker`
+/// instance and forwards its `endpointErrors`, `lastErrorMessage`, and
+/// `recentActivity` through read-only computed properties so every view
+/// observes the same state. Extracting the tracker sets up the coordinator
+/// split queued for a future pass — the eventual sub-stores
+/// (Relationships, Assignments, Notes, Insights, Shares, Blueprints) can
+/// all share one error channel instead of each maintaining their own.
+///
+/// ## Invalidation triggers
+/// - `recordError(_:_:)` and `recordErrorMessage(_:message:)` set the
+///   per-endpoint entry, bump `lastErrorMessage`, and append an error row
+///   to `recentActivity`.
+/// - `clearError(_:)` zeroes the entry and recomputes the aggregate banner
+///   so recovery paths don't leave a stale message in place.
+/// - `clearAllErrors()` covers account-switch / sign-out transitions.
+///
+/// `@Observable` propagates state changes through SwiftUI's observation
+/// system transparently, so view re-renders fire without manual wiring.
 @Observable
 @MainActor
 final class CollaborationErrorTracker {

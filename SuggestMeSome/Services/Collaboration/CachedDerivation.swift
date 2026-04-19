@@ -12,10 +12,23 @@
 
 import Foundation
 
-/// Lazy cache that recomputes only after explicit invalidation. Uses
-/// reference semantics so holders can invoke `get(...)` from a computed
-/// property getter without running into Swift's mutating-getter
-/// restriction on `let` fields.
+/// Lazy cache that recomputes its value only after explicit invalidation.
+///
+/// Used by `CollaborationCoordinator`'s derived views — role-partitioned
+/// relationships and invites, roster snapshots, the `hasAnyCollaboration`
+/// aggregate — so the underlying filter / Set-construction work runs once
+/// per source-data change instead of on every SwiftUI body invocation.
+///
+/// Reference semantics let holders call `get(...)` from a computed
+/// property getter without tripping Swift's mutating-getter restriction on
+/// `let` fields.
+///
+/// ## Invalidation triggers
+/// Holders must call `invalidate()` whenever the inputs the `compute`
+/// closure reads can change. In the coordinator this happens inside
+/// `loadCache()` (after a refresh populates the source arrays) and
+/// `clearInMemoryState()` (on account sign-out). Forgetting to invalidate
+/// leaves views displaying stale filtered results.
 @MainActor
 final class CachedDerivation<Value> {
     private var cachedValue: Value?
