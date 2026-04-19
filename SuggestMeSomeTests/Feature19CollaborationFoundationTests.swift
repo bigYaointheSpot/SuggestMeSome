@@ -1093,6 +1093,27 @@ struct Feature19CollaborationFoundationTests {
         #expect(remainingNotes.map(\.stableID) == ["note-keep"])
     }
 
+    @Test func refreshCoalescerSharesInFlightTask() async {
+        let coalescer = CollaborationRefreshCoalescer()
+        let runCount = ActorCounter()
+
+        async let first: Void = coalescer.coalesce {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            await runCount.increment()
+        }
+        // Small delay so the first coalesce call registers its Task before
+        // the second arrives and sees it in flight.
+        try? await Task.sleep(nanoseconds: 5_000_000)
+        async let second: Void = coalescer.coalesce {
+            await runCount.increment()
+        }
+        _ = await (first, second)
+
+        // Only the first closure executes; the second piggybacks on the
+        // in-flight Task and returns without re-running the work.
+        #expect(await runCount.value == 1)
+    }
+
     @Test func pushRegistrationErrorAppearsInRecentActivity() async throws {
         let container = try makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: "Feature19PushActivity.\(UUID().uuidString)")!
@@ -1112,6 +1133,11 @@ struct Feature19CollaborationFoundationTests {
         #expect(coordinator.endpointError(.pushRegistration) == "APNs registration failed")
         #expect(coordinator.lastErrorMessage == "APNs registration failed")
         #expect(coordinator.recentActivity.contains { $0.message == "APNs registration failed" && $0.level == .error })
+    }
+
+    private actor ActorCounter {
+        private(set) var value: Int = 0
+        func increment() { value += 1 }
     }
 
     private func makeInMemoryContainer() throws -> ModelContainer {

@@ -79,8 +79,8 @@ final class CollaborationCoordinator {
     private var modelContext: ModelContext?
     private var currentAccountState: AccountBackendContractState = .empty
     private weak var cloudSyncManager: CloudSyncManager?
-    private var refreshTask: Task<Void, Never>?
-    private var refreshTaskToken = 0
+    private let refreshCoalescer = CollaborationRefreshCoalescer()
+    private let errorTracker = CollaborationErrorTracker()
     private var lastSuccessfulRefreshAt: Date?
 
     private let automaticRefreshMinimumInterval: TimeInterval = 15
@@ -98,31 +98,28 @@ final class CollaborationCoordinator {
     private(set) var programShares: [ProgramShareGrant] = []
     private(set) var progressShares: [ProgressShareCard] = []
     private(set) var pushAuthorizationState: CollaborationPushAuthorizationState = .notDetermined
-    private(set) var lastErrorMessage: String?
     private(set) var statusMessage: String?
-    private(set) var recentActivity: [CollaborationActivityRecord] = []
-    private(set) var endpointErrors: [CollaborationEndpoint: String] = [:]
+
+    /// Aggregate error banner — derived from the shared error tracker so
+    /// view observation fires when any endpoint error changes.
+    var lastErrorMessage: String? { errorTracker.lastErrorMessage }
+    var recentActivity: [CollaborationActivityRecord] { errorTracker.recentActivity }
+    var endpointErrors: [CollaborationEndpoint: String] { errorTracker.endpointErrors }
 
     func endpointError(_ endpoint: CollaborationEndpoint) -> String? {
-        endpointErrors[endpoint]
+        errorTracker.endpointError(endpoint)
     }
 
     private func recordError(_ endpoint: CollaborationEndpoint, _ error: Error) {
-        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        recordErrorMessage(endpoint, message: message)
+        errorTracker.recordError(endpoint, error)
     }
 
     private func recordErrorMessage(_ endpoint: CollaborationEndpoint, message: String) {
-        endpointErrors[endpoint] = message
-        lastErrorMessage = message
-        appendActivity(.error, message)
+        errorTracker.recordErrorMessage(endpoint, message: message)
     }
 
     private func clearError(_ endpoint: CollaborationEndpoint) {
-        endpointErrors[endpoint] = nil
-        // Recompute aggregate so top-level banners clear once the last
-        // failure is resolved instead of showing a stale message.
-        lastErrorMessage = endpointErrors.values.first
+        errorTracker.clearError(endpoint)
     }
 
     init(
@@ -238,8 +235,7 @@ final class CollaborationCoordinator {
             clearInMemoryState()
             phase = .signedOut
             statusMessage = nil
-            lastErrorMessage = nil
-            endpointErrors.removeAll()
+            errorTracker.clearAllErrors()
             return
         }
 
@@ -271,7 +267,7 @@ final class CollaborationCoordinator {
             }
             phase = .signedOut
             statusMessage = nil
-            lastErrorMessage = nil
+            errorTracker.clearAllErrors()
             return
         }
 
@@ -290,21 +286,9 @@ final class CollaborationCoordinator {
     func refreshAll(reason: String = "Manual refresh", force: Bool = true) async {
         guard shouldPerformRefresh(force: force) else { return }
 
-        if let refreshTask {
-            await refreshTask.value
-            return
-        }
-
-        refreshTaskToken += 1
-        let taskToken = refreshTaskToken
-        let task = Task<Void, Never> { @MainActor [weak self] in
+        await refreshCoalescer.coalesce { [weak self] in
             guard let self else { return }
             await self.performRefresh(reason: reason)
-        }
-        refreshTask = task
-        await task.value
-        if refreshTaskToken == taskToken {
-            refreshTask = nil
         }
     }
 
@@ -317,7 +301,6 @@ final class CollaborationCoordinator {
 
         phase = .loading
         statusMessage = nil
-        lastErrorMessage = nil
         clearError(.refresh)
 
         do {
@@ -910,11 +893,7 @@ final class CollaborationCoordinator {
     }
 
     private func appendActivity(_ level: CollaborationActivityLevel, _ message: String) {
-        recentActivity.insert(
-            CollaborationActivityRecord(level: level, message: message),
-            at: 0
-        )
-        recentActivity = Array(recentActivity.prefix(20))
+        errorTracker.logActivity(level, message)
     }
 
     private func shouldPerformRefresh(force: Bool) -> Bool {
