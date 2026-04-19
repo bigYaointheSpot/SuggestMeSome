@@ -23,7 +23,7 @@ struct CollaborationHubView: View {
             } else {
                 if let errorMessage = collaborationCoordinator.lastErrorMessage {
                     Section {
-                        CollaborationErrorBanner(message: errorMessage) {
+                        InlineErrorBanner(message: errorMessage) {
                             await collaborationCoordinator.refreshAll(reason: "Retry from collaboration hub", force: true)
                         }
                         .listRowInsets(EdgeInsets())
@@ -251,14 +251,11 @@ struct NotificationPreferencesView: View {
                 }
 
                 Section {
-                    MutationButton(
-                        title: "Save Preferences",
-                        prominent: true,
-                        action: {
-                            await collaborationCoordinator.updateNotificationPreferences(draft.asRequest())
-                            didSaveTrigger &+= 1
-                        }
-                    )
+                    AsyncActionButton(title: "Save Preferences") {
+                        await collaborationCoordinator.updateNotificationPreferences(draft.asRequest())
+                        didSaveTrigger &+= 1
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
             }
         }
@@ -300,13 +297,16 @@ struct MyCoachView: View {
             if accountManager.currentUser == nil {
                 CollaborationSignedOutSection()
             } else if collaborationCoordinator.shouldShowMyCoachEmptyState {
-                EmptyStateRow(
-                    title: "No Coach Yet",
+                DSEmptyState(
                     systemImage: "person.crop.circle.badge.questionmark",
-                    description: "Invite a coach to share programs, get assignments, and exchange notes.",
-                    actionTitle: "Send a Coach Invite",
-                    action: { showingInviteComposer = true }
+                    title: "No Coach Yet",
+                    message: "Invite a coach to share programs, get assignments, and exchange notes.",
+                    cta: .init(title: "Send a Coach Invite") {
+                        showingInviteComposer = true
+                    }
                 )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
             } else {
                 if !collaborationCoordinator.incomingPendingInvites.isEmpty {
                     Section("Incoming Invites") {
@@ -373,11 +373,13 @@ struct CoachRosterView: View {
                     if accountManager.currentUser == nil {
                         CollaborationSignedOutSection()
                     } else if collaborationCoordinator.coachRosterSnapshots.isEmpty {
-                        EmptyStateRow(
-                            title: "No Athletes Yet",
+                        DSEmptyState(
                             systemImage: "person.3.sequence",
-                            description: "Once an athlete accepts your invite, you'll see their training snapshots here — adherence, fatigue, and what to review next."
+                            title: "No Athletes Yet",
+                            message: "Once an athlete accepts your invite, you'll see their training snapshots here — adherence, fatigue, and what to review next."
                         )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
                     } else {
                         ForEach(collaborationCoordinator.coachRosterSnapshots) { snapshot in
                             NavigationLink {
@@ -554,13 +556,17 @@ struct AssignmentInboxView: View {
             if accountManager.currentUser == nil {
                 CollaborationSignedOutSection()
             } else if collaborationCoordinator.inboxAssignments.isEmpty {
-                EmptyStateRow(
-                    title: "Nothing From Your Coach",
+                let ctaTitle = collaborationCoordinator.athleteRelationships.isEmpty ? "Invite a Coach" : nil
+                DSEmptyState(
                     systemImage: "tray",
-                    description: "When a coach sends you a program, it'll show up here. Accepting one drops it into your training.",
-                    actionTitle: collaborationCoordinator.athleteRelationships.isEmpty ? "Invite a Coach" : nil,
-                    action: { showingInviteComposer = true }
+                    title: "Nothing From Your Coach",
+                    message: "When a coach sends you a program, it'll show up here. Accepting one drops it into your training.",
+                    cta: ctaTitle.map { title in
+                        DSEmptyState.CTA(title: title) { showingInviteComposer = true }
+                    }
                 )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
             } else {
                 ForEach(collaborationCoordinator.inboxAssignments) { assignment in
                     Section {
@@ -612,24 +618,22 @@ private struct AssignmentCard: View {
 
             if collaborationCoordinator.canActOnAssignment(assignment) {
                 HStack(spacing: 12) {
-                    MutationButton(
-                        title: "Accept",
-                        prominent: true,
-                        action: { await collaborationCoordinator.updateAssignmentStatus(assignment, status: .accepted) }
-                    )
-                    MutationButton(
-                        title: "Decline",
-                        role: .destructive,
-                        action: { await collaborationCoordinator.updateAssignmentStatus(assignment, status: .declined) }
-                    )
+                    AsyncActionButton(title: "Accept") {
+                        await collaborationCoordinator.updateAssignmentStatus(assignment, status: .accepted)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    AsyncActionButton(title: "Decline", role: .destructive) {
+                        await collaborationCoordinator.updateAssignmentStatus(assignment, status: .declined)
+                    }
+                    .buttonStyle(.bordered)
                 }
                 .padding(.top, 2)
 
-                MutationButton(
-                    title: "Archive",
-                    style: .borderless,
-                    action: { await collaborationCoordinator.updateAssignmentStatus(assignment, status: .archived) }
-                )
+                AsyncActionButton(title: "Archive") {
+                    await collaborationCoordinator.updateAssignmentStatus(assignment, status: .archived)
+                }
+                .buttonStyle(.borderless)
             }
         }
         .padding(.vertical, 4)
@@ -674,11 +678,13 @@ struct CoachNotesInboxView: View {
                 }
 
                 if collaborationCoordinator.notes.isEmpty && collaborationCoordinator.weeklyDigests.isEmpty {
-                    EmptyStateRow(
-                        title: "No Notes Yet",
+                    DSEmptyState(
                         systemImage: "text.bubble",
-                        description: "Coach notes, smart coaching nudges, and weekly digests will land here."
+                        title: "No Notes Yet",
+                        message: "Coach notes, smart coaching nudges, and weekly digests will land here."
                     )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
                 }
             }
         }
@@ -708,11 +714,10 @@ private struct CoachNoteRow: View {
                     .foregroundStyle(.secondary)
             }
             if note.isUnread {
-                MutationButton(
-                    title: "Mark as Read",
-                    style: .borderless,
-                    action: { await collaborationCoordinator.markNoteRead(note) }
-                )
+                AsyncActionButton(title: "Mark as Read") {
+                    await collaborationCoordinator.markNoteRead(note)
+                }
+                .buttonStyle(.borderless)
             }
         }
         .padding(.vertical, 4)
@@ -780,17 +785,14 @@ struct RelationshipDetailView: View {
             }
 
             Section {
-                MutationButton(
-                    title: "Save Privacy Settings",
-                    prominent: true,
-                    action: {
-                        await collaborationCoordinator.updateRelationshipScopes(
-                            relationship,
-                            scopes: Array(scopeSelection).sorted { $0.rawValue < $1.rawValue }
-                        )
-                        didSaveScopesTrigger &+= 1
-                    }
-                )
+                AsyncActionButton(title: "Save Privacy Settings") {
+                    await collaborationCoordinator.updateRelationshipScopes(
+                        relationship,
+                        scopes: Array(scopeSelection).sorted { $0.rawValue < $1.rawValue }
+                    )
+                    didSaveScopesTrigger &+= 1
+                }
+                .buttonStyle(.borderedProminent)
             }
 
             if FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState)
@@ -1293,23 +1295,21 @@ private struct InviteRow: View {
             }
             if presentationMode == .incomingPending {
                 HStack(spacing: 12) {
-                    MutationButton(
-                        title: "Accept",
-                        prominent: true,
-                        action: { await collaborationCoordinator.respondToInvite(invite, action: .accepted) }
-                    )
-                    MutationButton(
-                        title: "Decline",
-                        role: .destructive,
-                        action: { await collaborationCoordinator.respondToInvite(invite, action: .declined) }
-                    )
+                    AsyncActionButton(title: "Accept") {
+                        await collaborationCoordinator.respondToInvite(invite, action: .accepted)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    AsyncActionButton(title: "Decline", role: .destructive) {
+                        await collaborationCoordinator.respondToInvite(invite, action: .declined)
+                    }
+                    .buttonStyle(.bordered)
                 }
             } else if presentationMode == .outgoingPending {
-                MutationButton(
-                    title: "Revoke Invite",
-                    role: .destructive,
-                    action: { await collaborationCoordinator.revokeInvite(invite) }
-                )
+                AsyncActionButton(title: "Revoke Invite", role: .destructive) {
+                    await collaborationCoordinator.revokeInvite(invite)
+                }
+                .buttonStyle(.bordered)
             }
         }
         .padding(.vertical, 4)
@@ -1531,7 +1531,7 @@ private struct ProgramShareComposerView: View {
     var body: some View {
         Form {
             if let errorMessage {
-                CollaborationErrorBanner(message: errorMessage, retry: nil)
+                InlineErrorBanner(message: errorMessage)
             }
             Section("Send to") {
                 Picker("Recipient", selection: $selectedRelationshipID) {
@@ -1627,7 +1627,7 @@ private struct ProgressShareComposerView: View {
     var body: some View {
         Form {
             if let errorMessage {
-                CollaborationErrorBanner(message: errorMessage, retry: nil)
+                InlineErrorBanner(message: errorMessage)
             }
             Section("Snapshot") {
                 Text(snapshot.headline)
@@ -1727,7 +1727,7 @@ private struct FormComposerScaffold<Content: View>: View {
     var body: some View {
         Form {
             if let errorMessage {
-                CollaborationErrorBanner(message: errorMessage, retry: nil)
+                InlineErrorBanner(message: errorMessage)
             }
             content()
         }
@@ -1766,64 +1766,6 @@ private struct FormComposerScaffold<Content: View>: View {
     }
 }
 
-private struct MutationButton: View {
-    enum Style {
-        case bordered
-        case borderless
-    }
-
-    let title: String
-    var prominent: Bool = false
-    var role: ButtonRole? = nil
-    var style: Style = .bordered
-    let action: () async -> Void
-
-    @State private var isPending = false
-    @State private var didCompleteTrigger = 0
-
-    var body: some View {
-        Button(role: role) {
-            Task { await run() }
-        } label: {
-            HStack(spacing: 6) {
-                if isPending {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-                Text(title)
-            }
-            .frame(minHeight: 28)
-        }
-        .controlSize(.regular)
-        .buttonStyleApplied(prominent: prominent, style: style)
-        .disabled(isPending)
-        .sensoryFeedback(.success, trigger: didCompleteTrigger)
-        .accessibilityLabel(title)
-        .accessibilityHint(isPending ? "In progress" : "")
-    }
-
-    private func run() async {
-        isPending = true
-        await action()
-        isPending = false
-        didCompleteTrigger &+= 1
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func buttonStyleApplied(prominent: Bool, style: MutationButton.Style) -> some View {
-        switch (prominent, style) {
-        case (true, _):
-            self.buttonStyle(.borderedProminent)
-        case (false, .bordered):
-            self.buttonStyle(.bordered)
-        case (false, .borderless):
-            self.buttonStyle(.borderless)
-        }
-    }
-}
-
 private struct StatusBadge: View {
     let text: String
 
@@ -1836,80 +1778,6 @@ private struct StatusBadge: View {
             .foregroundStyle(.indigo)
             .clipShape(Capsule())
             .accessibilityLabel("Status: \(text)")
-    }
-}
-
-private struct CollaborationErrorBanner: View {
-    let message: String
-    let retry: (() async -> Void)?
-
-    @State private var isRetrying = false
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.primary)
-                if let retry {
-                    Button {
-                        Task {
-                            isRetrying = true
-                            await retry()
-                            isRetrying = false
-                        }
-                    } label: {
-                        if isRetrying {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Text("Try Again")
-                                .font(.footnote.weight(.semibold))
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(isRetrying)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Issue: \(message)")
-    }
-}
-
-private struct EmptyStateRow: View {
-    let title: String
-    let systemImage: String
-    let description: String
-    var actionTitle: String? = nil
-    var action: (() -> Void)? = nil
-
-    var body: some View {
-        VStack(spacing: 16) {
-            ContentUnavailableView(
-                title,
-                systemImage: systemImage,
-                description: Text(description)
-            )
-            if let actionTitle, let action {
-                Button(action: action) {
-                    Text(actionTitle)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding(.horizontal)
-            }
-        }
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
     }
 }
 
