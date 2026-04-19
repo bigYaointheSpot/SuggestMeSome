@@ -3941,6 +3941,36 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests`
 
+#### Prompt 2 [Feature 19 audit remediation for role-aware collaboration UI, refresh coalescing, and batched cache updates] — 2026-04-19
+
+- Tightened role-aware collaboration UI so trainees and coaches only see the actions that make sense for their state:
+  - added `incomingPendingInvites`, `outgoingPendingInvites`, `inboxAssignments`, `canWriteCoachNote(for:)`, `canActOnAssignment(_:)`, and invite presentation helpers on `CollaborationCoordinator`
+  - updated `My Coach` to keep pending incoming invites visible even before a first relationship exists, and added a lightweight `Sent Invites` section in the collaboration hub for outbound invite management
+  - updated `InviteRow` so incoming pending invites show `Accept`/`Decline`, outbound pending invites show `Revoke`, and all other invite states remain read-only
+  - updated the assignment inbox to render only trainee-actionable pending assignments and hid repeat response buttons once an assignment has already been accepted, declined, or archived
+  - gated coach-note composition in relationship detail by both premium access and the signed-in user's role on that relationship
+- Removed redundant collaboration refresh work on launch and foreground:
+  - split account hydration from refresh-triggering account transitions so collaboration cache state can load instantly without forcing a network fan-out
+  - changed `AccountManager.configureCollaborationCoordinator(...)` to hydrate collaboration state without a remote refresh
+  - added in-flight refresh coalescing and a short freshness guard so overlapping launch/foreground/manual refresh requests share one network pass instead of stampeding all collaboration endpoints
+  - kept foreground refresh as the single explicit lifecycle sync point while preserving refresh-on-sign-in behavior for actual account changes
+- Decoupled push registration from ordinary collaboration refreshes:
+  - removed unconditional push-registration syncing from `refreshAll()`
+  - added `syncPushRegistrationIfNeeded(...)` so device registration only runs when account state, authorization status, device token, or cached registration health actually changes
+  - preserved cached device-registration state locally so unchanged push state no longer causes redundant backend writes on every collaboration refresh
+- Batched collaboration cache writes for better scalability and smoother UI updates:
+  - added `CollaborationFullRefreshPayload` plus `LocalCollaborationCacheStore.replaceAll(...)` so a full collaboration refresh now performs one per-entity replacement pass and one save instead of many full-table fetch/save cycles
+  - switched snapshot loading to `FetchDescriptor(sortBy:)` for fixed-order collections and kept note ordering stable with unread-first/newest-first presentation
+  - kept granular replace APIs for mutation-specific refreshes like invite responses, note reads, and blueprint saves, so small actions stay simple while full refreshes stay efficient
+- Added focused regression coverage for:
+  - incoming and outgoing invite separation, including unresolved email-matched invites
+  - trainee-only assignment inbox filtering and coach-note permission gating
+  - non-refreshing account hydration, coalesced overlapping refreshes, and unchanged push-registration skips
+  - batched cache replacement save counts and ordering preservation
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests`
+
 ---
 
 ## Project Setup
