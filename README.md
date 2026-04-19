@@ -3991,6 +3991,45 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests`
 
+#### Prompt 4 [App-wide UI modernization — iOS 18 baseline, workout logging polish, onboarding, Settings] — 2026-04-19
+
+- Promoted the Dashboard-scoped design system into an app-wide layer so Workout, Settings, Programs, and Onboarding can consume it without reaching into `Views/Dashboard/`:
+  - moved `DSSpacing`, `DSRadius`, `DSColor`, `DSCardStyle`, and `DSSectionHeader` into `Views/DesignSystem/DSTokens.swift`; kept domain extensions (`FatigueStatus`, `TrainingStateRecoveryPressure`, `LiftTrendStatus`, `ObjectiveRecoveryStatus`, `ProgramVolumeMuscle`) in `DashboardTheme.swift`
+  - added `DSTypography` with rounded monospaced-digit metric styles (`dsMetricLarge/Medium/Small`) so numeric readouts use stable digit widths and animated `contentTransition(.numericText())` updates
+  - added named `DSPrimaryButtonStyle`, `DSSecondaryButtonStyle`, `DSDestructiveButtonStyle` with tactile `sensoryFeedback(.impact)` on press
+  - added `DSEmptyState` (ContentUnavailableView wrapper with hierarchical SF Symbol and optional primary CTA), `AsyncActionButton` (inline progress + success haptic + disabled while running), and `InlineErrorBanner` (shared with any future collaboration Phase 1 wiring)
+  - populated `AccentColor.colorset` with indigo light/dark variants so the system tint resolves everywhere
+- Modernized the workout logging row to match Apple's Health/Fitness feel:
+  - added `@FocusState` on `ExerciseEntryCard` with a reps → weight → next set's reps submission chain; the final set's weight dismisses with `.submitLabel(.done)`
+  - added paste-guard sanitizers on `repsText` (digits only, max 4) and `weightText` (digits plus one decimal separator, localized, max 6) that mutate in place as `String` to keep `DraftSet` persistence strings exact
+  - wired `sensoryFeedback(.success)` when a row has both reps and weight filled and `sensoryFeedback(.increase)` on PR flip alongside the existing star animation
+  - added a per-row `contextMenu` for "Mark as warm-up" / "Mark as working set" and destructive "Delete set" that re-sequences remaining set numbers (the set rows sit inside a VStack rather than a List, so contextMenu replaces the planned swipeActions on this surface)
+  - swapped `WorkoutElapsedTimerText` to the new `dsMetricLarge` style with an accessibility label so VoiceOver reads "Elapsed time 12:34"
+- Rebuilt the exercise picker sheet so adding a new exercise mid-workout feels instant:
+  - added `.searchable(...)` with navigation-bar-drawer placement; an empty query keeps the existing DisclosureGroup layout, a non-empty query renders a flat List of matches with the group name as caption
+  - a zero-match query shows a `DSEmptyState` with a "Create '<query>'" CTA that forwards directly into the set-count configuration step
+  - added `.presentationDetents([.medium, .large])` and a drag indicator on the sheet so it no longer slams to full height on iPhone
+- Added a first-launch onboarding flow and consolidated the app's empty states:
+  - new `OnboardingFlowView` — a three-card TabView (Progress that adapts, Coaching built on readiness, Private by default) with hierarchical SF Symbols and a final `AsyncActionButton` that drives `HealthKitAuthorizationService` and flips the `healthkit.permissionsRequested` flag so Settings doesn't re-prompt
+  - `ContentView` gates the tab shell behind `fullScreenCover` until `@AppStorage("hasCompletedOnboarding")` flips true
+  - replaced four ad-hoc `ContentUnavailableView` sites (`WorkoutsTab`, `TrainingProgramsTab` programs list, `TrainingProgramsTab` block-review fallback, `PersonalRecordsView`) with `DSEmptyState` for a consistent empty tone
+- Refreshed the Settings and Programs surfaces:
+  - migrated `ManageExercisesView`'s four inline `.alert(…, TextField:)` prompts to a reusable `NameEditorSheet` (Form + TextField at a medium detent, auto-focus on appear, submit-on-return, disabled Save while whitespace); destructive deletes stay on `confirmationDialog`
+  - flattened `SettingsTab.preferencesSection` by dropping the VStack-with-padding hack in favor of plain Form rows with segmented pickers so Form handles spacing
+  - extracted `resolvedOneRepMax` and `exerciseDisplayText` out of `ProgramReviewView` into a pure `ExerciseDisplayFormatter` service so the prescription string generation can be tested and reused without SwiftUI or view state
+- Targeted accessibility sweep on the touched surfaces only:
+  - added `accessibilityLabel` to icon-only controls on `ExerciseEntryCard` (disclosure chevron, weight-unit picker, trash button), the RPE stepper, and the elapsed-time readout
+  - added `accessibilityLabel` to the trash and pencil buttons on `ManageExercisesView`'s group headers
+  - added `.accessibilityAddTraits(.isHeader)` to onboarding card titles
+- Renamed the file-private `InlineErrorBanner` in `CollaborationViews.swift` to `CollaborationErrorBanner` to resolve the collision with the new shared component; Feature 19 Phase 1 can fold it into the shared banner when it wires the mutation-button work
+- Added focused validation for:
+  - reps sanitizer (digits only, 4-digit cap, non-numeric paste strip, idempotency)
+  - weight sanitizer (single dot, localized comma, collapsed extra separators, length cap, non-numeric garbage)
+  - `DraftSet` JSON round-trip exact-string preservation under sanitization
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature20UIModernizationTests`
+
 ---
 
 ## Project Setup
