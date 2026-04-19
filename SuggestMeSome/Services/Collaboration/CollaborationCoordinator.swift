@@ -34,6 +34,19 @@ enum CollaborationActivityLevel: String, Equatable {
     case error
 }
 
+enum CollaborationEndpoint: String, Equatable, Hashable {
+    case refresh
+    case invites
+    case relationships
+    case assignments
+    case notes
+    case blueprints
+    case programShares
+    case progressShares
+    case notificationPreferences
+    case pushRegistration
+}
+
 struct CollaborationActivityRecord: Identifiable, Equatable {
     let id: UUID
     let date: Date
@@ -88,6 +101,22 @@ final class CollaborationCoordinator {
     private(set) var lastErrorMessage: String?
     private(set) var statusMessage: String?
     private(set) var recentActivity: [CollaborationActivityRecord] = []
+    private(set) var endpointErrors: [CollaborationEndpoint: String] = [:]
+
+    func endpointError(_ endpoint: CollaborationEndpoint) -> String? {
+        endpointErrors[endpoint]
+    }
+
+    private func recordError(_ endpoint: CollaborationEndpoint, _ error: Error) {
+        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        endpointErrors[endpoint] = message
+        lastErrorMessage = message
+        appendActivity(.error, message)
+    }
+
+    private func clearError(_ endpoint: CollaborationEndpoint) {
+        endpointErrors[endpoint] = nil
+    }
 
     init(
         collaborationClient: CloudCollaborationClient? = nil,
@@ -203,6 +232,7 @@ final class CollaborationCoordinator {
             phase = .signedOut
             statusMessage = nil
             lastErrorMessage = nil
+            endpointErrors.removeAll()
             return
         }
 
@@ -281,6 +311,7 @@ final class CollaborationCoordinator {
         phase = .loading
         statusMessage = nil
         lastErrorMessage = nil
+        clearError(.refresh)
 
         do {
             let accessToken = try await validAccessToken()
@@ -333,8 +364,7 @@ final class CollaborationCoordinator {
             appendActivity(.info, reason)
         } catch {
             phase = .error
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            appendActivity(.error, lastErrorMessage ?? "Collaboration refresh failed.")
+            recordError(.refresh, error)
         }
     }
 
@@ -377,6 +407,9 @@ final class CollaborationCoordinator {
     private func syncPushRegistrationIfNeeded(deviceToken: String?) async {
         guard currentAccountID != nil else { return }
         guard let modelContext else { return }
+        if pushAuthorizationState == .authorized && deviceToken == nil {
+            return
+        }
         guard shouldSyncPushRegistration(deviceToken: deviceToken) else { return }
 
         do {
@@ -392,13 +425,15 @@ final class CollaborationCoordinator {
             try LocalCollaborationCacheStore(modelContext: modelContext)
                 .replaceDeviceRegistration(with: registration)
             loadCache()
+            clearError(.pushRegistration)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.pushRegistration, error)
         }
     }
 
     func recordPushRegistrationError(_ message: String) async {
         lastErrorMessage = message
+        endpointErrors[.pushRegistration] = message
         appendActivity(.error, message)
 
         guard let modelContext else { return }
@@ -431,8 +466,9 @@ final class CollaborationCoordinator {
             loadCache()
             statusMessage = "Notification preferences updated."
             appendActivity(.info, statusMessage ?? "Notification preferences updated.")
+            clearError(.notificationPreferences)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.notificationPreferences, error)
         }
     }
 
@@ -458,8 +494,9 @@ final class CollaborationCoordinator {
             try await refreshRelationships(using: accessToken, context: modelContext)
             statusMessage = "Coach invite sent."
             appendActivity(.info, statusMessage ?? "Coach invite sent.")
+            clearError(.invites)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.invites, error)
         }
     }
 
@@ -476,8 +513,9 @@ final class CollaborationCoordinator {
             try await refreshRelationships(using: accessToken, context: modelContext)
             statusMessage = "Invite \(action.title.lowercased())."
             appendActivity(.info, statusMessage ?? "Invite updated.")
+            clearError(.invites)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.invites, error)
         }
     }
 
@@ -492,8 +530,9 @@ final class CollaborationCoordinator {
             try await refreshInvites(using: accessToken, context: modelContext)
             statusMessage = "Invite revoked."
             appendActivity(.info, statusMessage ?? "Invite revoked.")
+            clearError(.invites)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.invites, error)
         }
     }
 
@@ -514,8 +553,9 @@ final class CollaborationCoordinator {
             try await refreshRelationships(using: accessToken, context: modelContext)
             statusMessage = "Visibility scopes updated."
             appendActivity(.info, statusMessage ?? "Visibility scopes updated.")
+            clearError(.relationships)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.relationships, error)
         }
     }
 
@@ -550,8 +590,9 @@ final class CollaborationCoordinator {
             try await refreshBlueprints(using: accessToken, context: modelContext)
             statusMessage = "Blueprint saved to your library."
             appendActivity(.info, statusMessage ?? "Blueprint saved.")
+            clearError(.blueprints)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.blueprints, error)
         }
     }
 
@@ -577,8 +618,9 @@ final class CollaborationCoordinator {
             try await refreshRelationships(using: accessToken, context: modelContext)
             statusMessage = "Assignment sent."
             appendActivity(.info, statusMessage ?? "Assignment sent.")
+            clearError(.assignments)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.assignments, error)
         }
     }
 
@@ -600,8 +642,9 @@ final class CollaborationCoordinator {
             }
             statusMessage = "Assignment \(status.title.lowercased())."
             appendActivity(.info, statusMessage ?? "Assignment updated.")
+            clearError(.assignments)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.assignments, error)
         }
     }
 
@@ -638,8 +681,9 @@ final class CollaborationCoordinator {
             try await refreshNotes(using: accessToken, context: modelContext)
             statusMessage = "Coach note sent."
             appendActivity(.info, statusMessage ?? "Coach note sent.")
+            clearError(.notes)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.notes, error)
         }
     }
 
@@ -653,8 +697,9 @@ final class CollaborationCoordinator {
             )
             try await refreshNotes(using: accessToken, context: modelContext)
             try await refreshRelationships(using: accessToken, context: modelContext)
+            clearError(.notes)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.notes, error)
         }
     }
 
@@ -683,8 +728,9 @@ final class CollaborationCoordinator {
             try await refreshProgramShares(using: accessToken, context: modelContext)
             statusMessage = "Program shared privately."
             appendActivity(.info, statusMessage ?? "Program shared privately.")
+            clearError(.programShares)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.programShares, error)
         }
     }
 
@@ -699,8 +745,9 @@ final class CollaborationCoordinator {
             try await refreshProgramShares(using: accessToken, context: modelContext)
             statusMessage = "Program share revoked."
             appendActivity(.info, statusMessage ?? "Program share revoked.")
+            clearError(.programShares)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.programShares, error)
         }
     }
 
@@ -731,8 +778,9 @@ final class CollaborationCoordinator {
             try await refreshProgressShares(using: accessToken, context: modelContext)
             statusMessage = "Progress shared privately."
             appendActivity(.info, statusMessage ?? "Progress shared privately.")
+            clearError(.progressShares)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.progressShares, error)
         }
     }
 
@@ -747,8 +795,9 @@ final class CollaborationCoordinator {
             try await refreshProgressShares(using: accessToken, context: modelContext)
             statusMessage = "Progress share revoked."
             appendActivity(.info, statusMessage ?? "Progress share revoked.")
+            clearError(.progressShares)
         } catch {
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            recordError(.progressShares, error)
         }
     }
 
