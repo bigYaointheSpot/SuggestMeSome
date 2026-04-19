@@ -11,7 +11,6 @@ import SwiftData
 struct ManageExercisesView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MuscleGroup.name) private var muscleGroups: [MuscleGroup]
-    @Query private var allExerciseEntries: [ExerciseEntry]
 
     // Add group
     @State private var showingAddGroup = false
@@ -34,6 +33,7 @@ struct ManageExercisesView: View {
 
     // Delete exercise
     @State private var exerciseToDelete: Exercise?
+    @State private var exerciseUsageSummary = ExerciseUsageSummary.empty
 
     // MARK: - Helpers
 
@@ -48,12 +48,16 @@ struct ManageExercisesView: View {
         return "All \(n) exercise\(n == 1 ? "" : "s") in this group will also be deleted. Historical workout data is not affected."
     }
 
-    private func exerciseDeleteMessage(_ exercise: Exercise) -> String {
-        let n = allExerciseEntries.filter { $0.exerciseName == exercise.name }.count
+    private func exerciseDeleteMessage(for summary: ExerciseUsageSummary) -> String {
+        let n = summary.workoutCount
         if n > 0 {
-            return "\"\(exercise.name)\" has been logged in \(n) workout\(n == 1 ? "" : "s"). Historical data will not be affected."
+            return "\"\(summary.exerciseName)\" has been logged in \(n) workout\(n == 1 ? "" : "s"). Historical data will not be affected."
         }
         return "This exercise has not been used in any workouts."
+    }
+
+    private var exerciseUsageRefreshToken: String {
+        exerciseToDelete?.name ?? ""
     }
 
     // MARK: - Body
@@ -67,6 +71,9 @@ struct ManageExercisesView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Manage Exercises")
         .navigationBarTitleDisplayMode(.large)
+        .task(id: exerciseUsageRefreshToken) {
+            refreshExerciseUsageSummary()
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -144,8 +151,8 @@ struct ManageExercisesView: View {
             }
             Button("Cancel", role: .cancel) { exerciseToDelete = nil }
         } message: {
-            if let exercise = exerciseToDelete {
-                Text(exerciseDeleteMessage(exercise))
+            if exerciseToDelete != nil {
+                Text(exerciseDeleteMessage(for: exerciseUsageSummary))
             }
         }
     }
@@ -249,5 +256,17 @@ struct ManageExercisesView: View {
         guard !name.isEmpty, let exercise = exerciseToRename else { return }
         exercise.name = name
         exerciseToRename = nil
+    }
+
+    private func refreshExerciseUsageSummary() {
+        guard let exercise = exerciseToDelete else {
+            exerciseUsageSummary = .empty
+            return
+        }
+
+        exerciseUsageSummary = TrainingReadRepository.exerciseUsageSummary(
+            for: exercise.name,
+            context: modelContext
+        )
     }
 }

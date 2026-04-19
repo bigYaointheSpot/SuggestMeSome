@@ -14,7 +14,6 @@ struct SettingsTab: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(AccountManager.self) private var accountManager
-    @Query(sort: \Workout.date) private var allWorkouts: [Workout]
 
     // MARK: Preferences
     @AppStorage("globalWeightUnit") private var globalWeightUnit: String = WeightUnit.lbs.rawValue
@@ -32,16 +31,17 @@ struct SettingsTab: View {
     // MARK: Data management state
     @State private var showingDeleteAllConfirm = false
     @State private var showingDeleteRangeSheet = false
+    @State private var workoutCount = 0
 
     // MARK: - Helpers
 
     private func deleteAllTitle() -> String {
-        let n = allWorkouts.count
+        let n = workoutCount
         return "Delete \(n) Workout\(n == 1 ? "" : "s") and All PRs"
     }
 
     private func deleteAllMessage() -> String {
-        let n = allWorkouts.count
+        let n = workoutCount
         return "All \(n) workout\(n == 1 ? "" : "s") and every personal record will be permanently deleted. Your exercise library is kept."
     }
 
@@ -102,10 +102,17 @@ struct SettingsTab: View {
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
-            .sheet(isPresented: $showingDeleteRangeSheet) {
+            .sheet(isPresented: $showingDeleteRangeSheet, onDismiss: refreshWorkoutCount) {
                 DeleteByRangeSheet { start, end in
                     deleteWorkoutsInRange(from: start, to: end)
                 }
+            }
+            .task {
+                refreshWorkoutCount()
+            }
+            .onChange(of: showingDeleteAllConfirm) { _, isPresented in
+                guard isPresented else { return }
+                refreshWorkoutCount()
             }
             .confirmationDialog(
                 "Delete All Workout Data?",
@@ -446,19 +453,27 @@ struct SettingsTab: View {
     // MARK: - Data deletion
 
     private func deleteAllData() {
-        try? PersonalRecordMaintenanceService.deleteWorkouts(allWorkouts, context: modelContext)
+        let workouts = TrainingReadRepository.fetchWorkouts(context: modelContext)
+        workoutCount = workouts.count
+        try? PersonalRecordMaintenanceService.deleteWorkouts(workouts, context: modelContext)
         try? PersonalRecordMaintenanceService.clearAllPRData(context: modelContext)
+        refreshWorkoutCount()
     }
 
     private func deleteWorkoutsInRange(from start: Date, to end: Date) {
         let dayStart = Calendar.current.startOfDay(for: start)
         let dayEnd   = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: end)!
-        let snapshot = TrainingReadRepository.workoutDateRangeSnapshot(
+        let workouts = TrainingReadRepository.fetchWorkouts(
             from: dayStart,
             to: dayEnd,
             context: modelContext
         )
-        try? PersonalRecordMaintenanceService.deleteWorkouts(snapshot.workouts, context: modelContext)
+        try? PersonalRecordMaintenanceService.deleteWorkouts(workouts, context: modelContext)
+        refreshWorkoutCount()
+    }
+
+    private func refreshWorkoutCount() {
+        workoutCount = TrainingReadRepository.workoutCount(context: modelContext)
     }
 }
 
@@ -521,7 +536,7 @@ struct DeleteByRangeSheet: View {
     @State private var startDate = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @State private var endDate = Date()
     @State private var showingConfirm = false
-    @State private var snapshot = WorkoutDateRangeReadSnapshot.empty
+    @State private var summary = WorkoutDeleteRangeSummary.empty
 
     private var previewToken: Int {
         let dayStart = Calendar.current.startOfDay(for: startDate)
@@ -532,9 +547,9 @@ struct DeleteByRangeSheet: View {
         return hasher.finalize()
     }
 
-    private var rangeCount: Int { snapshot.count }
-    private var earliestInRange: Date? { snapshot.earliestDate }
-    private var latestInRange: Date? { snapshot.latestDate }
+    private var rangeCount: Int { summary.count }
+    private var earliestInRange: Date? { summary.earliestDate }
+    private var latestInRange: Date? { summary.latestDate }
 
     private var deleteButtonLabel: String {
         rangeCount == 0 ? "No Workouts in Range" : "Delete \(rangeCount) Workout\(rangeCount == 1 ? "" : "s")"
@@ -605,7 +620,7 @@ struct DeleteByRangeSheet: View {
             second: 59,
             of: endDate
         ) ?? endDate
-        snapshot = TrainingReadRepository.workoutDateRangeSnapshot(
+        summary = TrainingReadRepository.workoutDeleteRangeSummary(
             from: dayStart,
             to: dayEnd,
             context: modelContext

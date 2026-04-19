@@ -20,6 +20,29 @@ struct WorkoutDateRangeReadSnapshot {
     let latestDate: Date?
 }
 
+struct WorkoutDeleteRangeSummary: Equatable {
+    static let empty = WorkoutDeleteRangeSummary(
+        count: 0,
+        earliestDate: nil,
+        latestDate: nil
+    )
+
+    let count: Int
+    let earliestDate: Date?
+    let latestDate: Date?
+}
+
+struct ExerciseUsageSummary: Equatable {
+    static let empty = ExerciseUsageSummary(exerciseName: "", workoutCount: 0)
+
+    let exerciseName: String
+    let workoutCount: Int
+
+    var hasUsage: Bool {
+        workoutCount > 0
+    }
+}
+
 struct ProgramRunIndexReadSnapshot {
     let activeRuns: [ProgramRun]
     let completedRuns: [ProgramRun]
@@ -111,6 +134,49 @@ enum TrainingReadRepository {
             count: workouts.count,
             earliestDate: workouts.first?.date,
             latestDate: workouts.last?.date
+        )
+    }
+
+    static func workoutCount(context: ModelContext) -> Int {
+        (try? context.fetchCount(FetchDescriptor<Workout>())) ?? 0
+    }
+
+    static func workoutDeleteRangeSummary(
+        from startDate: Date,
+        to endDate: Date,
+        context: ModelContext
+    ) -> WorkoutDeleteRangeSummary {
+        let snapshot = workoutDateRangeSnapshot(
+            from: startDate,
+            to: endDate,
+            context: context
+        )
+        return WorkoutDeleteRangeSummary(
+            count: snapshot.count,
+            earliestDate: snapshot.earliestDate,
+            latestDate: snapshot.latestDate
+        )
+    }
+
+    static func exerciseUsageSummary(
+        for exerciseName: String,
+        context: ModelContext
+    ) -> ExerciseUsageSummary {
+        let normalized = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return .empty
+        }
+
+        let descriptor = FetchDescriptor<ExerciseEntry>(
+            predicate: #Predicate<ExerciseEntry> { $0.exerciseName == normalized }
+        )
+        let entries = (try? context.fetch(descriptor)) ?? []
+        let distinctWorkoutIDs = Set(entries.compactMap { $0.workout?.id })
+        let workoutCount = distinctWorkoutIDs.isEmpty ? entries.count : distinctWorkoutIDs.count
+
+        return ExerciseUsageSummary(
+            exerciseName: normalized,
+            workoutCount: workoutCount
         )
     }
 

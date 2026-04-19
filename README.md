@@ -3546,6 +3546,26 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 11 [Settings destructive tools and exercise library read cleanup] — 2026-04-18
+
+- Removed the remaining broad history observation from the Settings data-management flow:
+  - `SettingsTab` now refreshes a lightweight targeted workout count via `TrainingReadRepository.workoutCount(...)` instead of observing the full workout history with `@Query`
+  - delete-all confirmation copy still reflects the current workout total, but the destructive action now fetches the full workout list only when the user actually confirms deletion
+  - `DeleteByRangeSheet` now reads a dedicated `WorkoutDeleteRangeSummary` for preview counts/date bounds instead of holding a heavier workout snapshot in view state
+- Replaced the exercise-library usage warning path with targeted reads:
+  - added `ExerciseUsageSummary` plus `TrainingReadRepository.exerciseUsageSummary(...)` so `ManageExercisesView` no longer observes all `ExerciseEntry` rows
+  - exercise delete confirmations now fetch usage counts only for the exercise being deleted, while preserving the existing warning copy and delete behavior
+- Added focused Prompt 11 coverage in `Feature16Prompt11SettingsReadSummaryTests.swift`:
+  - total workout count and date-range delete summaries match the targeted repository window
+  - exercise usage summaries count distinct workouts correctly from historical exercise-entry data
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt11SettingsReadSummaryTests`
+
+**Commit:** `refactor: narrow settings and exercise library reads`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
