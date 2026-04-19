@@ -144,7 +144,119 @@ struct LocalCollaborationCacheStore {
             existing: stableIDMap(for: ProgressShareCard.self),
             save: false
         )
+        try sweepOrphanedDependents(
+            livingRelationshipStableIDs: Set(payload.relationships.map(\.stableID))
+        )
         try persist()
+    }
+
+    /// Delete a relationship and every cached row that referenced it by
+    /// string FK, inside one transaction. Used when the coordinator
+    /// learns a relationship was removed (revoked invite, account teardown,
+    /// remote deletion). Mirrors the cascade behavior we'd get from a full
+    /// @Relationship(deleteRule: .cascade) conversion without the schema
+    /// reshape.
+    func deleteRelationshipCascade(stableID: String) throws {
+        let relationshipPredicate = #Predicate<CoachRelationship> { $0.stableID == stableID }
+        let relationships = try modelContext.fetch(FetchDescriptor<CoachRelationship>(predicate: relationshipPredicate))
+        for relationship in relationships {
+            modelContext.delete(relationship)
+        }
+
+        try deleteDependents(relationshipStableID: stableID)
+        try persist()
+    }
+
+    /// After a full refresh, delete dependent rows whose relationshipStableID
+    /// is not in the fresh relationship set. Guards against server-side
+    /// deletions that don't surface through an explicit revoke path.
+    private func sweepOrphanedDependents(livingRelationshipStableIDs: Set<String>) throws {
+        try sweepOrphans(
+            fetch: FetchDescriptor<CoachInvite>(),
+            relationshipStableID: { $0.relationshipStableID },
+            living: livingRelationshipStableIDs
+        )
+        try sweepOrphans(
+            fetch: FetchDescriptor<ProgramAssignment>(),
+            relationshipStableID: { $0.relationshipStableID },
+            living: livingRelationshipStableIDs
+        )
+        try sweepOrphans(
+            fetch: FetchDescriptor<CoachNote>(),
+            relationshipStableID: { $0.relationshipStableID },
+            living: livingRelationshipStableIDs
+        )
+        try sweepOrphans(
+            fetch: FetchDescriptor<InsightSnapshot>(),
+            relationshipStableID: { $0.relationshipStableID },
+            living: livingRelationshipStableIDs
+        )
+        try sweepOrphans(
+            fetch: FetchDescriptor<WeeklyDigest>(),
+            relationshipStableID: { $0.relationshipStableID },
+            living: livingRelationshipStableIDs
+        )
+        try sweepOrphans(
+            fetch: FetchDescriptor<ProgramShareGrant>(),
+            relationshipStableID: { $0.relationshipStableID },
+            living: livingRelationshipStableIDs
+        )
+        try sweepOrphans(
+            fetch: FetchDescriptor<ProgressShareCard>(),
+            relationshipStableID: { $0.relationshipStableID },
+            living: livingRelationshipStableIDs
+        )
+    }
+
+    private func deleteDependents(relationshipStableID: String) throws {
+        let invites = try modelContext.fetch(FetchDescriptor<CoachInvite>(
+            predicate: #Predicate { $0.relationshipStableID == relationshipStableID }
+        ))
+        for invite in invites { modelContext.delete(invite) }
+
+        let assignments = try modelContext.fetch(FetchDescriptor<ProgramAssignment>(
+            predicate: #Predicate { $0.relationshipStableID == relationshipStableID }
+        ))
+        for assignment in assignments { modelContext.delete(assignment) }
+
+        let notes = try modelContext.fetch(FetchDescriptor<CoachNote>(
+            predicate: #Predicate { $0.relationshipStableID == relationshipStableID }
+        ))
+        for note in notes { modelContext.delete(note) }
+
+        let insights = try modelContext.fetch(FetchDescriptor<InsightSnapshot>(
+            predicate: #Predicate { $0.relationshipStableID == relationshipStableID }
+        ))
+        for insight in insights { modelContext.delete(insight) }
+
+        let digests = try modelContext.fetch(FetchDescriptor<WeeklyDigest>(
+            predicate: #Predicate { $0.relationshipStableID == relationshipStableID }
+        ))
+        for digest in digests { modelContext.delete(digest) }
+
+        let programShares = try modelContext.fetch(FetchDescriptor<ProgramShareGrant>(
+            predicate: #Predicate { $0.relationshipStableID == relationshipStableID }
+        ))
+        for share in programShares { modelContext.delete(share) }
+
+        let progressShares = try modelContext.fetch(FetchDescriptor<ProgressShareCard>(
+            predicate: #Predicate { $0.relationshipStableID == relationshipStableID }
+        ))
+        for share in progressShares { modelContext.delete(share) }
+    }
+
+    private func sweepOrphans<Model: PersistentModel>(
+        fetch: FetchDescriptor<Model>,
+        relationshipStableID: (Model) -> String?,
+        living: Set<String>
+    ) throws {
+        let rows = try modelContext.fetch(fetch)
+        for row in rows {
+            guard let parentStableID = relationshipStableID(row) else { continue }
+            if !living.contains(parentStableID) {
+                modelContext.delete(row)
+            }
+        }
     }
 
     func replaceRelationships(with dtos: [CoachRelationshipDTO]) throws {

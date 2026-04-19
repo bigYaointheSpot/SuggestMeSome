@@ -346,6 +346,41 @@ struct Feature19CollaborationFoundationTests {
 
         let tokenStore = InMemoryCloudSessionTokenStore(tokens: feature19Tokens())
         let collaborationClient = MockCollaborationClient()
+        // Seed relationships alongside assignments so the refresh payload is
+        // internally consistent — replaceAll sweeps dependents whose parent
+        // isn't in the fresh relationship set.
+        collaborationClient.relationships = [
+            CoachRelationshipDTO(
+                stableID: "relationship-1",
+                createdAt: day(1),
+                updatedAt: day(2),
+                statusRawValue: CoachRelationshipStatus.active.rawValue,
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(2),
+                athleteDisplayName: "Athlete Sam",
+                invitedByAccountID: uuid(1),
+                visibilityScopeBitmask: 0,
+                unreadCoachNoteCount: 0,
+                pendingAssignmentCount: 0,
+                latestInsightSnapshotAt: nil
+            ),
+            CoachRelationshipDTO(
+                stableID: "relationship-2",
+                createdAt: day(1),
+                updatedAt: day(2),
+                statusRawValue: CoachRelationshipStatus.active.rawValue,
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(3),
+                athleteDisplayName: "Athlete Jordan",
+                invitedByAccountID: uuid(1),
+                visibilityScopeBitmask: 0,
+                unreadCoachNoteCount: 0,
+                pendingAssignmentCount: 0,
+                latestInsightSnapshotAt: nil
+            )
+        ]
         collaborationClient.assignments = [
             ProgramAssignmentDTO(
                 stableID: "assignment-pending",
@@ -843,6 +878,219 @@ struct Feature19CollaborationFoundationTests {
             predicate: #Predicate { $0.stableID == "note-unique" }
         ))
         #expect(rows.count == 1)
+    }
+
+    @Test func deleteRelationshipCascadeRemovesDependents() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let store = LocalCollaborationCacheStore(modelContext: context)
+
+        try store.replaceRelationships(with: [
+            CoachRelationshipDTO(
+                stableID: "relationship-cascade",
+                createdAt: day(1),
+                updatedAt: day(2),
+                statusRawValue: CoachRelationshipStatus.active.rawValue,
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(2),
+                athleteDisplayName: "Athlete Sam",
+                invitedByAccountID: uuid(1),
+                visibilityScopeBitmask: 0,
+                unreadCoachNoteCount: 0,
+                pendingAssignmentCount: 0,
+                latestInsightSnapshotAt: nil
+            )
+        ])
+        try store.replaceAssignments(with: [
+            ProgramAssignmentDTO(
+                stableID: "assignment-1",
+                createdAt: day(2),
+                updatedAt: day(2),
+                relationshipStableID: "relationship-cascade",
+                blueprintStableID: "blueprint-1",
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(2),
+                athleteDisplayName: "Athlete Sam",
+                statusRawValue: ProgramAssignmentStatus.pending.rawValue,
+                notesText: nil,
+                startGuidance: nil,
+                importedTrainingProgramStableID: nil,
+                importedProgramRunStableID: nil,
+                respondedAt: nil,
+                archivedAt: nil
+            )
+        ])
+        try store.replaceNotes(with: [
+            CoachNoteDTO(
+                stableID: "note-1",
+                createdAt: day(2),
+                updatedAt: day(2),
+                relationshipStableID: "relationship-cascade",
+                authorAccountID: uuid(1),
+                authorDisplayName: "Coach Alex",
+                recipientAccountID: uuid(2),
+                recipientDisplayName: "Athlete Sam",
+                bodyText: "Stay sharp",
+                anchorKindRawValue: CoachNoteAnchorKind.general.rawValue,
+                anchoredWorkoutStableID: nil,
+                anchoredProgramRunStableID: nil,
+                anchoredWeekStart: nil,
+                anchoredWeekEnd: nil,
+                eventSummaryText: nil,
+                priorityRawValue: CollaborationInsightPriority.medium.rawValue,
+                isUnread: true,
+                requiresReview: false
+            )
+        ])
+
+        try store.deleteRelationshipCascade(stableID: "relationship-cascade")
+
+        let remainingRelationships = try context.fetch(FetchDescriptor<CoachRelationship>())
+        let remainingAssignments = try context.fetch(FetchDescriptor<ProgramAssignment>())
+        let remainingNotes = try context.fetch(FetchDescriptor<CoachNote>())
+        #expect(remainingRelationships.isEmpty)
+        #expect(remainingAssignments.isEmpty)
+        #expect(remainingNotes.isEmpty)
+    }
+
+    @Test func fullRefreshSweepsOrphanedDependents() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let store = LocalCollaborationCacheStore(modelContext: context)
+
+        // Seed: one relationship with a note, assignment, and insight.
+        try store.replaceRelationships(with: [
+            CoachRelationshipDTO(
+                stableID: "relationship-keep",
+                createdAt: day(1),
+                updatedAt: day(2),
+                statusRawValue: CoachRelationshipStatus.active.rawValue,
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(2),
+                athleteDisplayName: "Athlete Sam",
+                invitedByAccountID: uuid(1),
+                visibilityScopeBitmask: 0,
+                unreadCoachNoteCount: 0,
+                pendingAssignmentCount: 0,
+                latestInsightSnapshotAt: nil
+            ),
+            CoachRelationshipDTO(
+                stableID: "relationship-drop",
+                createdAt: day(1),
+                updatedAt: day(2),
+                statusRawValue: CoachRelationshipStatus.active.rawValue,
+                coachAccountID: uuid(3),
+                coachDisplayName: "Coach Jamie",
+                athleteAccountID: uuid(4),
+                athleteDisplayName: "Athlete Taylor",
+                invitedByAccountID: uuid(3),
+                visibilityScopeBitmask: 0,
+                unreadCoachNoteCount: 0,
+                pendingAssignmentCount: 0,
+                latestInsightSnapshotAt: nil
+            )
+        ])
+        try store.replaceNotes(with: [
+            CoachNoteDTO(
+                stableID: "note-keep",
+                createdAt: day(2),
+                updatedAt: day(2),
+                relationshipStableID: "relationship-keep",
+                authorAccountID: uuid(1),
+                authorDisplayName: "Coach Alex",
+                recipientAccountID: uuid(2),
+                recipientDisplayName: "Athlete Sam",
+                bodyText: "Keep going",
+                anchorKindRawValue: CoachNoteAnchorKind.general.rawValue,
+                anchoredWorkoutStableID: nil,
+                anchoredProgramRunStableID: nil,
+                anchoredWeekStart: nil,
+                anchoredWeekEnd: nil,
+                eventSummaryText: nil,
+                priorityRawValue: CollaborationInsightPriority.medium.rawValue,
+                isUnread: true,
+                requiresReview: false
+            ),
+            CoachNoteDTO(
+                stableID: "note-orphan",
+                createdAt: day(2),
+                updatedAt: day(2),
+                relationshipStableID: "relationship-drop",
+                authorAccountID: uuid(3),
+                authorDisplayName: "Coach Jamie",
+                recipientAccountID: uuid(4),
+                recipientDisplayName: "Athlete Taylor",
+                bodyText: "Will be swept",
+                anchorKindRawValue: CoachNoteAnchorKind.general.rawValue,
+                anchoredWorkoutStableID: nil,
+                anchoredProgramRunStableID: nil,
+                anchoredWeekStart: nil,
+                anchoredWeekEnd: nil,
+                eventSummaryText: nil,
+                priorityRawValue: CollaborationInsightPriority.medium.rawValue,
+                isUnread: true,
+                requiresReview: false
+            )
+        ])
+
+        // Full refresh only mentions the keep relationship and its note.
+        try store.replaceAll(with: CollaborationFullRefreshPayload(
+            relationships: [
+                CoachRelationshipDTO(
+                    stableID: "relationship-keep",
+                    createdAt: day(1),
+                    updatedAt: day(3),
+                    statusRawValue: CoachRelationshipStatus.active.rawValue,
+                    coachAccountID: uuid(1),
+                    coachDisplayName: "Coach Alex",
+                    athleteAccountID: uuid(2),
+                    athleteDisplayName: "Athlete Sam",
+                    invitedByAccountID: uuid(1),
+                    visibilityScopeBitmask: 0,
+                    unreadCoachNoteCount: 0,
+                    pendingAssignmentCount: 0,
+                    latestInsightSnapshotAt: nil
+                )
+            ],
+            invites: [],
+            assignments: [],
+            notes: [
+                CoachNoteDTO(
+                    stableID: "note-keep",
+                    createdAt: day(2),
+                    updatedAt: day(3),
+                    relationshipStableID: "relationship-keep",
+                    authorAccountID: uuid(1),
+                    authorDisplayName: "Coach Alex",
+                    recipientAccountID: uuid(2),
+                    recipientDisplayName: "Athlete Sam",
+                    bodyText: "Keep going",
+                    anchorKindRawValue: CoachNoteAnchorKind.general.rawValue,
+                    anchoredWorkoutStableID: nil,
+                    anchoredProgramRunStableID: nil,
+                    anchoredWeekStart: nil,
+                    anchoredWeekEnd: nil,
+                    eventSummaryText: nil,
+                    priorityRawValue: CollaborationInsightPriority.medium.rawValue,
+                    isUnread: true,
+                    requiresReview: false
+                )
+            ],
+            notificationPreference: nil,
+            insightSnapshots: [],
+            weeklyDigests: [],
+            blueprints: [],
+            programShares: [],
+            progressShares: []
+        ))
+
+        let remainingRelationships = try context.fetch(FetchDescriptor<CoachRelationship>())
+        let remainingNotes = try context.fetch(FetchDescriptor<CoachNote>())
+        #expect(remainingRelationships.map(\.stableID) == ["relationship-keep"])
+        #expect(remainingNotes.map(\.stableID) == ["note-keep"])
     }
 
     @Test func pushRegistrationErrorAppearsInRecentActivity() async throws {
