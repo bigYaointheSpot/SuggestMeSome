@@ -109,21 +109,114 @@ struct ProgramListRow: View {
 
 struct ProgramRunDetailView: View {
     @Bindable var run: ProgramRun
-    @Environment(\.modelContext) private var modelContext
-    @Query(
-        filter: #Predicate<Workout> { $0.programRun != nil },
-        sort: \Workout.date
-    )
-    private var allWorkouts: [Workout]
 
-    @State private var showingEndConfirmation = false
+    var body: some View {
+        ProgramRunDetailScreen(run: run)
+    }
+}
 
-    var completedCount: Int {
-        TrainingContextQueryService.completedWorkoutCount(for: run, in: allWorkouts)
+// MARK: - CompleteProgramWorkoutSheet
+
+struct CompleteProgramWorkoutSheet: View {
+    let activeRuns: [ProgramRun]
+    let onStart: (ProgramWorkoutContext) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var selectedRun: ProgramRun? = nil
+
+    /// Returns the run to display a session preview for, without waiting for onAppear.
+    var effectiveRun: ProgramRun? {
+        selectedRun ?? (activeRuns.count == 1 ? activeRuns[0] : nil)
     }
 
-    var totalSessions: Int {
-        (run.program?.lengthInWeeks ?? 0) * (run.program?.sessionsPerWeek ?? 0)
+    var body: some View {
+        NavigationStack {
+            if let run = effectiveRun {
+                ProgramRunSessionPreviewView(
+                    run: run,
+                    onStart: onStart
+                )
+                    .navigationTitle("Next Session")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            if activeRuns.count > 1 {
+                                Button("Back") { selectedRun = nil }
+                            }
+                        }
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { dismiss() }
+                        }
+                    }
+            } else {
+                runSelectionList
+                    .navigationTitle("Select Program")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { dismiss() }
+                        }
+                    }
+            }
+        }
+    }
+
+    // MARK: Run selection list
+
+    private var runSelectionList: some View {
+        List {
+            ForEach(activeRuns) { run in
+                Button {
+                    selectedRun = run
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(run.program?.name ?? "Unknown Program")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text("Started \(run.startDate.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .listStyle(.plain)
+    }
+}
+
+private struct ProgramRunDetailScreen: View {
+    let run: ProgramRun
+
+    @Environment(\.modelContext) private var modelContext
+    @Query private var observedRunWorkouts: [Workout]
+    @State private var progressSnapshot: ProgramRunProgressReadSnapshot?
+    @State private var showingEndConfirmation = false
+
+    init(run: ProgramRun) {
+        self.run = run
+        let runID = run.id
+        _observedRunWorkouts = Query(
+            filter: #Predicate<Workout> { $0.programRun?.id == runID },
+            sort: [SortDescriptor(\Workout.date, order: .forward)]
+        )
+    }
+
+    private var refreshToken: Int {
+        ProgramRunProgressReadSnapshot.refreshToken(
+            for: run,
+            observedWorkouts: observedRunWorkouts
+        )
+    }
+
+    private var completedCount: Int {
+        progressSnapshot?.completedWorkoutCount ?? 0
+    }
+
+    private var totalSessions: Int {
+        progressSnapshot?.totalSessions ?? max(0, (run.program?.lengthInWeeks ?? 0) * (run.program?.sessionsPerWeek ?? 0))
     }
 
     var body: some View {
@@ -158,11 +251,21 @@ struct ProgramRunDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(run.program?.name ?? "Program")
         .navigationBarTitleDisplayMode(.large)
+        .task(id: refreshToken) {
+            progressSnapshot = TrainingReadRepository.programRunProgressSnapshot(
+                for: run,
+                context: modelContext
+            )
+        }
         .confirmationDialog("End Program?", isPresented: $showingEndConfirmation, titleVisibility: .visible) {
             Button("End Program", role: .destructive) {
                 run.isCompleted = true
                 run.endDate = Date.now
                 try? modelContext.save()
+                progressSnapshot = TrainingReadRepository.programRunProgressSnapshot(
+                    for: run,
+                    context: modelContext
+                )
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -171,94 +274,50 @@ struct ProgramRunDetailView: View {
     }
 }
 
-// MARK: - CompleteProgramWorkoutSheet
-
-struct CompleteProgramWorkoutSheet: View {
-    let activeRuns: [ProgramRun]
+private struct ProgramRunSessionPreviewView: View {
+    let run: ProgramRun
     let onStart: (ProgramWorkoutContext) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query(
-        filter: #Predicate<Workout> { $0.programRun != nil },
-        sort: \Workout.date
-    )
-    private var allWorkouts: [Workout]
+    @Query private var observedRunWorkouts: [Workout]
 
-    @State private var selectedRun: ProgramRun? = nil
-    @State private var weekNumber: Int = 1
-    @State private var sessionNumber: Int = 1
+    @State private var progressSnapshot: ProgramRunProgressReadSnapshot?
+    @State private var weekNumber = 1
+    @State private var sessionNumber = 1
     @State private var showingSessionPicker = false
+    @State private var hasInitializedSelection = false
 
-    /// Returns the run to display a session preview for, without waiting for onAppear.
-    var effectiveRun: ProgramRun? {
-        selectedRun ?? (activeRuns.count == 1 ? activeRuns[0] : nil)
+    init(
+        run: ProgramRun,
+        onStart: @escaping (ProgramWorkoutContext) -> Void
+    ) {
+        self.run = run
+        self.onStart = onStart
+        let runID = run.id
+        _observedRunWorkouts = Query(
+            filter: #Predicate<Workout> { $0.programRun?.id == runID },
+            sort: [SortDescriptor(\Workout.date, order: .forward)]
+        )
+    }
+
+    private var refreshToken: Int {
+        ProgramRunProgressReadSnapshot.refreshToken(
+            for: run,
+            observedWorkouts: observedRunWorkouts
+        )
+    }
+
+    private var exercises: [ProgramSessionExercise] {
+        ProgramOverlayResolutionService.resolvedExercises(
+            for: run,
+            week: weekNumber,
+            session: sessionNumber,
+            context: modelContext
+        )
     }
 
     var body: some View {
-        NavigationStack {
-            if let run = effectiveRun {
-                sessionPreviewView(for: run)
-                    .navigationTitle("Next Session")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            if activeRuns.count > 1 {
-                                Button("Back") { selectedRun = nil }
-                            }
-                        }
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") { dismiss() }
-                        }
-                    }
-            } else {
-                runSelectionList
-                    .navigationTitle("Select Program")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") { dismiss() }
-                        }
-                    }
-            }
-        }
-        .onAppear {
-            if activeRuns.count == 1 {
-                detectNextSession(for: activeRuns[0])
-            }
-        }
-    }
-
-    // MARK: Run selection list
-
-    private var runSelectionList: some View {
-        List {
-            ForEach(activeRuns) { run in
-                Button {
-                    selectedRun = run
-                    detectNextSession(for: run)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(run.program?.name ?? "Unknown Program")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                        Text("Started \(run.startDate.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .listStyle(.plain)
-    }
-
-    // MARK: Session preview
-
-    @ViewBuilder
-    private func sessionPreviewView(for run: ProgramRun) -> some View {
-        let exercises = sessionExercises(run: run, week: weekNumber, session: sessionNumber)
         List {
             Section {
                 HStack {
@@ -302,6 +361,9 @@ struct CompleteProgramWorkoutSheet: View {
             }
         }
         .listStyle(.insetGrouped)
+        .task(id: refreshToken) {
+            refreshProgressSnapshot()
+        }
         .safeAreaInset(edge: .bottom) {
             Button {
                 let ctx = ProgramWorkoutContext(
@@ -337,37 +399,27 @@ struct CompleteProgramWorkoutSheet: View {
         }
     }
 
-    // MARK: Helpers
-
-    private func detectNextSession(for run: ProgramRun) {
-        guard let program = run.program else { return }
-        for wk in 1...program.lengthInWeeks {
-            for sess in 1...program.sessionsPerWeek {
-                let done = TrainingContextQueryService.isProgramSessionCompleted(
-                    run: run,
-                    weekNumber: wk,
-                    sessionNumber: sess,
-                    in: allWorkouts
-                )
-                if !done {
-                    weekNumber = wk
-                    sessionNumber = sess
-                    return
-                }
-            }
-        }
-        // All sessions complete — default to beginning
-        weekNumber = 1
-        sessionNumber = 1
-    }
-
-    private func sessionExercises(run: ProgramRun, week: Int, session: Int) -> [ProgramSessionExercise] {
-        ProgramOverlayResolutionService.resolvedExercises(
+    private func refreshProgressSnapshot() {
+        let snapshot = TrainingReadRepository.programRunProgressSnapshot(
             for: run,
-            week: week,
-            session: session,
             context: modelContext
         )
+        progressSnapshot = snapshot
+
+        guard !hasInitializedSelection else { return }
+        applyInitialSelection(using: snapshot)
+        hasInitializedSelection = true
+    }
+
+    private func applyInitialSelection(using snapshot: ProgramRunProgressReadSnapshot) {
+        if let nextIncompleteSession = snapshot.nextIncompleteSession {
+            weekNumber = nextIncompleteSession.weekNumber
+            sessionNumber = nextIncompleteSession.sessionNumber
+            return
+        }
+
+        weekNumber = 1
+        sessionNumber = 1
     }
 }
 

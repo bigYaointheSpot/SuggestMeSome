@@ -119,7 +119,7 @@ head. It is trying to be the first training app that can explain itself.
 
 ### Feature 1 — Manual Workout Logging
 
-**Status:** Complete
+**Status:** In Progress
 
 Core workout tracking feature. Users can start a workout, log exercises with
 individual set-by-set weight and reps, and review their history.
@@ -3583,6 +3583,26 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt12PersonalRecordSnapshotTests`
 
 **Commit:** `refactor: cache personal records and trim stale helpers`
+
+---
+
+#### Prompt 13 [Program support screens off broad workout queries] — 2026-04-18
+
+- Moved the remaining program entry/detail screens onto scoped repository-backed progress snapshots instead of broad in-view workout collections:
+  - `TrainingReadRepository.programRunProgressSnapshot(...)` now precomputes total planned sessions, the next incomplete `(week, session)`, and a completed-workout lookup keyed by session coordinates in addition to the existing completed count and session-key set
+  - `ProgramRunDetailView` now refreshes its progress UI from that run-scoped snapshot, using a narrow run-only workout query as an invalidation trigger instead of observing every program workout in the app
+  - `CompleteProgramWorkoutSheet` now routes its session preview through a dedicated run-scoped preview screen that reads the same cached snapshot to select the next incomplete session before resolving exercises
+- Preserved the existing program UX while reducing render-path fan-out:
+  - program detail progress, end-program flow, session picker, next-session detection, and workout-start handoff still behave the same
+  - when all planned sessions are complete, the program session preview still falls back to Week 1 / Session 1 just like the previous implementation
+- Added focused Prompt 13 coverage in `Feature16Prompt13ProgramRunProgressTests.swift`:
+  - scoped snapshot totals, next-incomplete-session detection, and repeated-session lookup behavior
+  - completed-run behavior when no incomplete session remains
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt13ProgramRunProgressTests`
+
+**Commit:** `refactor: scope program run support screens`
 
 ---
 

@@ -48,11 +48,72 @@ struct ProgramRunIndexReadSnapshot {
     let completedRuns: [ProgramRun]
 }
 
+struct ProgramNextSessionReadSnapshot: Equatable {
+    let weekNumber: Int
+    let sessionNumber: Int
+}
+
 struct ProgramRunProgressReadSnapshot {
     let run: ProgramRun
     let workouts: [Workout]
     let completedWorkoutCount: Int
     let completedSessionKeys: Set<ProgramSessionCompletionKey>
+    let totalSessions: Int
+    let nextIncompleteSession: ProgramNextSessionReadSnapshot?
+    let workoutBySessionKey: [ProgramSessionCompletionKey: Workout]
+
+    func workout(
+        weekNumber: Int,
+        sessionNumber: Int
+    ) -> Workout? {
+        workoutBySessionKey[
+            ProgramSessionCompletionKey(
+                weekNumber: weekNumber,
+                sessionNumber: sessionNumber
+            )
+        ]
+    }
+
+    func isCompleted(
+        weekNumber: Int,
+        sessionNumber: Int
+    ) -> Bool {
+        completedSessionKeys.contains(
+            ProgramSessionCompletionKey(
+                weekNumber: weekNumber,
+                sessionNumber: sessionNumber
+            )
+        )
+    }
+
+    static func refreshToken(
+        for run: ProgramRun,
+        observedWorkouts: [Workout]
+    ) -> Int {
+        var hasher = Hasher()
+        hasher.combine(run.id)
+        hasher.combine(run.startDate)
+        hasher.combine(run.endDate)
+        hasher.combine(run.isCompleted)
+        hasher.combine(run.syncVersion)
+        hasher.combine(run.syncLastModifiedAt)
+
+        for workout in observedWorkouts.sorted(by: { lhs, rhs in
+            if lhs.date != rhs.date {
+                return lhs.date > rhs.date
+            }
+            return lhs.id.uuidString > rhs.id.uuidString
+        }) {
+            hasher.combine(workout.id)
+            hasher.combine(workout.date)
+            hasher.combine(workout.programWeekNumber)
+            hasher.combine(workout.programSessionNumber)
+            hasher.combine(workout.syncVersion)
+            hasher.combine(workout.syncLastModifiedAt)
+        }
+
+        return hasher.finalize()
+    }
 }
 
 struct CoachContextReadSnapshot {
@@ -114,12 +175,55 @@ enum TrainingReadRepository {
                 sessionNumber: sessionNumber
             )
         })
+        let workoutBySessionKey = workouts.reduce(into: [ProgramSessionCompletionKey: Workout]()) { result, workout in
+            guard let weekNumber = workout.programWeekNumber,
+                  let sessionNumber = workout.programSessionNumber else {
+                return
+            }
+            result[
+                ProgramSessionCompletionKey(
+                    weekNumber: weekNumber,
+                    sessionNumber: sessionNumber
+                )
+            ] = workout
+        }
+        let totalSessions = max(0, (run.program?.lengthInWeeks ?? 0) * (run.program?.sessionsPerWeek ?? 0))
+
+        let nextIncompleteSession: ProgramNextSessionReadSnapshot? = {
+            guard
+                let program = run.program,
+                program.lengthInWeeks > 0,
+                program.sessionsPerWeek > 0
+            else {
+                return nil
+            }
+
+            for weekNumber in 1...program.lengthInWeeks {
+                for sessionNumber in 1...program.sessionsPerWeek {
+                    let key = ProgramSessionCompletionKey(
+                        weekNumber: weekNumber,
+                        sessionNumber: sessionNumber
+                    )
+                    if !completedSessionKeys.contains(key) {
+                        return ProgramNextSessionReadSnapshot(
+                            weekNumber: weekNumber,
+                            sessionNumber: sessionNumber
+                        )
+                    }
+                }
+            }
+
+            return nil
+        }()
 
         return ProgramRunProgressReadSnapshot(
             run: run,
             workouts: workouts,
             completedWorkoutCount: workouts.count,
-            completedSessionKeys: completedSessionKeys
+            completedSessionKeys: completedSessionKeys,
+            totalSessions: totalSessions,
+            nextIncompleteSession: nextIncompleteSession,
+            workoutBySessionKey: workoutBySessionKey
         )
     }
 
