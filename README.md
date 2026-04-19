@@ -3832,6 +3832,26 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 **Commit:** `refactor: compact unchanged watch exercise rosters`
 
+#### Prompt 4 [Watch roster preservation and integration hardening] — 2026-04-19
+
+- Hardened the watch-side current-context merge so compact unchanged-roster updates stay lossless:
+  - `WatchCurrentSessionContext.sessionExerciseRoster` now explicitly treats `nil` as "preserve the existing roster" when the workout ID and `sessionVersionStableID` match
+  - added `WatchCurrentSessionContextMergePolicy` and routed `WatchLiveWorkoutState.setCurrentContext(_:)` through it in both the shared app module and the watch target so compact payloads keep the last full ordered roster instead of clearing it
+  - resets, completions, new workouts, and new session versions still clear the preserved roster boundary naturally because the merge policy refuses to carry roster state across workout/session identity changes
+- Updated the watch Summary tab to derive "Up Next" from preserved ordered roster state instead of stale status flags:
+  - added `WatchSessionExerciseRosterPresentationPolicy.upcomingEntries(...)`
+  - `WatchActiveWorkoutView` now uses the currently displayed/active exercise index plus the preserved ordered roster, so advancing to the next exercise still shows the correct remaining list even when the latest phone context was compacted with `sessionExerciseRoster = nil`
+- Added Prompt 4 coverage in `Feature17Prompt4WatchRosterPreservationTests.swift`:
+  - compact same-session updates preserve the last full roster in `WatchLiveWorkoutState`
+  - workout-ID and session-version changes do not inherit prior roster state
+  - reset/completion paths clear preserved roster state
+  - "Up Next" follows active-index advancement correctly even when the preserved roster status values are stale
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature17Prompt3WatchContextTransportTests -only-testing:SuggestMeSomeTests/Feature17Prompt4WatchRosterPreservationTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests`
+
+**Commit:** `refactor: preserve watch roster across compact context updates`
+
 ---
 
 ## Project Setup

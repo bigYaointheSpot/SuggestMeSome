@@ -144,14 +144,17 @@ struct WatchActiveWorkoutView: View {
 
     // MARK: - Up Next Roster
 
-    /// Ordered list of remaining exercises for the active session. Rendered
-    /// only when the phone ships a roster (Feature 17+) and at least one
-    /// upcoming exercise exists; pre-Feature-17 payloads fall through to
-    /// the existing progress-card-only layout.
+    /// Ordered list of remaining exercises for the active session. When the
+    /// phone sends compact unchanged-roster updates, the watch preserves the
+    /// last full roster and derives "Up Next" from the currently displayed
+    /// exercise index instead of relying on stale entry status flags.
     @ViewBuilder
     private var upNextRosterSection: some View {
-        let roster = currentContext?.sessionExerciseRoster ?? []
-        let upcoming = roster.filter { $0.status == .upcoming }
+        let context = activeContext
+        let upcoming = WatchSessionExerciseRosterPresentationPolicy.upcomingEntries(
+            roster: context?.sessionExerciseRoster,
+            activeExerciseIndex: context?.exerciseIndex
+        )
         if !upcoming.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {

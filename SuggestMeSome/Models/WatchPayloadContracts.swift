@@ -210,7 +210,9 @@ struct WatchCurrentSessionContext: Codable, Equatable {
     /// Ordered exercise roster for the active session. Each entry carries a
     /// stable identifier so the watch can track the same exercise across
     /// iOS-side reorders instead of pinning to a positional index. Optional
-    /// for backward compatibility with pre-Feature-17 builds.
+    /// for backward compatibility with pre-Feature-17 builds; when the phone
+    /// sends a compact unchanged-roster update for the same workout/session
+    /// version, `nil` means "preserve the existing roster."
     var sessionExerciseRoster: [WatchSessionExerciseRosterEntry]? = nil
     var capturedAt: Date
 }
@@ -231,6 +233,44 @@ enum WatchRosterExerciseStatus: String, Codable, Equatable {
     case completed
     case active
     case upcoming
+}
+
+enum WatchCurrentSessionContextMergePolicy {
+    static func mergePreservingRoster(
+        existing: WatchCurrentSessionContext?,
+        incoming: WatchCurrentSessionContext?
+    ) -> WatchCurrentSessionContext? {
+        guard var incoming else { return nil }
+        guard incoming.sessionExerciseRoster == nil else { return incoming }
+        guard let existing, isSameSession(existing, incoming) else { return incoming }
+        incoming.sessionExerciseRoster = existing.sessionExerciseRoster
+        return incoming
+    }
+
+    private static func isSameSession(
+        _ lhs: WatchCurrentSessionContext,
+        _ rhs: WatchCurrentSessionContext
+    ) -> Bool {
+        lhs.workoutID == rhs.workoutID
+            && lhs.sessionVersionStableID == rhs.sessionVersionStableID
+    }
+}
+
+enum WatchSessionExerciseRosterPresentationPolicy {
+    static func upcomingEntries(
+        roster: [WatchSessionExerciseRosterEntry]?,
+        activeExerciseIndex: Int?
+    ) -> [WatchSessionExerciseRosterEntry] {
+        let orderedRoster = (roster ?? []).sorted { lhs, rhs in
+            lhs.orderIndex < rhs.orderIndex
+        }
+        guard !orderedRoster.isEmpty else { return [] }
+        guard let activeExerciseIndex else {
+            return orderedRoster.filter { $0.status == .upcoming }
+        }
+        let firstUpcomingIndex = min(max(activeExerciseIndex + 1, 0), orderedRoster.count)
+        return Array(orderedRoster.dropFirst(firstUpcomingIndex))
+    }
 }
 
 // MARK: - Watch Presence Heartbeat

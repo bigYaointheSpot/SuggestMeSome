@@ -76,7 +76,13 @@ final class WatchLiveWorkoutState: ObservableObject {
     }
 
     func setCurrentContext(_ value: WatchCurrentSessionContext?) {
-        assignIfChanged(\.currentContext, value)
+        assignIfChanged(
+            \.currentContext,
+            WatchCurrentSessionContextMergePolicy.mergePreservingRoster(
+                existing: currentContext,
+                incoming: value
+            )
+        )
     }
 
     func setLatestWatchMetrics(_ value: WatchWorkoutMetricsPayload?) {
