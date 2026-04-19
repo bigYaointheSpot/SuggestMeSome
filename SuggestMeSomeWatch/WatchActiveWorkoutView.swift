@@ -276,66 +276,24 @@ struct WatchActiveWorkoutView: View {
     // MARK: - Progress (live-ticking)
 
     private var elapsedAndProgress: some View {
-        let completed = liveWorkout?.completedExercises ?? progressSnapshot?.completedExercises ?? 0
-        let total = max(liveWorkout?.totalExercises ?? progressSnapshot?.totalExercises ?? 0, 1)
-        let baseElapsed = liveWorkout?.elapsedSeconds ?? progressSnapshot?.elapsedSeconds ?? 0
-        let capturedAt = liveWorkout?.capturedAt
-        let currentExerciseIndex = (currentContext?.exerciseIndex).map { min($0 + 1, total) } ?? min(completed + 1, total)
-
-        return VStack(alignment: .leading, spacing: 6) {
-            TimelineView(.periodic(from: .now, by: 1)) { timelineContext in
-                let ticked = liveTickedElapsed(
-                    base: baseElapsed,
-                    capturedAt: capturedAt,
-                    now: timelineContext.date,
-                    lifecycleState: activeLifecycleState
-                )
-                HStack(alignment: .firstTextBaseline) {
-                    Text(WatchDurationFormatter.format(ticked))
-                        .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(.primary)
-                        .minimumScaleFactor(0.7)
-                    Spacer(minLength: 4)
-                    Text("Ex \(currentExerciseIndex)/\(total)")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-            }
-            ProgressView(value: Double(completed), total: Double(total))
-                .progressViewStyle(.linear)
-                .tint(WatchPalette.primary)
-                .accessibilityLabel("Workout progress")
-                .accessibilityValue("\(completed) of \(total) exercises complete")
-            Text("\(completed) of \(total) exercises done")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            if let watchMetrics {
-                HStack(spacing: 10) {
-                    if let heartRate = watchMetrics.heartRateBPM {
-                        Label("\(Int(heartRate.rounded()))", systemImage: "heart.fill")
-                            .foregroundStyle(.red)
-                    }
-                    if let activeEnergy = watchMetrics.activeEnergyKilocalories {
-                        Label("\(Int(activeEnergy.rounded())) kcal", systemImage: "flame.fill")
-                            .foregroundStyle(.orange)
-                    }
-                }
-                .font(.caption2.weight(.semibold))
-            }
-        }
-        .watchCard(emphasized: true)
+        WatchElapsedProgressCard(presentation: elapsedProgressPresentation)
     }
 
-    private func liveTickedElapsed(
-        base: Int,
-        capturedAt: Date?,
-        now: Date,
-        lifecycleState: WatchWorkoutLifecycleState?
-    ) -> Int {
-        guard let capturedAt else { return base }
-        guard lifecycleState != .paused else { return base }
-        let drift = max(0, now.timeIntervalSince(capturedAt))
-        return base + Int(drift.rounded())
+    private var elapsedProgressPresentation: WatchElapsedProgressPresentation {
+        let completed = liveWorkout?.completedExercises ?? progressSnapshot?.completedExercises ?? 0
+        let total = max(liveWorkout?.totalExercises ?? progressSnapshot?.totalExercises ?? 0, 1)
+        let currentExerciseIndex = (currentContext?.exerciseIndex).map { min($0 + 1, total) } ?? min(completed + 1, total)
+
+        return WatchElapsedProgressPresentation(
+            completedExercises: completed,
+            totalExercises: total,
+            baseElapsedSeconds: liveWorkout?.elapsedSeconds ?? progressSnapshot?.elapsedSeconds ?? 0,
+            capturedAt: liveWorkout?.capturedAt,
+            currentExerciseIndex: currentExerciseIndex,
+            lifecycleState: activeLifecycleState,
+            heartRateBPM: watchMetrics?.heartRateBPM,
+            activeEnergyKilocalories: watchMetrics?.activeEnergyKilocalories
+        )
     }
 
     // MARK: - Fallback cards (used by fullScreenPanel)
@@ -732,26 +690,130 @@ struct WatchRestTimerPanel: View {
     let onSkip: () -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "timer")
+                    .font(.caption.weight(.semibold))
+                Text("Rest")
+                    .font(.caption2.weight(.semibold))
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+                Spacer(minLength: 0)
+                Text("\(timer.totalSeconds)s set")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(WatchPalette.positive)
+
+            WatchRestTimerCountdown(timer: timer)
+
+            Text(nextSetHint)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            Button {
+                onSkip()
+            } label: {
+                Label("Skip Rest", systemImage: "forward.end.fill")
+                    .font(.caption.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+    }
+
+    static func countdownText(for seconds: Int) -> String {
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+private struct WatchElapsedProgressPresentation: Equatable {
+    let completedExercises: Int
+    let totalExercises: Int
+    let baseElapsedSeconds: Int
+    let capturedAt: Date?
+    let currentExerciseIndex: Int
+    let lifecycleState: WatchWorkoutLifecycleState?
+    let heartRateBPM: Double?
+    let activeEnergyKilocalories: Double?
+
+    func tickedElapsed(at date: Date) -> Int {
+        guard let capturedAt else { return baseElapsedSeconds }
+        guard lifecycleState != .paused else { return baseElapsedSeconds }
+        let drift = max(0, date.timeIntervalSince(capturedAt))
+        return baseElapsedSeconds + Int(drift.rounded())
+    }
+
+    var progressSummaryText: String {
+        "\(completedExercises) of \(totalExercises) exercises done"
+    }
+
+    var accessibilityProgressValue: String {
+        "\(completedExercises) of \(totalExercises) exercises complete"
+    }
+}
+
+private struct WatchElapsedProgressCard: View {
+    let presentation: WatchElapsedProgressPresentation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            WatchElapsedProgressHeader(presentation: presentation)
+            ProgressView(value: Double(presentation.completedExercises), total: Double(presentation.totalExercises))
+                .progressViewStyle(.linear)
+                .tint(WatchPalette.primary)
+                .accessibilityLabel("Workout progress")
+                .accessibilityValue(presentation.accessibilityProgressValue)
+            Text(presentation.progressSummaryText)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if presentation.heartRateBPM != nil || presentation.activeEnergyKilocalories != nil {
+                HStack(spacing: 10) {
+                    if let heartRate = presentation.heartRateBPM {
+                        Label("\(Int(heartRate.rounded()))", systemImage: "heart.fill")
+                            .foregroundStyle(.red)
+                    }
+                    if let activeEnergy = presentation.activeEnergyKilocalories {
+                        Label("\(Int(activeEnergy.rounded())) kcal", systemImage: "flame.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .font(.caption2.weight(.semibold))
+            }
+        }
+        .watchCard(emphasized: true)
+    }
+}
+
+private struct WatchElapsedProgressHeader: View {
+    let presentation: WatchElapsedProgressPresentation
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { timelineContext in
+            HStack(alignment: .firstTextBaseline) {
+                Text(WatchDurationFormatter.format(presentation.tickedElapsed(at: timelineContext.date)))
+                    .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.primary)
+                    .minimumScaleFactor(0.7)
+                Spacer(minLength: 4)
+                Text("Ex \(presentation.currentExerciseIndex)/\(presentation.totalExercises)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct WatchRestTimerCountdown: View {
+    @ObservedObject var timer: WatchRestTimerController
+
+    var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let remainingSeconds = timer.remainingSeconds(at: context.date)
-            let countdownText = Self.countdownText(for: remainingSeconds)
-
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 4) {
-                    Image(systemName: "timer")
-                        .font(.caption.weight(.semibold))
-                    Text("Rest")
-                        .font(.caption2.weight(.semibold))
-                        .textCase(.uppercase)
-                        .tracking(0.4)
-                    Spacer(minLength: 0)
-                    Text("\(timer.totalSeconds)s set")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                .foregroundStyle(WatchPalette.positive)
-
-                Text(countdownText)
+                Text(WatchRestTimerPanel.countdownText(for: remainingSeconds))
                     .font(.system(size: 48, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(.primary)
                     .minimumScaleFactor(0.6)
@@ -761,27 +823,8 @@ struct WatchRestTimerPanel: View {
                 ProgressView(value: timer.progress(at: context.date), total: 1)
                     .progressViewStyle(.linear)
                     .tint(WatchPalette.positive)
-
-                Text(nextSetHint)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-
-                Button {
-                    onSkip()
-                } label: {
-                    Label("Skip Rest", systemImage: "forward.end.fill")
-                        .font(.caption.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
         }
-    }
-
-    private static func countdownText(for seconds: Int) -> String {
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }
 

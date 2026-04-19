@@ -132,64 +132,21 @@ struct WorkoutView: View {
     }
 
     private var timerSection: some View {
-        VStack(spacing: 14) {
-            WorkoutElapsedTimerText(
-                session: activeWorkoutSessionStore.session,
-                startTime: startTime,
-                isActive: isActive
-            )
-
-            if isActive {
+        WorkoutSessionChromeSection(
+            startTime: startTime,
+            isActive: isActive,
+            lifecycleState: lifecycleState,
+            onTogglePauseResume: {
                 if lifecycleState == .paused {
-                    Label("Workout Paused", systemImage: "pause.circle.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.orange)
-                } else if activeWorkoutSessionStore.session?.usesLinkedWatchHealthSession == true,
-                          let metrics = activeWorkoutSessionStore.latestWatchMetrics {
-                    HStack(spacing: 16) {
-                        if let heartRate = metrics.heartRateBPM {
-                            Label("\(Int(heartRate.rounded())) bpm", systemImage: "heart.fill")
-                                .foregroundStyle(.red)
-                        }
-                        if let activeEnergy = metrics.activeEnergyKilocalories {
-                            Label("\(Int(activeEnergy.rounded())) kcal", systemImage: "flame.fill")
-                                .foregroundStyle(.orange)
-                        }
-                    }
-                    .font(.subheadline.weight(.medium))
+                    resumeWorkout()
+                } else {
+                    pauseWorkout()
                 }
+            },
+            onStartWorkout: {
+                startActiveSession(with: [], programContext: nil)
             }
-
-            if isActive {
-                Button {
-                    if lifecycleState == .paused {
-                        resumeWorkout()
-                    } else {
-                        pauseWorkout()
-                    }
-                } label: {
-                    Label(
-                        lifecycleState == .paused ? "Resume Workout" : "Pause Workout",
-                        systemImage: lifecycleState == .paused ? "play.circle.fill" : "pause.circle.fill"
-                    )
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(lifecycleState == .paused ? .green : .orange)
-                }
-            } else {
-                Button {
-                    startActiveSession(with: [], programContext: nil)
-                } label: {
-                    Label("Start Workout", systemImage: "play.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.green)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .padding(.horizontal)
-            }
-        }
+        )
     }
 
     @ViewBuilder
@@ -703,34 +660,94 @@ struct WorkoutView: View {
     }
 }
 
-private struct WorkoutElapsedTimerText: View {
-    let session: ActiveWorkoutSession?
+private struct WorkoutSessionChromeSection: View {
+    @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
+
     let startTime: Date?
     let isActive: Bool
+    let lifecycleState: WatchWorkoutLifecycleState
+    let onTogglePauseResume: () -> Void
+    let onStartWorkout: () -> Void
+
+    private var timerPresentation: WorkoutElapsedTimerPresentation {
+        WorkoutElapsedTimerPresentation(
+            isActive: isActive,
+            startTime: startTime,
+            session: activeWorkoutSessionStore.session
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            WorkoutElapsedTimerText(presentation: timerPresentation)
+
+            if isActive {
+                WorkoutSessionStatusRow(
+                    lifecycleState: lifecycleState,
+                    usesLinkedWatchHealthSession: activeWorkoutSessionStore.session?.usesLinkedWatchHealthSession == true,
+                    latestWatchMetrics: activeWorkoutSessionStore.latestWatchMetrics
+                )
+
+                Button(action: onTogglePauseResume) {
+                    Label(
+                        lifecycleState == .paused ? "Resume Workout" : "Pause Workout",
+                        systemImage: lifecycleState == .paused ? "play.circle.fill" : "pause.circle.fill"
+                    )
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(lifecycleState == .paused ? .green : .orange)
+                }
+            } else {
+                Button(action: onStartWorkout) {
+                    Label("Start Workout", systemImage: "play.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.green)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+}
+
+private struct WorkoutSessionStatusRow: View {
+    let lifecycleState: WatchWorkoutLifecycleState
+    let usesLinkedWatchHealthSession: Bool
+    let latestWatchMetrics: WatchWorkoutMetricsPayload?
+
+    @ViewBuilder
+    var body: some View {
+        if lifecycleState == .paused {
+            Label("Workout Paused", systemImage: "pause.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.orange)
+        } else if usesLinkedWatchHealthSession, let latestWatchMetrics {
+            HStack(spacing: 16) {
+                if let heartRate = latestWatchMetrics.heartRateBPM {
+                    Label("\(Int(heartRate.rounded())) bpm", systemImage: "heart.fill")
+                        .foregroundStyle(.red)
+                }
+                if let activeEnergy = latestWatchMetrics.activeEnergyKilocalories {
+                    Label("\(Int(activeEnergy.rounded())) kcal", systemImage: "flame.fill")
+                        .foregroundStyle(.orange)
+                }
+            }
+            .font(.subheadline.weight(.medium))
+        }
+    }
+}
+
+private struct WorkoutElapsedTimerText: View {
+    let presentation: WorkoutElapsedTimerPresentation
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            Text(formattedElapsed(at: context.date))
+            Text(presentation.formattedElapsed(at: context.date))
                 .font(.system(size: 56, weight: .thin, design: .monospaced))
                 .frame(maxWidth: .infinity, alignment: .center)
         }
-    }
-
-    private func formattedElapsed(at date: Date) -> String {
-        let elapsedSeconds = resolvedElapsedSeconds(at: date)
-        let h = elapsedSeconds / 3600
-        let m = (elapsedSeconds % 3600) / 60
-        let s = elapsedSeconds % 60
-        return String(format: "%02d:%02d:%02d", h, m, s)
-    }
-
-    private func resolvedElapsedSeconds(at date: Date) -> Int {
-        guard isActive else { return 0 }
-        if let session {
-            return session.elapsedSeconds(at: date)
-        }
-        guard let startTime else { return 0 }
-        return max(0, Int(date.timeIntervalSince(startTime)))
     }
 }
 

@@ -3669,6 +3669,28 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 17 [Timer invalidation isolation on phone and watch] — 2026-04-18
+
+- Isolated phone-side active-workout timer updates into smaller presentation seams so timer churn no longer sits on the same observation path as the root shell or the full workout editor:
+  - `ContentView` now renders the active-workout banner through a dedicated host view instead of observing the active workout store directly at the app-shell level
+  - added `WorkoutElapsedTimerPresentation` and `ActiveWorkoutBannerPresentation` so the banner and workout editor can hand the live clock off to narrow timer-only subviews
+  - `WorkoutView` now routes its timer and watch-metric chrome through `WorkoutSessionChromeSection`, keeping the large exercise-entry scroll surface out of the timer/watch-metric observation path
+- Tightened the watch live-workout timer subtree so per-second updates stay inside the countdown/elapsed surfaces instead of the larger summary and rest pages:
+  - the watch summary card now uses `WatchElapsedProgressCard` with a dedicated `WatchElapsedProgressHeader` timeline-driven clock
+  - the rest page now limits `TimelineView` updates to `WatchRestTimerCountdown`, leaving the static rest header, next-set hint, and skip button outside the 1 Hz redraw path
+  - live workout, rest timer, and root presentation behavior remain unchanged; this pass only narrows render scope
+- Added focused Prompt 17 coverage in `Feature16Prompt17TimerPresentationTests.swift`:
+  - running active-session elapsed time advances from accumulated state
+  - paused sessions do not keep ticking
+  - local start-time fallback and inactive-zero behavior stay correct
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt17TimerPresentationTests`
+
+**Commit:** `refactor: isolate workout timer invalidation`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

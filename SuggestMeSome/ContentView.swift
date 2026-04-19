@@ -44,7 +44,6 @@ enum MainTab: Int, CaseIterable {
 // MARK: - ContentView
 
 struct ContentView: View {
-    @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
     @State private var selectedTab: Int = MainTab.dailyCoach.rawValue
     @State private var showingActiveWorkout = false
     @AppStorage("appColorScheme") private var appColorScheme: String = "system"
@@ -55,10 +54,8 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if activeWorkoutSessionStore.hasActiveSession {
-                ActiveWorkoutBanner {
-                    showingActiveWorkout = true
-                }
+            ActiveWorkoutBannerHost {
+                showingActiveWorkout = true
             }
 
             TabView(selection: $selectedTab) {
@@ -114,51 +111,66 @@ struct ContentView: View {
 
 // MARK: - Active Workout Banner
 
-struct ActiveWorkoutBanner: View {
+private struct ActiveWorkoutBannerHost: View {
     @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
 
     let onResume: () -> Void
 
     var body: some View {
         if let session = activeWorkoutSessionStore.session {
-            Button(action: onResume) {
-                HStack(spacing: 10) {
-                    Image(systemName: "timer")
-                        .font(.headline)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Workout in Progress")
-                            .font(.subheadline.weight(.semibold))
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            Text("\(formattedElapsed(for: session, at: context.date)) · \(exerciseCountLabel(session.exerciseEntries.count))")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.85))
-                        }
-                    }
-                    Spacer()
-                    Text("Resume")
-                        .font(.subheadline.weight(.semibold))
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 10)
-                .foregroundStyle(.white)
-                .background(Color.indigo)
-            }
-            .buttonStyle(.plain)
+            ActiveWorkoutBanner(
+                presentation: ActiveWorkoutBannerPresentation(
+                    elapsedTimer: WorkoutElapsedTimerPresentation(
+                        isActive: true,
+                        startTime: session.startTime,
+                        session: session
+                    ),
+                    exerciseCount: session.exerciseEntries.count
+                ),
+                onResume: onResume
+            )
         }
     }
+}
 
-    private func formattedElapsed(for session: ActiveWorkoutSession, at date: Date) -> String {
-        let elapsedSeconds = session.elapsedSeconds(at: date)
-        let h = elapsedSeconds / 3600
-        let m = (elapsedSeconds % 3600) / 60
-        let s = elapsedSeconds % 60
-        return String(format: "%02d:%02d:%02d", h, m, s)
+struct ActiveWorkoutBanner: View {
+    let presentation: ActiveWorkoutBannerPresentation
+    let onResume: () -> Void
+
+    var body: some View {
+        Button(action: onResume) {
+            HStack(spacing: 10) {
+                Image(systemName: "timer")
+                    .font(.headline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Workout in Progress")
+                        .font(.subheadline.weight(.semibold))
+                    ActiveWorkoutBannerTimerLine(presentation: presentation)
+                }
+                Spacer()
+                Text("Resume")
+                    .font(.subheadline.weight(.semibold))
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .foregroundStyle(.white)
+            .background(Color.indigo)
+        }
+        .buttonStyle(.plain)
     }
+}
 
-    private func exerciseCountLabel(_ count: Int) -> String {
-        count == 1 ? "1 exercise" : "\(count) exercises"
+private struct ActiveWorkoutBannerTimerLine: View {
+    let presentation: ActiveWorkoutBannerPresentation
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            Text("\(presentation.elapsedTimer.formattedElapsed(at: context.date)) · \(presentation.exerciseCountText)")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.85))
+        }
     }
 }
 
