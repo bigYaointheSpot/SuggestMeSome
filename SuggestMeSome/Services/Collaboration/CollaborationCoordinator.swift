@@ -109,6 +109,10 @@ final class CollaborationCoordinator {
 
     private func recordError(_ endpoint: CollaborationEndpoint, _ error: Error) {
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        recordErrorMessage(endpoint, message: message)
+    }
+
+    private func recordErrorMessage(_ endpoint: CollaborationEndpoint, message: String) {
         endpointErrors[endpoint] = message
         lastErrorMessage = message
         appendActivity(.error, message)
@@ -116,6 +120,9 @@ final class CollaborationCoordinator {
 
     private func clearError(_ endpoint: CollaborationEndpoint) {
         endpointErrors[endpoint] = nil
+        // Recompute aggregate so top-level banners clear once the last
+        // failure is resolved instead of showing a stale message.
+        lastErrorMessage = endpointErrors.values.first
     }
 
     init(
@@ -432,9 +439,7 @@ final class CollaborationCoordinator {
     }
 
     func recordPushRegistrationError(_ message: String) async {
-        lastErrorMessage = message
-        endpointErrors[.pushRegistration] = message
-        appendActivity(.error, message)
+        recordErrorMessage(.pushRegistration, message: message)
 
         guard let modelContext else { return }
         let registration = DevicePushRegistrationDTO(

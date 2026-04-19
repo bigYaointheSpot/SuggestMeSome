@@ -191,20 +191,33 @@ struct HTTPCloudCollaborationClient: CloudCollaborationClient {
         _ request: URLRequest,
         retryable: Bool
     ) async throws -> Response {
-        // Exponential backoff delays for GET retries: 250ms, 750ms, 2s.
-        let retryDelaysNanos: [UInt64] = retryable
+        // Exponential backoff delays for GET retries: 250ms, 750ms, 2s (each
+        // ±20% jitter applied at send-time to avoid synchronized retries).
+        let retryBaseDelaysNanos: [UInt64] = retryable
             ? [250_000_000, 750_000_000, 2_000_000_000]
             : []
+        // Overall deadline — foreground refresh fans out many GETs in parallel
+        // and a stuck connection should not pin a task for minutes.
+        let deadline = Date().addingTimeInterval(retryable ? 15.0 : 60.0)
 
         var attempt = 0
         while true {
+            if Date() >= deadline {
+                throw CloudBackendClientError.network("Request timed out")
+            }
             do {
                 let (data, response) = try await session.data(for: request)
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw CloudBackendClientError.invalidResponse
                 }
-                if (500...599).contains(httpResponse.statusCode), attempt < retryDelaysNanos.count {
-                    try await Task.sleep(nanoseconds: retryDelaysNanos[attempt])
+                if (500...599).contains(httpResponse.statusCode),
+                   attempt < retryBaseDelaysNanos.count,
+                   let sleepNanos = nextRetryDelayNanos(
+                    baseDelays: retryBaseDelaysNanos,
+                    attempt: attempt,
+                    deadline: deadline
+                   ) {
+                    try await Task.sleep(nanoseconds: sleepNanos)
                     attempt += 1
                     continue
                 }
@@ -218,8 +231,17 @@ struct HTTPCloudCollaborationClient: CloudCollaborationClient {
                 }
             } catch let error as CloudBackendClientError {
                 throw error
-            } catch let urlError as URLError where attempt < retryDelaysNanos.count && shouldRetry(urlError) {
-                try await Task.sleep(nanoseconds: retryDelaysNanos[attempt])
+            } catch let urlError as URLError where attempt < retryBaseDelaysNanos.count && shouldRetry(urlError) {
+                guard let sleepNanos = nextRetryDelayNanos(
+                    baseDelays: retryBaseDelaysNanos,
+                    attempt: attempt,
+                    deadline: deadline
+                ) else {
+                    throw CloudBackendClientError.network(
+                        urlError.localizedDescription
+                    )
+                }
+                try await Task.sleep(nanoseconds: sleepNanos)
                 attempt += 1
                 continue
             } catch {
@@ -228,6 +250,26 @@ struct HTTPCloudCollaborationClient: CloudCollaborationClient {
                 )
             }
         }
+    }
+
+    /// Returns the sleep duration for `attempt` with ±20% jitter, clamped so
+    /// we never sleep past the overall deadline. Returns nil if the deadline
+    /// leaves no room to retry.
+    private func nextRetryDelayNanos(
+        baseDelays: [UInt64],
+        attempt: Int,
+        deadline: Date
+    ) -> UInt64? {
+        guard attempt < baseDelays.count else { return nil }
+        let base = Double(baseDelays[attempt])
+        let jitter = Double.random(in: 0.8...1.2)
+        let jittered = UInt64(base * jitter)
+        let remainingSeconds = deadline.timeIntervalSince(Date())
+        guard remainingSeconds > 0 else { return nil }
+        let remainingNanos = UInt64(remainingSeconds * 1_000_000_000)
+        // Leave at least 50ms of headroom for the follow-up request itself.
+        guard remainingNanos > 50_000_000 else { return nil }
+        return min(jittered, remainingNanos - 50_000_000)
     }
 
     private func shouldRetry(_ error: URLError) -> Bool {

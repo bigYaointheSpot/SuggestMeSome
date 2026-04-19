@@ -92,9 +92,7 @@ struct TrainingProgramsTab: View {
                 programButtonLabel(
                     "From Coach",
                     systemImage: "tray.full",
-                    badge: collaborationCoordinator.inboxAssignments.isEmpty
-                        ? nil
-                        : "\(collaborationCoordinator.inboxAssignments.count)"
+                    badge: formatBadgeCount(collaborationCoordinator.inboxAssignments.count)
                 )
             }
 
@@ -104,9 +102,7 @@ struct TrainingProgramsTab: View {
                 programButtonLabel(
                     "Saved",
                     systemImage: "square.stack.3d.up.fill",
-                    badge: collaborationCoordinator.blueprints.isEmpty
-                        ? nil
-                        : "\(collaborationCoordinator.blueprints.count)"
+                    badge: formatBadgeCount(collaborationCoordinator.blueprints.count)
                 )
             }
         }
@@ -144,6 +140,11 @@ struct TrainingProgramsTab: View {
         .buttonStyle(.plain)
         .padding(.horizontal)
         .padding(.bottom, 8)
+    }
+
+    private func formatBadgeCount(_ count: Int) -> String? {
+        guard count > 0 else { return nil }
+        return count > 99 ? "99+" : "\(count)"
     }
 
     private func programButtonLabel(_ title: String, systemImage: String, badge: String? = nil) -> some View {
