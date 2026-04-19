@@ -3811,6 +3811,27 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 **Commit:** `fix: normalize draft exercise order after structural edits`
 
+#### Prompt 3 [Compact unchanged watch exercise roster transport] — 2026-04-19
+
+- Hardened iPhone-side watch context delivery without changing the public watch payload shape:
+  - added an internal `WatchSessionExerciseRosterFingerprint` that keys only to workout/session identity plus the ordered roster structure (`DraftExerciseEntry` IDs, order, cardio flag, and display name)
+  - added a tiny `WatchCurrentSessionContextTransportPolicy` that decides between a full replayable context and a compact transport context for the current live send
+- Updated `DefaultWatchCompanionBridge` to keep the full current-session context for replay while shrinking unchanged live sends:
+  - first context for a workout/session version still includes the full `sessionExerciseRoster`
+  - unchanged-structure context updates now send a compact `WatchCurrentSessionContext` with `sessionExerciseRoster = nil`
+  - launch and completion reset the last-sent roster fingerprint so the next session context always rehydrates the watch with a full roster
+  - reconnect / replay paths still use the stored full context, so roster restoration remains lossless after bridge replay
+- Added Prompt 3 coverage in `Feature17Prompt3WatchContextTransportTests.swift`:
+  - initial current-session context includes the full roster
+  - non-structural context updates compact the transport payload while preserving the replayable full context
+  - reorder, new-workout, and new-session-version changes force a full roster transport again
+  - compacted replay state can still rehydrate a full roster on reconnect
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature17Prompt3WatchContextTransportTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests`
+
+**Commit:** `refactor: compact unchanged watch exercise rosters`
+
 ---
 
 ## Project Setup

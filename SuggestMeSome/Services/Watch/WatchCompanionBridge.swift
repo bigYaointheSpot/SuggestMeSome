@@ -29,6 +29,59 @@ protocol WatchCompanionBridge {
     func sendSessionCompletion(_ payload: WatchSessionCompletionPayload) async
 }
 
+struct WatchSessionExerciseRosterFingerprint: Equatable, Hashable {
+    struct Entry: Equatable, Hashable {
+        let id: UUID
+        let orderIndex: Int
+        let name: String
+        let isCardio: Bool
+    }
+
+    let workoutID: UUID
+    let sessionVersionStableID: String?
+    let entries: [Entry]
+
+    init?(context: WatchCurrentSessionContext) {
+        guard let roster = context.sessionExerciseRoster else { return nil }
+        self.workoutID = context.workoutID
+        self.sessionVersionStableID = context.sessionVersionStableID
+        self.entries = roster.map {
+            Entry(
+                id: $0.id,
+                orderIndex: $0.orderIndex,
+                name: $0.name,
+                isCardio: $0.isCardio
+            )
+        }
+    }
+}
+
+struct WatchCurrentSessionContextDeliveryDecision: Equatable {
+    let replayableContext: WatchCurrentSessionContext
+    let transportContext: WatchCurrentSessionContext
+    let rosterFingerprint: WatchSessionExerciseRosterFingerprint?
+}
+
+enum WatchCurrentSessionContextTransportPolicy {
+    static func makeDecision(
+        context: WatchCurrentSessionContext,
+        lastSentRosterFingerprint: WatchSessionExerciseRosterFingerprint?
+    ) -> WatchCurrentSessionContextDeliveryDecision {
+        let fingerprint = WatchSessionExerciseRosterFingerprint(context: context)
+        let transportContext: WatchCurrentSessionContext
+        if let fingerprint, fingerprint == lastSentRosterFingerprint {
+            transportContext = context.compactingSessionExerciseRoster()
+        } else {
+            transportContext = context
+        }
+        return WatchCurrentSessionContextDeliveryDecision(
+            replayableContext: context,
+            transportContext: transportContext,
+            rosterFingerprint: fingerprint
+        )
+    }
+}
+
 @MainActor
 final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     static let shared = DefaultWatchCompanionBridge()
@@ -46,6 +99,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     private var latestSessionCompletionPayload: WatchSessionCompletionPayload?
     private var latestPremiumLockedSnapshot: WatchTodayPlanSnapshot?
     private var replayState = WatchReplayState()
+    private var lastSentCurrentSessionRosterFingerprint: WatchSessionExerciseRosterFingerprint?
 
 #if canImport(WatchConnectivity)
     private let session: WCSession?
@@ -103,6 +157,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestLiveWorkoutSnapshot = nil
         latestCurrentSessionContext = nil
         latestSessionCompletionPayload = nil
+        lastSentCurrentSessionRosterFingerprint = nil
         LiveWorkoutActivityController.shared.start(
             launch: payload,
             sessionLabel: Self.sessionLabel(for: payload)
@@ -173,8 +228,13 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     }
 
     func sendCurrentSessionContext(_ context: WatchCurrentSessionContext) async {
-        latestCurrentSessionContext = context
+        let decision = WatchCurrentSessionContextTransportPolicy.makeDecision(
+            context: context,
+            lastSentRosterFingerprint: lastSentCurrentSessionRosterFingerprint
+        )
+        latestCurrentSessionContext = decision.replayableContext
         latestSessionCompletionPayload = nil
+        lastSentCurrentSessionRosterFingerprint = decision.rosterFingerprint
 #if canImport(WatchConnectivity)
         guard let session else { return }
         guard hasPremiumWatchAccess else {
@@ -182,8 +242,15 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
             return
         }
         guard canSendPayloads(on: session) else { return }
-        guard shouldSendPayload(kind: .currentSessionContext, payload: context, dedupeIdentical: true) else { return }
-        guard let message = Self.makeContextMessage(kind: .currentSessionContext, payload: context) else { return }
+        guard shouldSendPayload(
+            kind: .currentSessionContext,
+            payload: decision.transportContext,
+            dedupeIdentical: true
+        ) else { return }
+        guard let message = Self.makeContextMessage(
+            kind: .currentSessionContext,
+            payload: decision.transportContext
+        ) else { return }
         sendContextMessage(message, on: session)
 #else
         _ = context
@@ -196,6 +263,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
         latestWorkoutProgressSnapshot = nil
         latestLiveWorkoutSnapshot = nil
         latestCurrentSessionContext = nil
+        lastSentCurrentSessionRosterFingerprint = nil
         LiveWorkoutActivityController.shared.end()
 #if canImport(WatchConnectivity)
         guard let session else { return }
@@ -215,6 +283,14 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
 #else
         _ = payload
 #endif
+    }
+}
+
+private extension WatchCurrentSessionContext {
+    func compactingSessionExerciseRoster() -> WatchCurrentSessionContext {
+        var compacted = self
+        compacted.sessionExerciseRoster = nil
+        return compacted
     }
 }
 
