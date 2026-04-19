@@ -43,6 +43,7 @@ enum MainTab: Int, CaseIterable {
 // MARK: - ContentView
 
 struct ContentView: View {
+    @Environment(AppRouteCoordinator.self) private var appRouteCoordinator
     @State private var selectedTab: Int = MainTab.dailyCoach.rawValue
     @State private var showingActiveWorkout = false
     @AppStorage("appColorScheme") private var appColorScheme: String = "system"
@@ -100,11 +101,15 @@ struct ContentView: View {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Done") {
                                 showingActiveWorkout = false
-                            }
-                        }
-                    }
+                }
             }
         }
+        .onChange(of: appRouteCoordinator.activeRoute) { _, route in
+            guard let route else { return }
+            selectedTab = route.targetTab.rawValue
+        }
+    }
+}
     }
 }
 

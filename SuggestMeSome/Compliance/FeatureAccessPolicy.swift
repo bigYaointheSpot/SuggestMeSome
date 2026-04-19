@@ -10,6 +10,7 @@ enum PremiumFeature: String, CaseIterable, Identifiable {
     case dashboardAnalytics
     case smartWorkoutGeneration
     case trainingPrograms
+    case coachCollaboration
     case healthData
     case watchCompanion
     case nextBlockPlanning
@@ -26,6 +27,8 @@ enum PremiumFeature: String, CaseIterable, Identifiable {
             return "Smart Workout Generation"
         case .trainingPrograms:
             return "Training Programs"
+        case .coachCollaboration:
+            return "Coach Collaboration"
         case .healthData:
             return "Apple Health"
         case .watchCompanion:
@@ -45,6 +48,8 @@ enum PremiumFeature: String, CaseIterable, Identifiable {
             return "wand.and.stars"
         case .trainingPrograms:
             return "list.clipboard"
+        case .coachCollaboration:
+            return "person.2.wave.2.fill"
         case .healthData:
             return "heart.text.square.fill"
         case .watchCompanion:
@@ -64,6 +69,8 @@ enum PremiumFeature: String, CaseIterable, Identifiable {
             return "Unlock smart workout generation and adaptive suggestions."
         case .trainingPrograms:
             return "Unlock smart program building and adaptive program tools."
+        case .coachCollaboration:
+            return "Unlock invite-only coach collaboration, assignments, and private sharing tools."
         case .healthData:
             return "Unlock Apple Health integration for recovery and workout context."
         case .watchCompanion:
@@ -83,6 +90,8 @@ enum PremiumFeature: String, CaseIterable, Identifiable {
             return "Smart workout generation builds session suggestions from your saved training context and preferences."
         case .trainingPrograms:
             return "Training Programs includes smart generation, templates, active program tracking, and adaptive overlays."
+        case .coachCollaboration:
+            return "Coach collaboration adds private coach-athlete relationships, assignment inboxes, deterministic cloud insights, and invite-scoped sharing."
         case .healthData:
             return "Apple Health access is optional and premium-gated. The free workout logger remains fully usable without it."
         case .watchCompanion:
@@ -117,6 +126,12 @@ enum PremiumFeature: String, CaseIterable, Identifiable {
                 "Program templates and smart generation",
                 "Adaptive overlays and review surfaces",
                 "Multi-week training planning"
+            ]
+        case .coachCollaboration:
+            return [
+                "Invite-only coach roster and athlete overview tools",
+                "Assignment inbox, blueprint library, and coach notes",
+                "Deterministic cloud insights and private sharing controls"
             ]
         case .healthData:
             return [

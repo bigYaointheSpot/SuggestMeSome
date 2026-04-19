@@ -15,6 +15,8 @@ struct SettingsTab: View {
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(AccountManager.self) private var accountManager
     @Environment(CloudSyncManager.self) private var cloudSyncManager
+    @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
+    @Environment(AppRouteCoordinator.self) private var appRouteCoordinator
 
     // MARK: Preferences
     @AppStorage("globalWeightUnit") private var globalWeightUnit: String = WeightUnit.lbs.rawValue
@@ -94,6 +96,7 @@ struct SettingsTab: View {
                 preferencesSection
                 workoutSection
                 cloudSyncSection
+                collaborationSection
                 quickLinksSection
                 accountSection
                 premiumSection
@@ -136,6 +139,22 @@ struct SettingsTab: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text(deleteAllMessage())
+            }
+            .sheet(
+                item: Binding(
+                    get: {
+                        guard let route = appRouteCoordinator.activeRoute,
+                              route.targetTab == .settings else {
+                            return nil
+                        }
+                        return route
+                    },
+                    set: { (_: AppDeepLinkRoute?) in
+                        appRouteCoordinator.clear()
+                    }
+                )
+            ) { route in
+                CollaborationRouteSheetView(route: route)
             }
         }
     }
@@ -249,6 +268,41 @@ struct SettingsTab: View {
             Text("Cloud Sync")
         } footer: {
             Text("Cloud sync keeps workouts, programs, daily coaching, adaptive history, and key training preferences aligned across signed-in devices. Apple Health-derived recovery data stays on this device in Feature 18.")
+        }
+    }
+
+    private var collaborationSection: some View {
+        Section {
+            NavigationLink {
+                CollaborationHubView()
+            } label: {
+                HStack {
+                    Label("Coach Collaboration", systemImage: "person.2.wave.2.fill")
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(collaborationCoordinator.phase.title)
+                            .foregroundStyle(.secondary)
+                        Text("\(collaborationCoordinator.relationships.count) relationship(s)")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+
+            NavigationLink {
+                NotificationPreferencesView()
+            } label: {
+                HStack {
+                    Label("Notifications", systemImage: "bell.badge.fill")
+                    Spacer()
+                    Text(PushNotificationManager.shared.authorizationState.title)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("Coach Collaboration")
+        } footer: {
+            Text("Invite-only coach workflows, deterministic cloud insight snapshots, private program sharing, private progress sharing, and push delivery are layered on top of the Feature 18 account-backed sync foundation.")
         }
     }
 

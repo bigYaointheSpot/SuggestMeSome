@@ -450,6 +450,7 @@ final class AccountManager {
 
     private let authService: AuthService
     private weak var cloudSyncManager: CloudSyncManager?
+    private weak var collaborationCoordinator: CollaborationCoordinator?
 
     private(set) var sessionState: SessionState = .signedOut
     private(set) var knownAccounts: [UserAccount] = []
@@ -609,6 +610,13 @@ final class AccountManager {
         }
     }
 
+    func configureCollaborationCoordinator(_ coordinator: CollaborationCoordinator) {
+        collaborationCoordinator = coordinator
+        Task { @MainActor in
+            await coordinator.handleAccountStateDidChange(currentState)
+        }
+    }
+
     func reloadFromPersistence() {
         statusMessage = nil
         lastErrorMessage = nil
@@ -624,6 +632,11 @@ final class AccountManager {
         if let cloudSyncManager {
             Task { @MainActor in
                 await cloudSyncManager.handleAccountStateDidChange(state)
+            }
+        }
+        if let collaborationCoordinator {
+            Task { @MainActor in
+                await collaborationCoordinator.handleAccountStateDidChange(state)
             }
         }
     }

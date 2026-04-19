@@ -321,6 +321,7 @@ struct DailyCoachView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
     @Environment(PurchaseManager.self) private var purchaseManager
+    @Environment(AppRouteCoordinator.self) private var appRouteCoordinator
 
     // MARK: Queries
 
@@ -442,6 +443,7 @@ struct DailyCoachView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     todayTrainingCard
+                    DailyCoachCloudUpdatesCard()
                     if isBetweenBlocks {
                         betweenBlocksContextCard
                     }
@@ -492,6 +494,22 @@ struct DailyCoachView: View {
                 if let pw = pendingProgramWorkout {
                     WorkoutView(programWorkout: pw, preparedDraft: pendingDraft?.entries)
                 }
+            }
+            .sheet(
+                item: Binding(
+                    get: {
+                        guard let route = appRouteCoordinator.activeRoute,
+                              route.targetTab == .dailyCoach else {
+                            return nil
+                        }
+                        return route
+                    },
+                    set: { (_: AppDeepLinkRoute?) in
+                        appRouteCoordinator.clear()
+                    }
+                )
+            ) { route in
+                CollaborationRouteSheetView(route: route)
             }
         }
         .sheet(isPresented: $showingCheckInSheet) {

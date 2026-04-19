@@ -45,6 +45,7 @@ struct DashboardView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
+    @Environment(AppRouteCoordinator.self) private var appRouteCoordinator
     @Query(sort: \Workout.date, order: .reverse) private var allWorkouts: [Workout]
     @Query(filter: #Predicate<ProgramRun> { run in run.isCompleted == false })
     private var activeProgramRuns: [ProgramRun]
@@ -139,6 +140,7 @@ struct DashboardView: View {
                     quickStartSection
                     timeWindowPicker
                     statsBar
+                    CollaborationInsightSummaryCard()
                     strengthTrendsCard
                     if viewModel.hasAdaptiveSignals || viewModel.snapshotFatigueStatus != nil {
                         adaptiveSignalsRow
@@ -232,6 +234,22 @@ struct DashboardView: View {
                 }
             } message: {
                 Text("Starting a new workout will delete the in-progress draft.")
+            }
+            .sheet(
+                item: Binding(
+                    get: {
+                        guard let route = appRouteCoordinator.activeRoute,
+                              route.targetTab == .dashboard else {
+                            return nil
+                        }
+                        return route
+                    },
+                    set: { (_: AppDeepLinkRoute?) in
+                        appRouteCoordinator.clear()
+                    }
+                )
+            ) { route in
+                CollaborationRouteSheetView(route: route)
             }
         }
         .task(id: dashboardRefreshToken) {

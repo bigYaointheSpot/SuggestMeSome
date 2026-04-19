@@ -3,6 +3,8 @@ import SwiftUI
 
 struct TrainingProgramsTab: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
+    @Environment(AppRouteCoordinator.self) private var appRouteCoordinator
     @Query private var programRuns: [ProgramRun]
     @Query(sort: \Workout.date, order: .reverse) private var allWorkouts: [Workout]
     @Query private var allProposals: [AdaptationProposal]
@@ -32,6 +34,7 @@ struct TrainingProgramsTab: View {
         NavigationStack {
             VStack(spacing: 0) {
                 programButtonRow
+                collaborationButtonRow
                 Divider()
                 programRunList
             }
@@ -45,6 +48,22 @@ struct TrainingProgramsTab: View {
             }
             .task(id: previewCacheRefreshToken) {
                 clearPlannedSessionPreviewCache()
+            }
+            .sheet(
+                item: Binding(
+                    get: {
+                        guard let route = appRouteCoordinator.activeRoute,
+                              route.targetTab == .programs else {
+                            return nil
+                        }
+                        return route
+                    },
+                    set: { (_: AppDeepLinkRoute?) in
+                        appRouteCoordinator.clear()
+                    }
+                )
+            ) { route in
+                CollaborationRouteSheetView(route: route)
             }
         }
     }
@@ -72,6 +91,44 @@ struct TrainingProgramsTab: View {
         .padding(.bottom, 8)
     }
 
+    private var collaborationButtonRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                NavigationLink {
+                    AssignmentInboxView()
+                } label: {
+                    collaborationPill(
+                        "Assignments",
+                        systemImage: "tray.full",
+                        detail: "\(collaborationCoordinator.inboxAssignments.count) pending"
+                    )
+                }
+
+                NavigationLink {
+                    BlueprintLibraryView()
+                } label: {
+                    collaborationPill(
+                        "Blueprints",
+                        systemImage: "square.stack.3d.up.fill",
+                        detail: "\(collaborationCoordinator.blueprints.count) saved"
+                    )
+                }
+
+                NavigationLink {
+                    CollaborationHubView()
+                } label: {
+                    collaborationPill(
+                        "Coach Hub",
+                        systemImage: "person.2.wave.2.fill",
+                        detail: "\(collaborationCoordinator.relationships.count) linked"
+                    )
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        }
+    }
+
     private func programButtonLabel(_ title: String, systemImage: String) -> some View {
         VStack(spacing: 6) {
             Image(systemName: systemImage)
@@ -87,6 +144,20 @@ struct TrainingProgramsTab: View {
         .padding(.vertical, 14)
         .background(Color.indigo.gradient)
         .foregroundStyle(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func collaborationPill(_ title: String, systemImage: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
