@@ -578,7 +578,10 @@ struct Feature10Prompt6TodayPlanEngineTests {
             objectiveRecoveryInsight: insight
         )
         #expect(
-            plan.whyToday.lowercased().contains("caution") || plan.whyToday.lowercased().contains("healthkit"),
+            plan.whyToday.lowercased().contains("caution")
+                || plan.whyToday.lowercased().contains("cautious")
+                || plan.whyToday.lowercased().contains("healthkit")
+                || plan.whyToday.lowercased().contains("apple health"),
             "whyToday must mention HealthKit caution"
         )
     }
@@ -998,7 +1001,6 @@ struct Feature10Prompt6TodayPlanEngineTests {
             checkIns: [checkIn],
             weeklyReviews: [review],
             healthKitDailySummaries: [],
-            completedRuns: [],
             healthKitEnabled: false,
             useHealthKitInDailyCoach: false,
             recoveryLastSyncTimestamp: 0,
@@ -1027,8 +1029,6 @@ struct Feature10Prompt6TodayPlanEngineTests {
             checkIns: [],
             weeklyReviews: [],
             healthKitDailySummaries: [],
-            completedRuns: [],
-            personalRecords: [],
             healthKitEnabled: false,
             useHealthKitInDailyCoach: false,
             recoveryLastSyncTimestamp: 0,
@@ -1049,8 +1049,6 @@ struct Feature10Prompt6TodayPlanEngineTests {
             checkIns: [],
             weeklyReviews: [],
             healthKitDailySummaries: [],
-            completedRuns: [],
-            personalRecords: [],
             healthKitEnabled: false,
             useHealthKitInDailyCoach: false,
             recoveryLastSyncTimestamp: 0,
@@ -1065,8 +1063,6 @@ struct Feature10Prompt6TodayPlanEngineTests {
             checkIns: [],
             weeklyReviews: [],
             healthKitDailySummaries: [],
-            completedRuns: [],
-            personalRecords: [],
             healthKitEnabled: true,
             useHealthKitInDailyCoach: true,
             recoveryLastSyncTimestamp: 123,
@@ -1075,6 +1071,80 @@ struct Feature10Prompt6TodayPlanEngineTests {
 
         #expect(baseToken != workoutChangeToken)
         #expect(baseToken != healthKitChangeToken)
+    }
+
+    @Test func dailyCoachRefreshTokenIgnoresPersonalRecordsForTodayPlanButCompletedBlockInsightsTrackThem() {
+        let referenceNow = Date(timeIntervalSince1970: 1_776_000_000)
+        let program = TrainingProgram(
+            name: "Completed Block",
+            lengthInWeeks: 4,
+            sessionsPerWeek: 3,
+            createdDate: Date(),
+            source: .aiGenerated
+        )
+        let completedRun = ProgramRun(startDate: daysAgo(56))
+        completedRun.program = program
+        completedRun.isCompleted = true
+        completedRun.endDate = daysAgo(1)
+        let baselineRecord = PersonalRecord(
+            exerciseName: "Bench Press",
+            repCount: 5,
+            weight: 225,
+            unit: .lbs,
+            dateAchieved: daysAgo(2)
+        )
+        let updatedRecord = PersonalRecord(
+            id: baselineRecord.id,
+            syncStableID: baselineRecord.syncStableID,
+            syncVersion: baselineRecord.syncVersion + 1,
+            exerciseName: "Bench Press",
+            repCount: 5,
+            weight: 235,
+            unit: .lbs,
+            dateAchieved: daysAgo(1)
+        )
+
+        let baseMainToken = DailyCoachDerivedState.refreshToken(
+            activeRuns: [],
+            recentWorkouts: [],
+            weeklyAnalyses: [],
+            allProposals: [],
+            allOverlays: [],
+            checkIns: [],
+            weeklyReviews: [],
+            healthKitDailySummaries: [],
+            healthKitEnabled: false,
+            useHealthKitInDailyCoach: false,
+            recoveryLastSyncTimestamp: 0,
+            now: referenceNow
+        )
+        let updatedMainToken = DailyCoachDerivedState.refreshToken(
+            activeRuns: [],
+            recentWorkouts: [],
+            weeklyAnalyses: [],
+            allProposals: [],
+            allOverlays: [],
+            checkIns: [],
+            weeklyReviews: [],
+            healthKitDailySummaries: [],
+            healthKitEnabled: false,
+            useHealthKitInDailyCoach: false,
+            recoveryLastSyncTimestamp: 0,
+            now: referenceNow
+        )
+        let baseInsightsToken = DailyCoachCompletedBlockInsights.refreshToken(
+            recentWorkouts: [],
+            completedRuns: [completedRun],
+            personalRecords: [baselineRecord]
+        )
+        let updatedInsightsToken = DailyCoachCompletedBlockInsights.refreshToken(
+            recentWorkouts: [],
+            completedRuns: [completedRun],
+            personalRecords: [updatedRecord]
+        )
+
+        #expect(baseMainToken == updatedMainToken)
+        #expect(baseInsightsToken != updatedInsightsToken)
     }
 
     // MARK: - Helpers

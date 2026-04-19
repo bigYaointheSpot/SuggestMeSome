@@ -140,7 +140,7 @@ struct Feature16Prompt6TrainingProgramsSnapshotTests {
         )
     }
 
-    @Test func programRunListRefreshTokenChangesWhenOverlayChanges() {
+    @Test func programRunListRefreshTokenIgnoresOverlayOnlyChangesWhilePreviewCacheTokenTracksThem() {
         let run = makeRun(
             name: "Overlay Run",
             source: .aiGenerated,
@@ -172,18 +172,23 @@ struct Feature16Prompt6TrainingProgramsSnapshotTests {
             programRuns: [run],
             workouts: [],
             proposals: [],
-            events: [],
-            overlays: [baseOverlay]
+            events: []
         )
         let updatedToken = ProgramRunListSnapshot.refreshToken(
             programRuns: [run],
             workouts: [],
             proposals: [],
-            events: [],
+            events: []
+        )
+        let initialPreviewToken = ProgramRunListSnapshot.previewCacheRefreshToken(
+            overlays: [baseOverlay]
+        )
+        let updatedPreviewToken = ProgramRunListSnapshot.previewCacheRefreshToken(
             overlays: [updatedOverlay]
         )
 
-        #expect(initialToken != updatedToken)
+        #expect(initialToken == updatedToken)
+        #expect(initialPreviewToken != updatedPreviewToken)
     }
 
     @Test func programSessionPreviewSnapshotLoadsWorkingExerciseAndWarmups() throws {

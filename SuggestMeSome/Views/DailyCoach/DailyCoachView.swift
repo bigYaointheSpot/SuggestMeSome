@@ -9,6 +9,63 @@
 import SwiftUI
 import SwiftData
 
+struct DailyCoachCompletedBlockInsights {
+    let latestCompletedRun: ProgramRun?
+    let latestCompletedReviewSnapshot: MesocycleReviewSnapshot?
+    let longHorizonSummary: LongHorizonAdaptationSummary?
+
+    static let placeholder = DailyCoachCompletedBlockInsights(
+        latestCompletedRun: nil,
+        latestCompletedReviewSnapshot: nil,
+        longHorizonSummary: nil
+    )
+
+    static func refreshToken(
+        recentWorkouts: [Workout],
+        completedRuns: [ProgramRun],
+        personalRecords: [PersonalRecord]
+    ) -> Int {
+        var hasher = Hasher()
+        combine(completedRuns, into: &hasher) { run, hasher in
+            hasher.combine(run.id)
+            hasher.combine(run.syncVersion)
+            hasher.combine(run.syncLastModifiedAt)
+            hasher.combine(run.isCompleted)
+            hasher.combine(run.endDate)
+        }
+        combine(recentWorkouts, into: &hasher) { workout, hasher in
+            hasher.combine(workout.id)
+            hasher.combine(workout.syncVersion)
+            hasher.combine(workout.syncLastModifiedAt)
+            hasher.combine(workout.date)
+            hasher.combine(workout.programRun?.id)
+            hasher.combine(workout.programWeekNumber)
+            hasher.combine(workout.programSessionNumber)
+        }
+        combine(personalRecords, into: &hasher) { record, hasher in
+            hasher.combine(record.id)
+            hasher.combine(record.syncVersion)
+            hasher.combine(record.syncLastModifiedAt)
+            hasher.combine(record.dateAchieved)
+            hasher.combine(record.exerciseName)
+            hasher.combine(record.repCount)
+            hasher.combine(record.weight)
+        }
+        return hasher.finalize()
+    }
+
+    private static func combine<Row>(
+        _ rows: [Row],
+        into hasher: inout Hasher,
+        rowHasher: (Row, inout Hasher) -> Void
+    ) {
+        hasher.combine(rows.count)
+        for row in rows {
+            rowHasher(row, &hasher)
+        }
+    }
+}
+
 struct DailyCoachDerivedState {
     let focusRun: ProgramRun?
     let pendingProposals: [AdaptationProposal]
@@ -36,12 +93,10 @@ struct DailyCoachDerivedState {
         checkIns: [],
         weeklyReviews: [],
         healthKitDailySummaries: [],
-        completedRuns: [],
         healthKitEnabled: false,
         useHealthKitInDailyCoach: false,
         recoveryLastSyncTimestamp: 0,
-        latestCompletedReviewSnapshot: nil,
-        longHorizonSummary: nil,
+        completedBlockInsights: .placeholder,
         now: .distantPast
     )
 
@@ -54,12 +109,10 @@ struct DailyCoachDerivedState {
         checkIns: [DailyCoachCheckIn],
         weeklyReviews: [DailyCoachWeeklyReview],
         healthKitDailySummaries: [HealthKitDailySummary],
-        completedRuns: [ProgramRun],
         healthKitEnabled: Bool,
         useHealthKitInDailyCoach: Bool,
         recoveryLastSyncTimestamp: Double,
-        latestCompletedReviewSnapshot: MesocycleReviewSnapshot? = nil,
-        longHorizonSummary: LongHorizonAdaptationSummary? = nil,
+        completedBlockInsights: DailyCoachCompletedBlockInsights = .placeholder,
         now: Date = .now
     ) -> DailyCoachDerivedState {
         let focusRun = TrainingContextQueryService.activeProgramRuns(from: activeRuns).first
@@ -125,8 +178,6 @@ struct DailyCoachDerivedState {
             )
             return context.overlaysAffectingTodayCount > 0
         }()
-        let latestCompletedRun = TrainingContextQueryService.latestCompletedRun(from: completedRuns)
-
         return DailyCoachDerivedState(
             focusRun: focusRun,
             pendingProposals: pendingProposals,
@@ -137,9 +188,9 @@ struct DailyCoachDerivedState {
             todayPlan: todayPlan,
             relevantProposalForTodayPlan: relevantProposalForTodayPlan,
             overlaysAffectTodaySession: overlaysAffectTodaySession,
-            latestCompletedRun: latestCompletedRun,
-            latestCompletedReviewSnapshot: latestCompletedReviewSnapshot,
-            longHorizonSummary: longHorizonSummary
+            latestCompletedRun: completedBlockInsights.latestCompletedRun,
+            latestCompletedReviewSnapshot: completedBlockInsights.latestCompletedReviewSnapshot,
+            longHorizonSummary: completedBlockInsights.longHorizonSummary
         )
     }
 
@@ -152,8 +203,6 @@ struct DailyCoachDerivedState {
         checkIns: [DailyCoachCheckIn],
         weeklyReviews: [DailyCoachWeeklyReview],
         healthKitDailySummaries: [HealthKitDailySummary],
-        completedRuns: [ProgramRun],
-        personalRecords: [PersonalRecord],
         healthKitEnabled: Bool,
         useHealthKitInDailyCoach: Bool,
         recoveryLastSyncTimestamp: Double,
@@ -231,23 +280,26 @@ struct DailyCoachDerivedState {
             hasher.combine(summary.sourceUpdatedAt)
             hasher.combine(summary.updatedAt)
         }
-        combine(completedRuns, into: &hasher) { run, hasher in
-            hasher.combine(run.id)
-            hasher.combine(run.syncVersion)
-            hasher.combine(run.syncLastModifiedAt)
-            hasher.combine(run.isCompleted)
-            hasher.combine(run.endDate)
-        }
-        combine(personalRecords, into: &hasher) { record, hasher in
-            hasher.combine(record.id)
-            hasher.combine(record.syncVersion)
-            hasher.combine(record.syncLastModifiedAt)
-            hasher.combine(record.dateAchieved)
-            hasher.combine(record.exerciseName)
-            hasher.combine(record.repCount)
-            hasher.combine(record.weight)
-        }
         return hasher.finalize()
+    }
+
+    func replacingCompletedBlockInsights(
+        _ insights: DailyCoachCompletedBlockInsights
+    ) -> DailyCoachDerivedState {
+        DailyCoachDerivedState(
+            focusRun: focusRun,
+            pendingProposals: pendingProposals,
+            latestAnalysis: latestAnalysis,
+            latestReview: latestReview,
+            objectiveRecoveryEvaluation: objectiveRecoveryEvaluation,
+            todayCheckIn: todayCheckIn,
+            todayPlan: todayPlan,
+            relevantProposalForTodayPlan: relevantProposalForTodayPlan,
+            overlaysAffectTodaySession: overlaysAffectTodaySession,
+            latestCompletedRun: insights.latestCompletedRun,
+            latestCompletedReviewSnapshot: insights.latestCompletedReviewSnapshot,
+            longHorizonSummary: insights.longHorizonSummary
+        )
     }
 
     private static func combine<Row>(
@@ -310,6 +362,7 @@ struct DailyCoachView: View {
     private var recoveryLastSyncTimestamp: Double = 0
 
     @State private var derivedState = DailyCoachDerivedState.placeholder
+    @State private var completedBlockInsights = DailyCoachCompletedBlockInsights.placeholder
     @State private var hasPublishedInitialTodayPlan = false
 
     private var focusRun: ProgramRun? { derivedState.focusRun }
@@ -323,7 +376,7 @@ struct DailyCoachView: View {
     private var overlaysAffectTodaySession: Bool { derivedState.overlaysAffectTodaySession }
     private var latestCompletedRun: ProgramRun? { derivedState.latestCompletedRun }
     private var latestCompletedReviewSnapshot: MesocycleReviewSnapshot? { derivedState.latestCompletedReviewSnapshot }
-    private var isBetweenBlocks: Bool { derivedState.isBetweenBlocks }
+    private var isBetweenBlocks: Bool { focusRun == nil && latestCompletedRun != nil }
     private var longHorizonSummary: LongHorizonAdaptationSummary? { derivedState.longHorizonSummary }
     private var derivedStateRefreshToken: Int {
         DailyCoachDerivedState.refreshToken(
@@ -335,11 +388,17 @@ struct DailyCoachView: View {
             checkIns: checkIns,
             weeklyReviews: weeklyReviews,
             healthKitDailySummaries: healthKitDailySummaries,
-            completedRuns: completedRuns,
-            personalRecords: personalRecords,
             healthKitEnabled: healthKitEnabled,
             useHealthKitInDailyCoach: useHealthKitInDailyCoach,
             recoveryLastSyncTimestamp: recoveryLastSyncTimestamp
+        )
+    }
+
+    private var completedBlockInsightsRefreshToken: Int {
+        DailyCoachCompletedBlockInsights.refreshToken(
+            recentWorkouts: recentWorkouts,
+            completedRuns: completedRuns,
+            personalRecords: personalRecords
         )
     }
 
@@ -558,6 +617,9 @@ struct DailyCoachView: View {
         }
         .task(id: derivedStateRefreshToken) {
             refreshDerivedState()
+        }
+        .task(id: completedBlockInsightsRefreshToken) {
+            refreshCompletedBlockInsights()
         }
         .onAppear {
             if purchaseManager.isPremiumUnlocked {
@@ -1622,8 +1684,6 @@ struct DailyCoachView: View {
     // MARK: - Session Launch Helpers
 
     private func refreshDerivedState(now: Date = .now) {
-        let latestCompletedReviewSnapshot = resolvedLatestCompletedReviewSnapshot()
-        let longHorizonSummary = resolvedLongHorizonSummary()
         let refreshedState = DailyCoachDerivedState.build(
             activeRuns: activeRuns,
             recentWorkouts: recentWorkouts,
@@ -1633,12 +1693,10 @@ struct DailyCoachView: View {
             checkIns: checkIns,
             weeklyReviews: weeklyReviews,
             healthKitDailySummaries: healthKitDailySummaries,
-            completedRuns: completedRuns,
             healthKitEnabled: healthKitEnabled,
             useHealthKitInDailyCoach: useHealthKitInDailyCoach,
             recoveryLastSyncTimestamp: recoveryLastSyncTimestamp,
-            latestCompletedReviewSnapshot: latestCompletedReviewSnapshot,
-            longHorizonSummary: longHorizonSummary,
+            completedBlockInsights: completedBlockInsights,
             now: now
         )
         derivedState = refreshedState
@@ -1646,6 +1704,12 @@ struct DailyCoachView: View {
             hasPublishedInitialTodayPlan = true
             publishTodayPlanToWatchIfNeeded(force: true, using: refreshedState)
         }
+    }
+
+    private func refreshCompletedBlockInsights() {
+        let insights = resolvedCompletedBlockInsights()
+        completedBlockInsights = insights
+        derivedState = derivedState.replacingCompletedBlockInsights(insights)
     }
 
     private var watchTodayPlanSignature: String {
@@ -1900,26 +1964,24 @@ struct DailyCoachView: View {
         }
     }
 
-    private func resolvedLatestCompletedReviewSnapshot() -> MesocycleReviewSnapshot? {
+    private func resolvedCompletedBlockInsights() -> DailyCoachCompletedBlockInsights {
         guard let latestCompletedRun = TrainingContextQueryService.latestCompletedRun(from: completedRuns) else {
-            return nil
+            return .placeholder
         }
-        return TrainingReadRepository.mesocycleReviewSnapshot(
+        let latestCompletedReviewSnapshot = TrainingReadRepository.mesocycleReviewSnapshot(
             for: latestCompletedRun,
             context: modelContext
         )
-    }
-
-    private func resolvedLongHorizonSummary() -> LongHorizonAdaptationSummary? {
-        guard let latestCompletedRun = TrainingContextQueryService.latestCompletedRun(from: completedRuns) else {
-            return nil
-        }
         let summary = TrainingReadRepository.longHorizonAdaptationSummary(
             endingWith: latestCompletedRun,
             maxBlocks: 3,
             context: modelContext
         )
-        return summary.blockCount > 0 ? summary : nil
+        return DailyCoachCompletedBlockInsights(
+            latestCompletedRun: latestCompletedRun,
+            latestCompletedReviewSnapshot: latestCompletedReviewSnapshot,
+            longHorizonSummary: summary.blockCount > 0 ? summary : nil
+        )
     }
 
     private func prepareReviewSheet() {

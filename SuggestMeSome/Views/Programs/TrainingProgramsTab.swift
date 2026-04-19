@@ -18,7 +18,12 @@ struct TrainingProgramsTab: View {
             programRuns: programRuns,
             workouts: allWorkouts,
             proposals: allProposals,
-            events: allEvents,
+            events: allEvents
+        )
+    }
+
+    private var previewCacheRefreshToken: Int {
+        ProgramRunListSnapshot.previewCacheRefreshToken(
             overlays: allOverlays
         )
     }
@@ -37,6 +42,9 @@ struct TrainingProgramsTab: View {
             }
             .task(id: programsRefreshToken) {
                 refreshListSnapshot()
+            }
+            .task(id: previewCacheRefreshToken) {
+                clearPlannedSessionPreviewCache()
             }
         }
     }
@@ -127,6 +135,10 @@ struct TrainingProgramsTab: View {
             proposals: allProposals,
             events: allEvents
         )
+        clearPlannedSessionPreviewCache()
+    }
+
+    private func clearPlannedSessionPreviewCache() {
         plannedSessionPreviewCache = [:]
         loadingSessionPreviewKeys = []
     }

@@ -128,12 +128,99 @@ struct Feature16Prompt5WorkoutHistoryTests {
         #expect(snapshot.latestDate == filtered.last?.date)
     }
 
+    @Test func workoutHistoryRefreshTokenIgnoresSetDetailChangesWhenFilterInputsStayEquivalent() {
+        let chest = MuscleGroup(name: "Chest")
+        chest.exercises = [Exercise(name: "Bench Press", exerciseType: .compound, muscleGroup: chest)]
+        let baselineWorkout = makeWorkout(
+            exerciseName: "Bench Press",
+            date: day(-1),
+            setSpecs: [(5, 225, false)]
+        )
+        let updatedWorkout = makeWorkout(
+            id: baselineWorkout.id,
+            exerciseName: "Bench Press",
+            date: baselineWorkout.date,
+            setSpecs: [(8, 315, false)]
+        )
+        let filters = WorkoutHistoryFilterInputs(
+            isDateFilterEnabled: false,
+            startDate: day(-7),
+            endDate: Date(),
+            selectedGroupNames: ["Chest"],
+            selectedExerciseNames: [],
+            isPersonalRecordOnly: false
+        )
+
+        let baselineToken = WorkoutHistoryDerivedState.refreshToken(
+            workouts: [baselineWorkout],
+            muscleGroups: [chest],
+            filters: filters
+        )
+        let updatedToken = WorkoutHistoryDerivedState.refreshToken(
+            workouts: [updatedWorkout],
+            muscleGroups: [chest],
+            filters: filters
+        )
+
+        #expect(baselineToken == updatedToken)
+    }
+
+    @Test func workoutHistoryRefreshTokenTracksPRFlagsAndExerciseGroupMembership() {
+        let chest = MuscleGroup(name: "Chest")
+        chest.exercises = [Exercise(name: "Bench Press", exerciseType: .compound, muscleGroup: chest)]
+        let expandedChest = MuscleGroup(name: "Chest")
+        expandedChest.exercises = [
+            Exercise(name: "Bench Press", exerciseType: .compound, muscleGroup: expandedChest),
+            Exercise(name: "Incline Bench Press", exerciseType: .compound, muscleGroup: expandedChest)
+        ]
+        let baselineWorkout = makeWorkout(
+            exerciseName: "Bench Press",
+            date: day(-1),
+            setSpecs: [(5, 225, false)]
+        )
+        let prWorkout = makeWorkout(
+            id: baselineWorkout.id,
+            exerciseName: "Bench Press",
+            date: baselineWorkout.date,
+            setSpecs: [(5, 225, true)]
+        )
+        let filters = WorkoutHistoryFilterInputs(
+            isDateFilterEnabled: false,
+            startDate: day(-7),
+            endDate: Date(),
+            selectedGroupNames: ["Chest"],
+            selectedExerciseNames: [],
+            isPersonalRecordOnly: true
+        )
+
+        let baselineToken = WorkoutHistoryDerivedState.refreshToken(
+            workouts: [baselineWorkout],
+            muscleGroups: [chest],
+            filters: filters
+        )
+        let prToken = WorkoutHistoryDerivedState.refreshToken(
+            workouts: [prWorkout],
+            muscleGroups: [chest],
+            filters: filters
+        )
+        let expandedMembershipToken = WorkoutHistoryDerivedState.refreshToken(
+            workouts: [baselineWorkout],
+            muscleGroups: [expandedChest],
+            filters: filters
+        )
+
+        #expect(baselineToken != prToken)
+        #expect(baselineToken != expandedMembershipToken)
+    }
+
     private func makeWorkout(
+        id: UUID? = nil,
         exerciseName: String,
         date: Date,
         setSpecs: [(reps: Int, weight: Double, isPR: Bool)]
     ) -> Workout {
         let workout = Workout(
+            id: id ?? UUID(),
             date: date,
             startTime: date,
             durationSeconds: 1_800

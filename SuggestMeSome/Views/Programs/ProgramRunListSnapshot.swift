@@ -1,6 +1,63 @@
 import Foundation
 import SwiftData
 
+private struct ProgramRunListRefreshFingerprint: Hashable {
+    let runFingerprints: [ProgramRunRefreshFingerprint]
+    let workoutFingerprints: [ProgramRunWorkoutRefreshFingerprint]
+    let proposalFingerprints: [ProgramRunProposalRefreshFingerprint]
+    let eventFingerprints: [ProgramRunEventRefreshFingerprint]
+}
+
+private struct ProgramRunRefreshFingerprint: Hashable {
+    let runID: UUID
+    let startDate: Date
+    let endDate: Date?
+    let isCompleted: Bool
+    let syncVersion: Int
+    let syncLastModifiedAt: Date
+}
+
+private struct ProgramRunWorkoutRefreshFingerprint: Hashable {
+    let workoutID: UUID
+    let date: Date
+    let syncVersion: Int
+    let syncLastModifiedAt: Date
+    let runID: UUID?
+    let weekNumber: Int?
+    let sessionNumber: Int?
+}
+
+private struct ProgramRunProposalRefreshFingerprint: Hashable {
+    let proposalID: UUID
+    let runID: UUID?
+    let priority: Int
+    let statusRawValue: String
+    let createdAt: Date
+    let syncVersion: Int
+    let syncLastModifiedAt: Date
+}
+
+private struct ProgramRunEventRefreshFingerprint: Hashable {
+    let eventID: UUID
+    let runID: UUID?
+    let timestamp: Date
+    let eventTypeRawValue: String
+}
+
+private struct TrainingProgramsPreviewCacheRefreshFingerprint: Hashable {
+    let overlayFingerprints: [ProgramRunOverlayRefreshFingerprint]
+}
+
+private struct ProgramRunOverlayRefreshFingerprint: Hashable {
+    let overlayID: UUID
+    let runID: UUID?
+    let appliedAt: Date
+    let overlayStatusRawValue: String
+    let summaryText: String
+    let syncVersion: Int
+    let syncLastModifiedAt: Date
+}
+
 struct ProgramRunSessionPreviewKey: Hashable {
     let runID: UUID
     let weekNumber: Int
@@ -172,80 +229,108 @@ struct ProgramRunListSnapshot {
         programRuns: [ProgramRun],
         workouts: [Workout],
         proposals: [AdaptationProposal],
-        events: [AdaptationEventHistory],
-        overlays: [AppliedProgramOverlay]
+        events: [AdaptationEventHistory]
     ) -> Int {
+        let fingerprint = ProgramRunListRefreshFingerprint(
+            runFingerprints: programRuns
+                .map { run in
+                    ProgramRunRefreshFingerprint(
+                        runID: run.id,
+                        startDate: run.startDate,
+                        endDate: run.endDate,
+                        isCompleted: run.isCompleted,
+                        syncVersion: run.syncVersion,
+                        syncLastModifiedAt: run.syncLastModifiedAt
+                    )
+                }
+                .sorted(by: { lhs, rhs in
+                    if lhs.startDate != rhs.startDate {
+                        return lhs.startDate > rhs.startDate
+                    }
+                    return lhs.runID.uuidString > rhs.runID.uuidString
+                }),
+            workoutFingerprints: workouts
+                .map { workout in
+                    ProgramRunWorkoutRefreshFingerprint(
+                        workoutID: workout.id,
+                        date: workout.date,
+                        syncVersion: workout.syncVersion,
+                        syncLastModifiedAt: workout.syncLastModifiedAt,
+                        runID: workout.programRun?.id,
+                        weekNumber: workout.programWeekNumber,
+                        sessionNumber: workout.programSessionNumber
+                    )
+                }
+                .sorted(by: { lhs, rhs in
+                    if lhs.date != rhs.date {
+                        return lhs.date > rhs.date
+                    }
+                    return lhs.workoutID.uuidString > rhs.workoutID.uuidString
+                }),
+            proposalFingerprints: proposals
+                .map { proposal in
+                    ProgramRunProposalRefreshFingerprint(
+                        proposalID: proposal.id,
+                        runID: proposal.programRun?.id,
+                        priority: proposal.priority,
+                        statusRawValue: proposal.proposalStatus.rawValue,
+                        createdAt: proposal.createdAt,
+                        syncVersion: proposal.syncVersion,
+                        syncLastModifiedAt: proposal.syncLastModifiedAt
+                    )
+                }
+                .sorted(by: { lhs, rhs in
+                    if lhs.createdAt != rhs.createdAt {
+                        return lhs.createdAt > rhs.createdAt
+                    }
+                    return lhs.proposalID.uuidString > rhs.proposalID.uuidString
+                }),
+            eventFingerprints: events
+                .map { event in
+                    ProgramRunEventRefreshFingerprint(
+                        eventID: event.id,
+                        runID: event.programRun?.id,
+                        timestamp: event.timestamp,
+                        eventTypeRawValue: event.eventType.rawValue
+                    )
+                }
+                .sorted(by: { lhs, rhs in
+                    if lhs.timestamp != rhs.timestamp {
+                        return lhs.timestamp > rhs.timestamp
+                    }
+                    return lhs.eventID.uuidString > rhs.eventID.uuidString
+                })
+        )
+
         var hasher = Hasher()
+        hasher.combine(fingerprint)
+        return hasher.finalize()
+    }
 
-        for run in programRuns.sorted(by: { lhs, rhs in
-            if lhs.startDate != rhs.startDate {
-                return lhs.startDate > rhs.startDate
-            }
-            return lhs.id.uuidString > rhs.id.uuidString
-        }) {
-            hasher.combine(run.id)
-            hasher.combine(run.startDate)
-            hasher.combine(run.endDate)
-            hasher.combine(run.isCompleted)
-            hasher.combine(run.syncVersion)
-            hasher.combine(run.syncLastModifiedAt)
-        }
+    static func previewCacheRefreshToken(overlays: [AppliedProgramOverlay]) -> Int {
+        let fingerprint = TrainingProgramsPreviewCacheRefreshFingerprint(
+            overlayFingerprints: overlays
+                .map { overlay in
+                    ProgramRunOverlayRefreshFingerprint(
+                        overlayID: overlay.id,
+                        runID: overlay.programRun?.id,
+                        appliedAt: overlay.appliedAt,
+                        overlayStatusRawValue: overlay.overlayStatus.rawValue,
+                        summaryText: overlay.summaryText ?? "",
+                        syncVersion: overlay.syncVersion,
+                        syncLastModifiedAt: overlay.syncLastModifiedAt
+                    )
+                }
+                .sorted(by: { lhs, rhs in
+                    if lhs.appliedAt != rhs.appliedAt {
+                        return lhs.appliedAt > rhs.appliedAt
+                    }
+                    return lhs.overlayID.uuidString > rhs.overlayID.uuidString
+                })
+        )
 
-        for workout in workouts.sorted(by: { lhs, rhs in
-            if lhs.date != rhs.date {
-                return lhs.date > rhs.date
-            }
-            return lhs.id.uuidString > rhs.id.uuidString
-        }) {
-            hasher.combine(workout.id)
-            hasher.combine(workout.date)
-            hasher.combine(workout.syncVersion)
-            hasher.combine(workout.syncLastModifiedAt)
-            hasher.combine(workout.programRun?.id)
-            hasher.combine(workout.programWeekNumber)
-            hasher.combine(workout.programSessionNumber)
-        }
-
-        for proposal in proposals.sorted(by: { lhs, rhs in
-            if lhs.createdAt != rhs.createdAt {
-                return lhs.createdAt > rhs.createdAt
-            }
-            return lhs.id.uuidString > rhs.id.uuidString
-        }) {
-            hasher.combine(proposal.id)
-            hasher.combine(proposal.programRun?.id)
-            hasher.combine(proposal.priority)
-            hasher.combine(proposal.proposalStatus.rawValue)
-            hasher.combine(proposal.createdAt)
-            hasher.combine(proposal.syncVersion)
-            hasher.combine(proposal.syncLastModifiedAt)
-        }
-
-        for event in events.sorted(by: { lhs, rhs in
-            if lhs.timestamp != rhs.timestamp {
-                return lhs.timestamp > rhs.timestamp
-            }
-            return lhs.id.uuidString > rhs.id.uuidString
-        }) {
-            hasher.combine(event.id)
-            hasher.combine(event.programRun?.id)
-            hasher.combine(event.timestamp)
-            hasher.combine(event.eventType.rawValue)
-        }
-
-        for overlay in overlays.sorted(by: { lhs, rhs in
-            if lhs.appliedAt != rhs.appliedAt {
-                return lhs.appliedAt > rhs.appliedAt
-            }
-            return lhs.id.uuidString > rhs.id.uuidString
-        }) {
-            hasher.combine(overlay.id)
-            hasher.combine(overlay.programRun?.id)
-            hasher.combine(overlay.appliedAt)
-            hasher.combine(overlay.overlayStatus.rawValue)
-            hasher.combine(overlay.summaryText)
-        }
-
+        var hasher = Hasher()
+        hasher.combine(fingerprint)
         return hasher.finalize()
     }
 }

@@ -3743,6 +3743,24 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 21 [Narrow refresh and invalidation paths to behavior-specific inputs] — 2026-04-18
+
+- Narrowed the Feature 16 refresh tokens so large SwiftUI surfaces only invalidate on the inputs that actually affect their rendered outputs:
+  - `WorkoutHistoryDerivedState` now fingerprints only workout identity/date, exercise names, PR presence, filter inputs, and exercise-group membership instead of hashing full nested workout detail
+  - `ProgramRunListSnapshot` now splits the main list refresh token from the planned-session preview cache token, so overlay-only changes clear the preview cache without rebuilding the whole programs list snapshot
+  - `DailyCoachView` now keeps the main today-plan token scoped to recommendation inputs and refreshes completed-block review / long-horizon insights through a smaller secondary token
+- Added focused Prompt 21 coverage across the touched refresh paths:
+  - `Feature16Prompt5WorkoutHistoryTests.swift` now verifies set-detail-only changes do not invalidate workout history while PR and exercise-group membership changes still do
+  - `Feature16Prompt6TrainingProgramsSnapshotTests.swift` now verifies overlay-only changes invalidate preview cache behavior without changing the main programs list token
+  - `Feature10Prompt6TodayPlanEngineTests.swift` now verifies PR-only changes stay out of the today-plan token while completed-block insights continue to refresh, and its existing Apple Health caution wording assertion now accepts the shipped "Apple Health ... cautious" phrasing
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt5WorkoutHistoryTests -only-testing:SuggestMeSomeTests/Feature16Prompt6TrainingProgramsSnapshotTests -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests`
+
+**Commit:** `refactor: narrow feature 16 refresh tokens`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

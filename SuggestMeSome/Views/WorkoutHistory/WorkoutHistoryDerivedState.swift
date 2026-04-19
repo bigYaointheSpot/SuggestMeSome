@@ -1,5 +1,23 @@
 import Foundation
 
+private struct WorkoutHistoryExerciseGroupFingerprint: Hashable {
+    let groupName: String
+    let exerciseNames: [String]
+}
+
+private struct WorkoutHistoryWorkoutFingerprint: Hashable {
+    let workoutID: UUID
+    let date: Date
+    let exerciseNames: [String]
+    let containsPersonalRecord: Bool
+}
+
+private struct WorkoutHistoryDerivedFingerprint: Hashable {
+    let filters: WorkoutHistoryFilterInputs
+    let exerciseGroups: [WorkoutHistoryExerciseGroupFingerprint]
+    let workouts: [WorkoutHistoryWorkoutFingerprint]
+}
+
 struct WorkoutHistoryFilterInputs: Hashable {
     var isDateFilterEnabled: Bool
     var startDate: Date
@@ -133,43 +151,34 @@ struct WorkoutHistoryDerivedState {
         muscleGroups: [MuscleGroup],
         filters: WorkoutHistoryFilterInputs
     ) -> Int {
-        var hasher = Hasher()
-        hasher.combine(filters)
-
-        for group in muscleGroups.sorted(by: { $0.name < $1.name }) {
-            hasher.combine(group.name)
-            for exercise in group.exercises.sorted(by: { $0.name < $1.name }) {
-                hasher.combine(exercise.name)
-                hasher.combine(exercise.exerciseType.rawValue)
-            }
-        }
-
-        for workout in workouts.sorted(by: { lhs, rhs in
-            if lhs.date != rhs.date {
-                return lhs.date > rhs.date
-            }
-            return lhs.id.uuidString > rhs.id.uuidString
-        }) {
-            hasher.combine(workout.id)
-            hasher.combine(workout.date)
-            hasher.combine(workout.programWeekNumber)
-            hasher.combine(workout.programSessionNumber)
-            for entry in workout.exerciseEntries.sorted(by: { $0.orderIndex < $1.orderIndex }) {
-                hasher.combine(entry.id)
-                hasher.combine(entry.exerciseName)
-                hasher.combine(entry.orderIndex)
-                hasher.combine(entry.isCardio)
-                hasher.combine(entry.cardioDurationSeconds)
-                for set in entry.sets.sorted(by: { $0.setNumber < $1.setNumber }) {
-                    hasher.combine(set.id)
-                    hasher.combine(set.setNumber)
-                    hasher.combine(set.reps)
-                    hasher.combine(set.weight)
-                    hasher.combine(set.isPR)
+        let fingerprint = WorkoutHistoryDerivedFingerprint(
+            filters: filters,
+            exerciseGroups: muscleGroups
+                .map { group in
+                    WorkoutHistoryExerciseGroupFingerprint(
+                        groupName: group.name,
+                        exerciseNames: group.exercises.map(\.name).sorted()
+                    )
                 }
-            }
-        }
-
+                .sorted(by: { $0.groupName < $1.groupName }),
+            workouts: workouts
+                .map { workout in
+                    WorkoutHistoryWorkoutFingerprint(
+                        workoutID: workout.id,
+                        date: workout.date,
+                        exerciseNames: Array(Set(workout.exerciseEntries.map(\.exerciseName))).sorted(),
+                        containsPersonalRecord: containsPersonalRecord(in: workout)
+                    )
+                }
+                .sorted(by: { lhs, rhs in
+                    if lhs.date != rhs.date {
+                        return lhs.date > rhs.date
+                    }
+                    return lhs.workoutID.uuidString > rhs.workoutID.uuidString
+                })
+        )
+        var hasher = Hasher()
+        hasher.combine(fingerprint)
         return hasher.finalize()
     }
 
