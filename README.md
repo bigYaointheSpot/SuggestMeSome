@@ -3906,6 +3906,41 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 - Verification:
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests`
 
+### Feature 19 — Coach collaboration, deterministic cloud intelligence, and private sharing
+
+**Status:** Complete
+
+#### Prompt 1 [Invite-only collaboration, push foundations, cloud insight surfaces, and private sharing] — 2026-04-19
+
+- Added a separate collaboration domain on top of Feature 18's personal cloud sync:
+  - introduced `CloudCollaborationClient` plus dedicated collaboration DTOs for coach relationships, invites, assignments, notes, push registrations, notification preferences, insight snapshots, weekly digests, blueprints, private program shares, and progress shares
+  - added server-authoritative SwiftData cache models and `LocalCollaborationCacheStore` so collaboration data stays isolated from the personal sync batch while still persisting locally for fast app launch and offline readback
+  - added `CollaborationCoordinator` as the app-level orchestration layer for refresh, cache loading, invite/assignment/note actions, blueprint saves, private sharing actions, push registration, and signed-in account lifecycle handling
+- Wired collaboration and deterministic cloud intelligence into the shipped iPhone surfaces:
+  - `Training Programs` now exposes an assignment inbox, blueprint library, and collaboration hub entry point
+  - `Dashboard` now surfaces deterministic cloud insight cards and private progress sharing entry points
+  - `Daily Coach` now surfaces coach-note and weekly-digest updates plus deterministic nudge explainability
+  - `Settings` now includes collaboration management, notification preferences, push status, invite/review controls, and private sharing controls
+- Added invite-only coach workflows and private sharing flows without introducing a public social layer:
+  - coaches and athletes can manage private relationships, scope visibility, send invites, review roster snapshots, assign saved blueprints, and exchange read-only coach notes
+  - users can save immutable program blueprints from synced programs, then reuse them for coach assignments or private program sharing
+  - users can create account-scoped private progress shares for PRs, lift trends, adherence summaries, and completed-block snapshots without exposing raw Apple Health-derived recovery data
+- Added push-notification and deep-link foundations for collaboration:
+  - introduced `PushNotificationManager`, APNs device-token registration, notification authorization state handling, and backend device registration plumbing
+  - added `AppRouteCoordinator` and collaboration-specific deep-link targets so push notifications can route into existing tabs instead of adding a new root tab
+  - kept push delivery deterministic and explainable by decoding structured nudge explanations into `Daily Coach` surfaces
+- Hardened monetization and privacy boundaries for the new collaboration layer:
+  - added the `coachCollaboration` premium gate and wired coach-facing roster/review/assignment capabilities behind it while keeping athlete-facing collaboration and analytics aligned with existing feature access rules
+  - added explicit UI/privacy copy that collaboration data remains account-to-account, private, and separate from the personal sync batch, while Apple Health-derived recovery data stays on-device in this release
+- Added focused validation for:
+  - collaboration deep-link routing into existing tabs
+  - collaboration cache replacement and snapshot loading behavior
+  - signed-in collaboration refresh and cache population through `CollaborationCoordinator`
+  - blueprint-save encoding from `TrainingProgram` into immutable collaboration library payloads
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests`
+
 ---
 
 ## Project Setup
