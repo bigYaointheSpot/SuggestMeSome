@@ -3854,6 +3854,40 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+### Feature 18 — Account-backed cloud sync
+
+**Status:** Complete
+
+#### Prompt 1 [Production-backed Sign in with Apple cloud sync] — 2026-04-19
+
+- Turned the sync foundation into a real app-level cloud flow:
+  - added `ProductionBackendAuthService` around Sign in with Apple, access/refresh token handling, persisted backend account state, and live restore/export/delete-account wiring
+  - introduced `CloudSyncManager`, `CloudSyncStateStore`, and `HTTPCloudBackendClient` for bootstrap, incremental pull/push, pending outbound batches, per-collection cursors, sync activity logging, and manual retry
+- Expanded synced data coverage beyond workouts and programs:
+  - extended the cloud contracts plus local sync repositories to carry weekly analyses, lift trends, adaptation event history, and training preferences
+  - added a dedicated training-preferences sync seam for global weight unit, default rest timer, and preferred training days
+  - kept personal records rebuilt locally after imports and left Apple Health-derived recovery data local-only
+- Wired sync into the shipped surfaces and mutation paths:
+  - app startup and foreground refresh now restore the cloud account session and trigger foreground sync
+  - `Settings` now exposes a dedicated Cloud Sync surface with account state, status, last successful sync, retry, and recent activity
+  - account/privacy screens now use Sign in with Apple plus backend-driven export, delete-data, and delete-account flows, while backup/export copy now distinguishes manual device backups from continuous cloud sync
+  - workout saves, readiness check-ins, program starts/completions, and destructive deletions now enqueue sync without blocking local persistence
+- Hardened cloud session and merge behavior:
+  - synced root models now carry deletion tombstones so remote deletes can propagate without syncing nested child rows independently
+  - pulled workouts apply as raw upserts without rerunning local adaptive side effects, while adaptive-history backfill and PR rebuilds run as explicit recovery jobs when needed
+  - production session restore now drops stale signed-in state when tokens are missing, and the sync manager schedules a follow-up pass when a local mutation lands during an in-flight sync
+- Added focused validation for:
+  - training-preference sync round-trips and cloud sync state-store persistence
+  - Sign in with Apple session restore, signed-out fallback, backend export submission, delete-data submission, and delete-account teardown
+  - updated production-backend compliance copy plus clearer Cloud Sync vs Device Backup messaging
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests`
+
+**Commits:** `cd6e6b4`, `ad76946`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
