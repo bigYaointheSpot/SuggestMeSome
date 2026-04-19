@@ -26,6 +26,14 @@ struct LocalWorkoutSyncStore {
         let programRuns = try context.stableIDMap(for: ProgramRun.self)
 
         for payload in payloads {
+            if payload.metadata.deletedAt != nil {
+                if let existing = existingWorkouts[payload.metadata.stableID] {
+                    context.modelContext.delete(existing)
+                    existingWorkouts[payload.metadata.stableID] = nil
+                }
+                continue
+            }
+
             let programRun = payload.programRunStableID.flatMap { programRuns[$0] }
             if let existing = existingWorkouts[payload.metadata.stableID] {
                 existing.apply(syncDTO: payload, programRun: programRun)

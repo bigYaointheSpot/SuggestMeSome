@@ -20,14 +20,29 @@ struct LocalDailyCoachSyncStore {
 
         for payload in payloads {
             let run = payload.programRunStableID.flatMap { runs[$0] }
-            if let existing = checkIns[payload.metadata.stableID] {
+            let existing = checkIns[payload.metadata.stableID] ?? dedupeCheckInTarget(
+                dayStart: payload.dayStart,
+                existing: Array(checkIns.values)
+            )
+
+            if payload.metadata.deletedAt != nil {
+                if let existing {
+                    context.modelContext.delete(existing)
+                    checkIns[existing.resolvedSyncStableID] = nil
+                }
+                continue
+            }
+
+            if let existing {
                 existing.apply(syncDTO: payload, programRun: run)
+                checkIns[payload.metadata.stableID] = existing
             } else {
                 let checkIn = DailyCoachCheckIn(
                     id: UUID(uuidString: payload.metadata.stableID) ?? UUID(),
                     syncStableID: payload.metadata.stableID,
                     syncVersion: payload.metadata.version,
                     syncLastModifiedAt: payload.metadata.lastModifiedAt,
+                    syncDeletedAt: payload.metadata.deletedAt,
                     date: payload.date,
                     dayStart: payload.dayStart,
                     sleepQuality: payload.sleepQuality,
@@ -64,27 +79,29 @@ struct LocalDailyCoachSyncStore {
 
         for payload in payloads {
             let run = payload.programRunStableID.flatMap { runs[$0] }
-            if let existing = reviews[payload.metadata.stableID] {
-                existing.syncStableID = payload.metadata.stableID
-                existing.syncVersion = payload.metadata.version
-                existing.syncLastModifiedAt = payload.metadata.lastModifiedAt
-                existing.weekStart = payload.weekStart
-                existing.weekEnd = payload.weekEnd
-                existing.isProgramWeek = payload.isProgramWeek
-                existing.programRun = run
-                existing.headline = payload.headline
-                existing.winText = payload.winText
-                existing.watchoutText = payload.watchoutText
-                existing.nextActionText = payload.nextActionText
-                existing.sourceWeeklyAnalysisIDText = payload.sourceWeeklyAnalysisIDText
-                existing.hasBeenSeen = payload.hasBeenSeen
-                existing.createdAt = payload.createdAt
+            let existing = reviews[payload.metadata.stableID] ?? dedupeWeeklyReviewTarget(
+                payload: payload,
+                existing: Array(reviews.values)
+            )
+
+            if payload.metadata.deletedAt != nil {
+                if let existing {
+                    context.modelContext.delete(existing)
+                    reviews[existing.resolvedSyncStableID] = nil
+                }
+                continue
+            }
+
+            if let existing {
+                existing.apply(syncDTO: payload, programRun: run)
+                reviews[payload.metadata.stableID] = existing
             } else {
                 let review = DailyCoachWeeklyReview(
                     id: UUID(uuidString: payload.metadata.stableID) ?? UUID(),
                     syncStableID: payload.metadata.stableID,
                     syncVersion: payload.metadata.version,
                     syncLastModifiedAt: payload.metadata.lastModifiedAt,
+                    syncDeletedAt: payload.metadata.deletedAt,
                     weekStart: payload.weekStart,
                     weekEnd: payload.weekEnd,
                     isProgramWeek: payload.isProgramWeek,
@@ -108,7 +125,12 @@ struct LocalDailyCoachSyncStore {
     private func dailyCheckInFetchDescriptor(since: Date?) -> FetchDescriptor<DailyCoachCheckIn> {
         let sortBy = [SortDescriptor(\DailyCoachCheckIn.date, order: .reverse)]
         guard let sinceDate = since else {
-            return FetchDescriptor<DailyCoachCheckIn>(sortBy: sortBy)
+            return FetchDescriptor<DailyCoachCheckIn>(
+                predicate: #Predicate<DailyCoachCheckIn> { checkIn in
+                    checkIn.syncDeletedAt == nil
+                },
+                sortBy: sortBy
+            )
         }
         return FetchDescriptor<DailyCoachCheckIn>(
             predicate: #Predicate<DailyCoachCheckIn> { checkIn in
@@ -121,7 +143,12 @@ struct LocalDailyCoachSyncStore {
     private func weeklyReviewFetchDescriptor(since: Date?) -> FetchDescriptor<DailyCoachWeeklyReview> {
         let sortBy = [SortDescriptor(\DailyCoachWeeklyReview.weekStart, order: .reverse)]
         guard let sinceDate = since else {
-            return FetchDescriptor<DailyCoachWeeklyReview>(sortBy: sortBy)
+            return FetchDescriptor<DailyCoachWeeklyReview>(
+                predicate: #Predicate<DailyCoachWeeklyReview> { review in
+                    review.syncDeletedAt == nil
+                },
+                sortBy: sortBy
+            )
         }
         return FetchDescriptor<DailyCoachWeeklyReview>(
             predicate: #Predicate<DailyCoachWeeklyReview> { review in
@@ -129,5 +156,22 @@ struct LocalDailyCoachSyncStore {
             },
             sortBy: sortBy
         )
+    }
+
+    private func dedupeCheckInTarget(
+        dayStart: Date,
+        existing: [DailyCoachCheckIn]
+    ) -> DailyCoachCheckIn? {
+        existing.first { $0.dayStart == dayStart }
+    }
+
+    private func dedupeWeeklyReviewTarget(
+        payload: DailyCoachWeeklyReviewSyncDTO,
+        existing: [DailyCoachWeeklyReview]
+    ) -> DailyCoachWeeklyReview? {
+        existing.first { review in
+            review.weekStart == payload.weekStart &&
+            review.programRun?.resolvedSyncStableID == payload.programRunStableID
+        }
     }
 }

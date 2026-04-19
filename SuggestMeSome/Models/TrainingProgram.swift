@@ -23,6 +23,7 @@ final class TrainingProgram {
     var syncVersion: Int
     /// Last modified timestamp used by sync conflict policies.
     var syncLastModifiedAt: Date
+    var syncDeletedAt: Date?
     var name: String
     /// Valid values: 6, 8, 10, 12
     var lengthInWeeks: Int
@@ -50,6 +51,7 @@ final class TrainingProgram {
         syncStableID: String? = nil,
         syncVersion: Int = 1,
         syncLastModifiedAt: Date = Date(),
+        syncDeletedAt: Date? = nil,
         name: String,
         lengthInWeeks: Int,
         sessionsPerWeek: Int,
@@ -66,6 +68,7 @@ final class TrainingProgram {
         self.syncStableID = syncStableID ?? id.uuidString
         self.syncVersion = max(1, syncVersion)
         self.syncLastModifiedAt = syncLastModifiedAt
+        self.syncDeletedAt = syncDeletedAt
         self.name = name
         self.lengthInWeeks = lengthInWeeks
         self.sessionsPerWeek = sessionsPerWeek

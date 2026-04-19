@@ -5,6 +5,7 @@ import SwiftData
 @MainActor
 struct LocalSyncStoreContext {
     let modelContext: ModelContext
+    let userDefaults: UserDefaults
 
     func fetchRows<T: PersistentModel>(_ type: T.Type) throws -> [T] {
         try modelContext.fetch(FetchDescriptor<T>())
@@ -35,6 +36,12 @@ struct LocalSyncStoreContext {
     func analysesByID() throws -> [String: WeeklyTrainingAnalysis] {
         try fetchRows(WeeklyTrainingAnalysis.self).reduce(into: [String: WeeklyTrainingAnalysis]()) { map, row in
             map[row.id.uuidString] = row
+        }
+    }
+
+    func stableIDMapByRowID<T: SyncTrackableModel & PersistentModel>(for type: T.Type) throws -> [UUID: T] {
+        try fetchRows(type).reduce(into: [UUID: T]()) { map, row in
+            map[row.id] = row
         }
     }
 

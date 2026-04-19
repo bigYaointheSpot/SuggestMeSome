@@ -7,11 +7,15 @@ final class LocalSyncRepository:
     ProgramSyncRepository,
     DailyCoachSyncRepository,
     AdaptiveSyncRepository,
+    TrainingPreferencesSyncRepository,
     HealthKitSummarySyncRepository {
     private let context: LocalSyncStoreContext
 
-    init(modelContext: ModelContext) {
-        self.context = LocalSyncStoreContext(modelContext: modelContext)
+    init(modelContext: ModelContext, userDefaults: UserDefaults = .standard) {
+        self.context = LocalSyncStoreContext(
+            modelContext: modelContext,
+            userDefaults: userDefaults
+        )
     }
 
     func fetchWorkoutPayloads(since: Date?, includeDeleted: Bool = false) throws -> [WorkoutSyncDTO] {
@@ -76,6 +80,38 @@ final class LocalSyncRepository:
 
     func upsertAppliedOverlayPayloads(_ payloads: [AppliedProgramOverlaySyncDTO]) throws {
         try LocalAdaptiveSyncStore(context: context).upsertAppliedOverlayPayloads(payloads)
+    }
+
+    func fetchWeeklyTrainingAnalysisPayloads(since: Date?) throws -> [WeeklyTrainingAnalysisSyncDTO] {
+        try LocalAdaptiveSyncStore(context: context).fetchWeeklyTrainingAnalysisPayloads(since: since)
+    }
+
+    func upsertWeeklyTrainingAnalysisPayloads(_ payloads: [WeeklyTrainingAnalysisSyncDTO]) throws {
+        try LocalAdaptiveSyncStore(context: context).upsertWeeklyTrainingAnalysisPayloads(payloads)
+    }
+
+    func fetchLiftPerformanceTrendPayloads(since: Date?) throws -> [LiftPerformanceTrendSyncDTO] {
+        try LocalAdaptiveSyncStore(context: context).fetchLiftPerformanceTrendPayloads(since: since)
+    }
+
+    func upsertLiftPerformanceTrendPayloads(_ payloads: [LiftPerformanceTrendSyncDTO]) throws {
+        try LocalAdaptiveSyncStore(context: context).upsertLiftPerformanceTrendPayloads(payloads)
+    }
+
+    func fetchAdaptationEventPayloads(since: Date?) throws -> [AdaptationEventHistorySyncDTO] {
+        try LocalAdaptiveSyncStore(context: context).fetchAdaptationEventPayloads(since: since)
+    }
+
+    func upsertAdaptationEventPayloads(_ payloads: [AdaptationEventHistorySyncDTO]) throws {
+        try LocalAdaptiveSyncStore(context: context).upsertAdaptationEventPayloads(payloads)
+    }
+
+    func fetchTrainingPreferencesPayload(since: Date?) throws -> TrainingPreferencesSyncDTO? {
+        try LocalTrainingPreferencesSyncStore(context: context).fetchTrainingPreferencesPayload(since: since)
+    }
+
+    func upsertTrainingPreferencesPayload(_ payload: TrainingPreferencesSyncDTO) throws {
+        try LocalTrainingPreferencesSyncStore(context: context).upsertTrainingPreferencesPayload(payload)
     }
 
     func fetchHealthKitSummaryPayloads(since: Date?) throws -> [HealthKitDailySummarySyncDTO] {

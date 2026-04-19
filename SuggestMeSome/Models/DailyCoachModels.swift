@@ -30,6 +30,7 @@ final class DailyCoachCheckIn {
     var syncVersion: Int
     /// Last modified timestamp used by sync conflict policies.
     var syncLastModifiedAt: Date
+    var syncDeletedAt: Date?
     /// Calendar day this check-in represents (time component should be start-of-day).
     var date: Date
     /// Timestamp when the user started the check-in flow.
@@ -59,6 +60,7 @@ final class DailyCoachCheckIn {
         syncStableID: String? = nil,
         syncVersion: Int = 1,
         syncLastModifiedAt: Date? = nil,
+        syncDeletedAt: Date? = nil,
         date: Date,
         dayStart: Date = Date(),
         sleepQuality: Int = 3,
@@ -75,6 +77,7 @@ final class DailyCoachCheckIn {
         self.id = id
         self.syncStableID = syncStableID ?? id.uuidString
         self.syncVersion = max(1, syncVersion)
+        self.syncDeletedAt = syncDeletedAt
         self.date = date
         self.dayStart = dayStart
         self.sleepQuality = sleepQuality
@@ -103,6 +106,7 @@ final class DailyCoachWeeklyReview {
     var syncVersion: Int
     /// Last modified timestamp used by sync conflict policies.
     var syncLastModifiedAt: Date
+    var syncDeletedAt: Date?
     /// Monday (or chosen week-start) of the reviewed week.
     var weekStart: Date
     /// Sunday (or chosen week-end) of the reviewed week.
@@ -131,6 +135,7 @@ final class DailyCoachWeeklyReview {
         syncStableID: String? = nil,
         syncVersion: Int = 1,
         syncLastModifiedAt: Date? = nil,
+        syncDeletedAt: Date? = nil,
         weekStart: Date,
         weekEnd: Date,
         isProgramWeek: Bool = false,
@@ -146,6 +151,7 @@ final class DailyCoachWeeklyReview {
         self.id = id
         self.syncStableID = syncStableID ?? id.uuidString
         self.syncVersion = max(1, syncVersion)
+        self.syncDeletedAt = syncDeletedAt
         self.weekStart = weekStart
         self.weekEnd = weekEnd
         self.isProgramWeek = isProgramWeek

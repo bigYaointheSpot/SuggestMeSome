@@ -45,9 +45,12 @@ enum SyncMetadataAuditService {
             audit(ProgramSessionExercise.self, named: "ProgramSessionExercise", context: context, auditedAt: auditedAt),
             audit(DailyCoachCheckIn.self, named: "DailyCoachCheckIn", context: context, auditedAt: auditedAt),
             audit(DailyCoachWeeklyReview.self, named: "DailyCoachWeeklyReview", context: context, auditedAt: auditedAt),
+            audit(WeeklyTrainingAnalysis.self, named: "WeeklyTrainingAnalysis", context: context, auditedAt: auditedAt),
+            audit(LiftPerformanceTrend.self, named: "LiftPerformanceTrend", context: context, auditedAt: auditedAt),
             audit(AdaptationProposal.self, named: "AdaptationProposal", context: context, auditedAt: auditedAt),
             audit(AppliedProgramOverlay.self, named: "AppliedProgramOverlay", context: context, auditedAt: auditedAt),
             audit(AppliedOverlayAdjustment.self, named: "AppliedOverlayAdjustment", context: context, auditedAt: auditedAt),
+            audit(AdaptationEventHistory.self, named: "AdaptationEventHistory", context: context, auditedAt: auditedAt),
             audit(HealthKitDailySummary.self, named: "HealthKitDailySummary", context: context, auditedAt: auditedAt),
         ]
 

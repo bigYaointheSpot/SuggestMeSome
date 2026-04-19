@@ -17,6 +17,7 @@ final class ProgramRun {
     var syncVersion: Int
     /// Last modified timestamp used by sync conflict policies.
     var syncLastModifiedAt: Date
+    var syncDeletedAt: Date?
     var startDate: Date
     var endDate: Date?
     var isCompleted: Bool
@@ -37,6 +38,7 @@ final class ProgramRun {
         syncStableID: String? = nil,
         syncVersion: Int = 1,
         syncLastModifiedAt: Date = Date(),
+        syncDeletedAt: Date? = nil,
         startDate: Date,
         endDate: Date? = nil,
         isCompleted: Bool = false,
@@ -48,6 +50,7 @@ final class ProgramRun {
         self.syncStableID = syncStableID ?? id.uuidString
         self.syncVersion = max(1, syncVersion)
         self.syncLastModifiedAt = syncLastModifiedAt
+        self.syncDeletedAt = syncDeletedAt
         self.startDate = startDate
         self.endDate = endDate
         self.isCompleted = isCompleted

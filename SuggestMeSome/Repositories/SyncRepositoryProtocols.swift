@@ -21,10 +21,21 @@ protocol DailyCoachSyncRepository {
 }
 
 protocol AdaptiveSyncRepository {
+    func fetchWeeklyTrainingAnalysisPayloads(since: Date?) throws -> [WeeklyTrainingAnalysisSyncDTO]
+    func upsertWeeklyTrainingAnalysisPayloads(_ payloads: [WeeklyTrainingAnalysisSyncDTO]) throws
+    func fetchLiftPerformanceTrendPayloads(since: Date?) throws -> [LiftPerformanceTrendSyncDTO]
+    func upsertLiftPerformanceTrendPayloads(_ payloads: [LiftPerformanceTrendSyncDTO]) throws
     func fetchAdaptationProposalPayloads(since: Date?) throws -> [AdaptationProposalSyncDTO]
     func upsertAdaptationProposalPayloads(_ payloads: [AdaptationProposalSyncDTO]) throws
     func fetchAppliedOverlayPayloads(since: Date?) throws -> [AppliedProgramOverlaySyncDTO]
     func upsertAppliedOverlayPayloads(_ payloads: [AppliedProgramOverlaySyncDTO]) throws
+    func fetchAdaptationEventPayloads(since: Date?) throws -> [AdaptationEventHistorySyncDTO]
+    func upsertAdaptationEventPayloads(_ payloads: [AdaptationEventHistorySyncDTO]) throws
+}
+
+protocol TrainingPreferencesSyncRepository {
+    func fetchTrainingPreferencesPayload(since: Date?) throws -> TrainingPreferencesSyncDTO?
+    func upsertTrainingPreferencesPayload(_ payload: TrainingPreferencesSyncDTO) throws
 }
 
 protocol HealthKitSummarySyncRepository {

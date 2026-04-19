@@ -92,12 +92,15 @@ extension Workout: SyncTrackableModel, SyncTombstoneTrackable {}
 extension ExerciseEntry: SyncTrackableModel {}
 extension SetEntry: SyncTrackableModel {}
 extension PersonalRecord: SyncTrackableModel {}
-extension TrainingProgram: SyncTrackableModel {}
-extension ProgramRun: SyncTrackableModel {}
+extension TrainingProgram: SyncTrackableModel, SyncTombstoneTrackable {}
+extension ProgramRun: SyncTrackableModel, SyncTombstoneTrackable {}
 extension ProgramSessionExercise: SyncTrackableModel {}
-extension DailyCoachCheckIn: SyncTrackableModel {}
-extension DailyCoachWeeklyReview: SyncTrackableModel {}
-extension AdaptationProposal: SyncTrackableModel {}
-extension AppliedProgramOverlay: SyncTrackableModel {}
+extension DailyCoachCheckIn: SyncTrackableModel, SyncTombstoneTrackable {}
+extension DailyCoachWeeklyReview: SyncTrackableModel, SyncTombstoneTrackable {}
+extension WeeklyTrainingAnalysis: SyncTrackableModel, SyncTombstoneTrackable {}
+extension LiftPerformanceTrend: SyncTrackableModel, SyncTombstoneTrackable {}
+extension AdaptationProposal: SyncTrackableModel, SyncTombstoneTrackable {}
+extension AppliedProgramOverlay: SyncTrackableModel, SyncTombstoneTrackable {}
 extension AppliedOverlayAdjustment: SyncTrackableModel {}
+extension AdaptationEventHistory: SyncTrackableModel, SyncTombstoneTrackable {}
 extension HealthKitDailySummary: SyncTrackableModel {}

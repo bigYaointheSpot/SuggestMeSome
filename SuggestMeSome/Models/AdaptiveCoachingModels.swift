@@ -270,6 +270,10 @@ final class ExercisePerformanceOutcome {
 @Model
 final class WeeklyTrainingAnalysis {
     var id: UUID
+    var syncStableID: String?
+    var syncVersion: Int
+    var syncLastModifiedAt: Date
+    var syncDeletedAt: Date?
     var createdAt: Date
     var weekStartDate: Date
     var weekEndDate: Date
@@ -311,6 +315,10 @@ final class WeeklyTrainingAnalysis {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date? = nil,
+        syncDeletedAt: Date? = nil,
         createdAt: Date = Date(),
         weekStartDate: Date,
         weekEndDate: Date,
@@ -335,6 +343,10 @@ final class WeeklyTrainingAnalysis {
         finalizedAt: Date? = nil
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
+        self.syncLastModifiedAt = syncLastModifiedAt ?? finalizedAt ?? createdAt
+        self.syncDeletedAt = syncDeletedAt
         self.createdAt = createdAt
         self.weekStartDate = weekStartDate
         self.weekEndDate = weekEndDate
@@ -394,6 +406,10 @@ final class WeeklyVolumeMetric {
 @Model
 final class LiftPerformanceTrend {
     var id: UUID
+    var syncStableID: String?
+    var syncVersion: Int
+    var syncLastModifiedAt: Date
+    var syncDeletedAt: Date?
     var updatedAt: Date
 
     var programRun: ProgramRun?
@@ -426,6 +442,10 @@ final class LiftPerformanceTrend {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date? = nil,
+        syncDeletedAt: Date? = nil,
         updatedAt: Date = Date(),
         programRun: ProgramRun? = nil,
         trainingProgram: TrainingProgram? = nil,
@@ -450,6 +470,10 @@ final class LiftPerformanceTrend {
         lastPerformanceScore: PerformanceScore? = nil
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
+        self.syncLastModifiedAt = syncLastModifiedAt ?? updatedAt
+        self.syncDeletedAt = syncDeletedAt
         self.updatedAt = updatedAt
         self.programRun = programRun
         self.trainingProgram = trainingProgram
@@ -583,6 +607,7 @@ final class AdaptationProposal {
     var syncVersion: Int
     /// Last modified timestamp used by sync conflict policies.
     var syncLastModifiedAt: Date
+    var syncDeletedAt: Date?
     var createdAt: Date
     var decidedAt: Date?
 
@@ -623,6 +648,7 @@ final class AdaptationProposal {
         syncStableID: String? = nil,
         syncVersion: Int = 1,
         syncLastModifiedAt: Date? = nil,
+        syncDeletedAt: Date? = nil,
         createdAt: Date = Date(),
         decidedAt: Date? = nil,
         programRun: ProgramRun? = nil,
@@ -653,6 +679,7 @@ final class AdaptationProposal {
         self.id = id
         self.syncStableID = syncStableID ?? id.uuidString
         self.syncVersion = max(1, syncVersion)
+        self.syncDeletedAt = syncDeletedAt
         self.createdAt = createdAt
         self.decidedAt = decidedAt
         self.programRun = programRun
@@ -693,6 +720,7 @@ final class AppliedProgramOverlay {
     var syncVersion: Int
     /// Last modified timestamp used by sync conflict policies.
     var syncLastModifiedAt: Date
+    var syncDeletedAt: Date?
     var createdAt: Date
     var appliedAt: Date
 
@@ -715,6 +743,7 @@ final class AppliedProgramOverlay {
         syncStableID: String? = nil,
         syncVersion: Int = 1,
         syncLastModifiedAt: Date? = nil,
+        syncDeletedAt: Date? = nil,
         createdAt: Date = Date(),
         appliedAt: Date = Date(),
         programRun: ProgramRun? = nil,
@@ -730,6 +759,7 @@ final class AppliedProgramOverlay {
         self.id = id
         self.syncStableID = syncStableID ?? id.uuidString
         self.syncVersion = max(1, syncVersion)
+        self.syncDeletedAt = syncDeletedAt
         self.createdAt = createdAt
         self.appliedAt = appliedAt
         self.programRun = programRun
@@ -821,6 +851,10 @@ final class AppliedOverlayAdjustment {
 @Model
 final class AdaptationEventHistory {
     var id: UUID
+    var syncStableID: String?
+    var syncVersion: Int
+    var syncLastModifiedAt: Date
+    var syncDeletedAt: Date?
     var timestamp: Date
 
     var programRun: ProgramRun?
@@ -846,6 +880,10 @@ final class AdaptationEventHistory {
 
     init(
         id: UUID = UUID(),
+        syncStableID: String? = nil,
+        syncVersion: Int = 1,
+        syncLastModifiedAt: Date? = nil,
+        syncDeletedAt: Date? = nil,
         timestamp: Date = Date(),
         programRun: ProgramRun? = nil,
         trainingProgram: TrainingProgram? = nil,
@@ -866,6 +904,10 @@ final class AdaptationEventHistory {
         userActionTaken: Bool = false
     ) {
         self.id = id
+        self.syncStableID = syncStableID ?? id.uuidString
+        self.syncVersion = max(1, syncVersion)
+        self.syncLastModifiedAt = syncLastModifiedAt ?? timestamp
+        self.syncDeletedAt = syncDeletedAt
         self.timestamp = timestamp
         self.programRun = programRun
         self.trainingProgram = trainingProgram

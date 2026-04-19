@@ -9,6 +9,19 @@ private enum SyncMapperUtilities {
             deletedAt: deletedAt
         )
     }
+
+    static func nestedMetadata(
+        stableID: String,
+        lastModifiedAt: Date,
+        deletedAt: Date? = nil
+    ) -> SyncRecordMetadataDTO {
+        SyncRecordMetadataDTO(
+            stableID: stableID,
+            version: 1,
+            lastModifiedAt: lastModifiedAt,
+            deletedAt: deletedAt
+        )
+    }
 }
 
 extension SetEntry {
@@ -263,7 +276,7 @@ extension TrainingProgram {
             }
 
         return TrainingProgramSyncDTO(
-            metadata: SyncMapperUtilities.metadata(for: self),
+            metadata: SyncMapperUtilities.metadata(for: self, deletedAt: syncDeletedAt),
             name: name,
             lengthInWeeks: lengthInWeeks,
             sessionsPerWeek: sessionsPerWeek,
@@ -283,6 +296,7 @@ extension TrainingProgram {
         syncStableID = dto.metadata.stableID
         syncVersion = dto.metadata.version
         syncLastModifiedAt = dto.metadata.lastModifiedAt
+        syncDeletedAt = dto.metadata.deletedAt
         name = dto.name
         lengthInWeeks = dto.lengthInWeeks
         sessionsPerWeek = dto.sessionsPerWeek
@@ -301,7 +315,7 @@ extension ProgramRun {
     func toSyncDTO() -> ProgramRunSyncDTO {
         initializeSyncMetadataIfNeeded()
         return ProgramRunSyncDTO(
-            metadata: SyncMapperUtilities.metadata(for: self),
+            metadata: SyncMapperUtilities.metadata(for: self, deletedAt: syncDeletedAt),
             startDate: startDate,
             endDate: endDate,
             isCompleted: isCompleted,
@@ -316,6 +330,7 @@ extension ProgramRun {
         syncStableID = dto.metadata.stableID
         syncVersion = dto.metadata.version
         syncLastModifiedAt = dto.metadata.lastModifiedAt
+        syncDeletedAt = dto.metadata.deletedAt
         startDate = dto.startDate
         endDate = dto.endDate
         isCompleted = dto.isCompleted
@@ -330,7 +345,7 @@ extension DailyCoachCheckIn {
     func toSyncDTO() -> DailyCoachCheckInSyncDTO {
         initializeSyncMetadataIfNeeded()
         return DailyCoachCheckInSyncDTO(
-            metadata: SyncMapperUtilities.metadata(for: self),
+            metadata: SyncMapperUtilities.metadata(for: self, deletedAt: syncDeletedAt),
             date: date,
             dayStart: dayStart,
             sleepQuality: sleepQuality,
@@ -350,6 +365,7 @@ extension DailyCoachCheckIn {
         syncStableID = dto.metadata.stableID
         syncVersion = dto.metadata.version
         syncLastModifiedAt = dto.metadata.lastModifiedAt
+        syncDeletedAt = dto.metadata.deletedAt
         date = dto.date
         dayStart = dto.dayStart
         sleepQuality = dto.sleepQuality
@@ -369,7 +385,7 @@ extension DailyCoachWeeklyReview {
     func toSyncDTO() -> DailyCoachWeeklyReviewSyncDTO {
         initializeSyncMetadataIfNeeded()
         return DailyCoachWeeklyReviewSyncDTO(
-            metadata: SyncMapperUtilities.metadata(for: self),
+            metadata: SyncMapperUtilities.metadata(for: self, deletedAt: syncDeletedAt),
             weekStart: weekStart,
             weekEnd: weekEnd,
             isProgramWeek: isProgramWeek,
@@ -383,13 +399,31 @@ extension DailyCoachWeeklyReview {
             createdAt: createdAt
         )
     }
+
+    func apply(syncDTO dto: DailyCoachWeeklyReviewSyncDTO, programRun: ProgramRun? = nil) {
+        syncStableID = dto.metadata.stableID
+        syncVersion = dto.metadata.version
+        syncLastModifiedAt = dto.metadata.lastModifiedAt
+        syncDeletedAt = dto.metadata.deletedAt
+        weekStart = dto.weekStart
+        weekEnd = dto.weekEnd
+        isProgramWeek = dto.isProgramWeek
+        self.programRun = programRun
+        headline = dto.headline
+        winText = dto.winText
+        watchoutText = dto.watchoutText
+        nextActionText = dto.nextActionText
+        sourceWeeklyAnalysisIDText = dto.sourceWeeklyAnalysisIDText
+        hasBeenSeen = dto.hasBeenSeen
+        createdAt = dto.createdAt
+    }
 }
 
 extension AdaptationProposal {
     func toSyncDTO() -> AdaptationProposalSyncDTO {
         initializeSyncMetadataIfNeeded()
         return AdaptationProposalSyncDTO(
-            metadata: SyncMapperUtilities.metadata(for: self),
+            metadata: SyncMapperUtilities.metadata(for: self, deletedAt: syncDeletedAt),
             createdAt: createdAt,
             decidedAt: decidedAt,
             programRunStableID: programRun?.resolvedSyncStableID,
@@ -423,6 +457,7 @@ extension AdaptationProposal {
         syncStableID = dto.metadata.stableID
         syncVersion = dto.metadata.version
         syncLastModifiedAt = dto.metadata.lastModifiedAt
+        syncDeletedAt = dto.metadata.deletedAt
         createdAt = dto.createdAt
         decidedAt = dto.decidedAt
         proposalType = ProposalType(rawValue: dto.proposalTypeRawValue) ?? .increaseLoad
@@ -499,7 +534,7 @@ extension AppliedProgramOverlay {
     func toSyncDTO() -> AppliedProgramOverlaySyncDTO {
         initializeSyncMetadataIfNeeded()
         return AppliedProgramOverlaySyncDTO(
-            metadata: SyncMapperUtilities.metadata(for: self),
+            metadata: SyncMapperUtilities.metadata(for: self, deletedAt: syncDeletedAt),
             createdAt: createdAt,
             appliedAt: appliedAt,
             programRunStableID: programRun?.resolvedSyncStableID,
@@ -519,6 +554,7 @@ extension AppliedProgramOverlay {
         syncStableID = dto.metadata.stableID
         syncVersion = dto.metadata.version
         syncLastModifiedAt = dto.metadata.lastModifiedAt
+        syncDeletedAt = dto.metadata.deletedAt
         createdAt = dto.createdAt
         appliedAt = dto.appliedAt
         effectiveWeekStart = dto.effectiveWeekStart
@@ -527,6 +563,405 @@ extension AppliedProgramOverlay {
         appliedByUserConfirmation = dto.appliedByUserConfirmation
         adjustmentReason = AdjustmentReason(rawValue: dto.adjustmentReasonRawValue) ?? .programSignalPriority
         summaryText = dto.summaryText
+    }
+}
+
+extension ExercisePerformanceOutcome {
+    func toSyncDTO() -> ExercisePerformanceOutcomeSyncDTO {
+        ExercisePerformanceOutcomeSyncDTO(
+            metadata: SyncMapperUtilities.nestedMetadata(
+                stableID: id.uuidString,
+                lastModifiedAt: analysis?.syncLastModifiedAt ?? createdAt
+            ),
+            createdAt: createdAt,
+            programRunStableID: programRun?.resolvedSyncStableID,
+            workoutStableID: workout?.resolvedSyncStableID,
+            exerciseEntryStableID: exerciseEntry?.resolvedSyncStableID,
+            workoutDate: workoutDate,
+            programWeekNumber: programWeekNumber,
+            programSessionNumber: programSessionNumber,
+            sourceProgramSessionExerciseID: sourceProgramSessionExerciseID?.uuidString,
+            exerciseName: exerciseName,
+            canonicalLiftKey: canonicalLiftKey,
+            signalSourceRawValue: signalSource.rawValue,
+            signalConfidenceRawValue: signalConfidence.rawValue,
+            signalWeight: signalWeight,
+            prescribedSets: prescribedSets,
+            prescribedReps: prescribedReps,
+            prescribedWeight: prescribedWeight,
+            prescribedWeightUnit: prescribedWeightUnit,
+            prescribedTargetPercentage1RM: prescribedTargetPercentage1RM,
+            prescribedTargetRPE: prescribedTargetRPE,
+            prescribedTargetRIR: prescribedTargetRIR,
+            prescribedWorkingSetStyleRawValue: prescribedWorkingSetStyle?.rawValue,
+            prescribedTargetEffortTypeRawValue: prescribedTargetEffortType?.rawValue,
+            actualSetCount: actualSetCount,
+            actualAverageReps: actualAverageReps,
+            actualAverageWeight: actualAverageWeight,
+            actualTopSetReps: actualTopSetReps,
+            actualTopSetWeight: actualTopSetWeight,
+            actualTopSetEstimated1RM: actualTopSetEstimated1RM,
+            completionRatio: completionRatio,
+            loadDeltaPercent: loadDeltaPercent,
+            repsDelta: repsDelta,
+            performanceScoreValue: performanceScoreValue,
+            performanceScoreRawValue: performanceScore.rawValue,
+            inferredFatigueStatusRawValue: inferredFatigueStatus.rawValue,
+            isTopSetSignal: isTopSetSignal,
+            notes: notes
+        )
+    }
+
+    static func fromSyncDTO(
+        _ dto: ExercisePerformanceOutcomeSyncDTO,
+        analysis: WeeklyTrainingAnalysis?,
+        programRun: ProgramRun?,
+        workout: Workout?,
+        exerciseEntry: ExerciseEntry?
+    ) -> ExercisePerformanceOutcome {
+        ExercisePerformanceOutcome(
+            id: UUID(uuidString: dto.metadata.stableID) ?? UUID(),
+            createdAt: dto.createdAt,
+            analysis: analysis,
+            programRun: programRun,
+            workout: workout,
+            exerciseEntry: exerciseEntry,
+            workoutDate: dto.workoutDate,
+            programWeekNumber: dto.programWeekNumber,
+            programSessionNumber: dto.programSessionNumber,
+            sourceProgramSessionExerciseID: dto.sourceProgramSessionExerciseID.flatMap(UUID.init(uuidString:)),
+            exerciseName: dto.exerciseName,
+            canonicalLiftKey: dto.canonicalLiftKey,
+            signalSource: WorkoutSignalSource(rawValue: dto.signalSourceRawValue) ?? .standalone,
+            signalConfidence: WorkoutSignalConfidence(rawValue: dto.signalConfidenceRawValue) ?? .low,
+            signalWeight: dto.signalWeight,
+            prescribedSets: dto.prescribedSets,
+            prescribedReps: dto.prescribedReps,
+            prescribedWeight: dto.prescribedWeight,
+            prescribedWeightUnit: dto.prescribedWeightUnit,
+            prescribedTargetPercentage1RM: dto.prescribedTargetPercentage1RM,
+            prescribedTargetRPE: dto.prescribedTargetRPE,
+            prescribedTargetRIR: dto.prescribedTargetRIR,
+            prescribedWorkingSetStyle: dto.prescribedWorkingSetStyleRawValue.flatMap(ProgramWorkingSetStyle.init(rawValue:)),
+            prescribedTargetEffortType: dto.prescribedTargetEffortTypeRawValue.flatMap(ProgramTargetEffortType.init(rawValue:)),
+            actualSetCount: dto.actualSetCount,
+            actualAverageReps: dto.actualAverageReps,
+            actualAverageWeight: dto.actualAverageWeight,
+            actualTopSetReps: dto.actualTopSetReps,
+            actualTopSetWeight: dto.actualTopSetWeight,
+            actualTopSetEstimated1RM: dto.actualTopSetEstimated1RM,
+            completionRatio: dto.completionRatio,
+            loadDeltaPercent: dto.loadDeltaPercent,
+            repsDelta: dto.repsDelta,
+            performanceScoreValue: dto.performanceScoreValue,
+            performanceScore: PerformanceScore(rawValue: dto.performanceScoreRawValue) ?? .insufficientData,
+            inferredFatigueStatus: FatigueStatus(rawValue: dto.inferredFatigueStatusRawValue) ?? .manageable,
+            isTopSetSignal: dto.isTopSetSignal,
+            notes: dto.notes
+        )
+    }
+}
+
+extension WeeklyVolumeMetric {
+    func toSyncDTO() -> WeeklyVolumeMetricSyncDTO {
+        WeeklyVolumeMetricSyncDTO(
+            metadata: SyncMapperUtilities.nestedMetadata(
+                stableID: id.uuidString,
+                lastModifiedAt: analysis?.syncLastModifiedAt ?? .now
+            ),
+            muscleRawValue: muscle.rawValue,
+            plannedHardSets: plannedHardSets,
+            completedHardSets: completedHardSets,
+            weightedCompletedHardSets: weightedCompletedHardSets,
+            deltaHardSets: deltaHardSets
+        )
+    }
+
+    static func fromSyncDTO(
+        _ dto: WeeklyVolumeMetricSyncDTO,
+        analysis: WeeklyTrainingAnalysis?
+    ) -> WeeklyVolumeMetric {
+        WeeklyVolumeMetric(
+            id: UUID(uuidString: dto.metadata.stableID) ?? UUID(),
+            analysis: analysis,
+            muscle: ProgramVolumeMuscle(rawValue: dto.muscleRawValue) ?? .chest,
+            plannedHardSets: dto.plannedHardSets,
+            completedHardSets: dto.completedHardSets,
+            weightedCompletedHardSets: dto.weightedCompletedHardSets,
+            deltaHardSets: dto.deltaHardSets
+        )
+    }
+}
+
+extension WeeklyTrainingAnalysis {
+    func toSyncDTO() -> WeeklyTrainingAnalysisSyncDTO {
+        initializeSyncMetadataIfNeeded()
+        return WeeklyTrainingAnalysisSyncDTO(
+            metadata: SyncMapperUtilities.metadata(for: self, deletedAt: syncDeletedAt),
+            createdAt: createdAt,
+            weekStartDate: weekStartDate,
+            weekEndDate: weekEndDate,
+            programRunStableID: programRun?.resolvedSyncStableID,
+            trainingProgramStableID: trainingProgram?.resolvedSyncStableID,
+            programWeekNumber: programWeekNumber,
+            focusSnapshotRawValue: focusSnapshot?.rawValue,
+            programWorkoutCount: programWorkoutCount,
+            standaloneWorkoutCount: standaloneWorkoutCount,
+            totalOutcomeCount: totalOutcomeCount,
+            totalSignalWeight: totalSignalWeight,
+            programSignalWeight: programSignalWeight,
+            standaloneSignalWeight: standaloneSignalWeight,
+            weightedPerformanceScore: weightedPerformanceScore,
+            adherenceScore: adherenceScore,
+            plannedFatigueScore: plannedFatigueScore,
+            observedFatigueScore: observedFatigueScore,
+            fatigueStatusRawValue: fatigueStatus.rawValue,
+            totalCompletedHardSets: totalCompletedHardSets,
+            totalCompletedTonnage: totalCompletedTonnage,
+            isFinalized: isFinalized,
+            finalizedAt: finalizedAt,
+            outcomes: outcomes
+                .sorted { lhs, rhs in
+                    if lhs.workoutDate == rhs.workoutDate {
+                        return lhs.id.uuidString < rhs.id.uuidString
+                    }
+                    return lhs.workoutDate < rhs.workoutDate
+                }
+                .map { $0.toSyncDTO() },
+            volumeMetrics: volumeMetrics
+                .sorted { $0.muscle.rawValue < $1.muscle.rawValue }
+                .map { $0.toSyncDTO() }
+        )
+    }
+
+    func apply(syncDTO dto: WeeklyTrainingAnalysisSyncDTO, programRun: ProgramRun?, trainingProgram: TrainingProgram?) {
+        syncStableID = dto.metadata.stableID
+        syncVersion = dto.metadata.version
+        syncLastModifiedAt = dto.metadata.lastModifiedAt
+        syncDeletedAt = dto.metadata.deletedAt
+        createdAt = dto.createdAt
+        weekStartDate = dto.weekStartDate
+        weekEndDate = dto.weekEndDate
+        self.programRun = programRun
+        self.trainingProgram = trainingProgram
+        programWeekNumber = dto.programWeekNumber
+        focusSnapshot = dto.focusSnapshotRawValue.flatMap(ProgramFocus.init(rawValue:))
+        programWorkoutCount = dto.programWorkoutCount
+        standaloneWorkoutCount = dto.standaloneWorkoutCount
+        totalOutcomeCount = dto.totalOutcomeCount
+        totalSignalWeight = dto.totalSignalWeight
+        programSignalWeight = dto.programSignalWeight
+        standaloneSignalWeight = dto.standaloneSignalWeight
+        weightedPerformanceScore = dto.weightedPerformanceScore
+        adherenceScore = dto.adherenceScore
+        plannedFatigueScore = dto.plannedFatigueScore
+        observedFatigueScore = dto.observedFatigueScore
+        fatigueStatus = FatigueStatus(rawValue: dto.fatigueStatusRawValue) ?? .manageable
+        totalCompletedHardSets = dto.totalCompletedHardSets
+        totalCompletedTonnage = dto.totalCompletedTonnage
+        isFinalized = dto.isFinalized
+        finalizedAt = dto.finalizedAt
+    }
+}
+
+extension LiftTrendSnapshot {
+    func toSyncDTO() -> LiftTrendSnapshotSyncDTO {
+        LiftTrendSnapshotSyncDTO(
+            metadata: SyncMapperUtilities.nestedMetadata(
+                stableID: id.uuidString,
+                lastModifiedAt: trend?.syncLastModifiedAt ?? createdAt
+            ),
+            createdAt: createdAt,
+            analysisStableID: analysis?.resolvedSyncStableID,
+            canonicalLiftKey: canonicalLiftKey,
+            liftDisplayName: liftDisplayName,
+            weekStartDate: weekStartDate,
+            weekEndDate: weekEndDate,
+            programWeekNumber: programWeekNumber,
+            totalDataPoints: totalDataPoints,
+            programLinkedDataPoints: programLinkedDataPoints,
+            standaloneDataPoints: standaloneDataPoints,
+            weightedSignalCount: weightedSignalCount,
+            weightedProgramSignal: weightedProgramSignal,
+            weightedStandaloneSignal: weightedStandaloneSignal,
+            confidenceScore: confidenceScore,
+            currentEstimated1RM: currentEstimated1RM,
+            baselineEstimated1RM: baselineEstimated1RM,
+            rollingBestEstimated1RM: rollingBestEstimated1RM,
+            changePercent: changePercent,
+            trendStatusRawValue: trendStatus.rawValue,
+            fatigueStatusRawValue: fatigueStatus.rawValue,
+            latestTopSetWeight: latestTopSetWeight,
+            latestTopSetReps: latestTopSetReps,
+            latestPerformanceScoreValue: latestPerformanceScoreValue,
+            note: note
+        )
+    }
+
+    static func fromSyncDTO(
+        _ dto: LiftTrendSnapshotSyncDTO,
+        trend: LiftPerformanceTrend?,
+        analysis: WeeklyTrainingAnalysis?,
+        programRun: ProgramRun?,
+        trainingProgram: TrainingProgram?
+    ) -> LiftTrendSnapshot {
+        LiftTrendSnapshot(
+            id: UUID(uuidString: dto.metadata.stableID) ?? UUID(),
+            createdAt: dto.createdAt,
+            trend: trend,
+            analysis: analysis,
+            programRun: programRun,
+            trainingProgram: trainingProgram,
+            canonicalLiftKey: dto.canonicalLiftKey,
+            liftDisplayName: dto.liftDisplayName,
+            weekStartDate: dto.weekStartDate,
+            weekEndDate: dto.weekEndDate,
+            programWeekNumber: dto.programWeekNumber,
+            totalDataPoints: dto.totalDataPoints,
+            programLinkedDataPoints: dto.programLinkedDataPoints,
+            standaloneDataPoints: dto.standaloneDataPoints,
+            weightedSignalCount: dto.weightedSignalCount,
+            weightedProgramSignal: dto.weightedProgramSignal,
+            weightedStandaloneSignal: dto.weightedStandaloneSignal,
+            confidenceScore: dto.confidenceScore,
+            currentEstimated1RM: dto.currentEstimated1RM,
+            baselineEstimated1RM: dto.baselineEstimated1RM,
+            rollingBestEstimated1RM: dto.rollingBestEstimated1RM,
+            changePercent: dto.changePercent,
+            trendStatus: LiftTrendStatus(rawValue: dto.trendStatusRawValue) ?? .insufficientData,
+            fatigueStatus: FatigueStatus(rawValue: dto.fatigueStatusRawValue) ?? .manageable,
+            latestTopSetWeight: dto.latestTopSetWeight,
+            latestTopSetReps: dto.latestTopSetReps,
+            latestPerformanceScoreValue: dto.latestPerformanceScoreValue,
+            note: dto.note
+        )
+    }
+}
+
+extension LiftPerformanceTrend {
+    func toSyncDTO() -> LiftPerformanceTrendSyncDTO {
+        initializeSyncMetadataIfNeeded()
+        return LiftPerformanceTrendSyncDTO(
+            metadata: SyncMapperUtilities.metadata(for: self, deletedAt: syncDeletedAt),
+            updatedAt: updatedAt,
+            programRunStableID: programRun?.resolvedSyncStableID,
+            trainingProgramStableID: trainingProgram?.resolvedSyncStableID,
+            canonicalLiftKey: canonicalLiftKey,
+            liftDisplayName: liftDisplayName,
+            totalDataPoints: totalDataPoints,
+            programLinkedDataPoints: programLinkedDataPoints,
+            standaloneDataPoints: standaloneDataPoints,
+            weightedSignalCount: weightedSignalCount,
+            confidenceScore: confidenceScore,
+            firstObservationDate: firstObservationDate,
+            lastObservationDate: lastObservationDate,
+            currentEstimated1RM: currentEstimated1RM,
+            previousEstimated1RM: previousEstimated1RM,
+            rollingBestEstimated1RM: rollingBestEstimated1RM,
+            fourWeekChangePercent: fourWeekChangePercent,
+            trendStatusRawValue: trendStatus.rawValue,
+            fatigueStatusRawValue: fatigueStatus.rawValue,
+            latestTopSetWeight: latestTopSetWeight,
+            latestTopSetReps: latestTopSetReps,
+            latestPerformanceScoreValue: latestPerformanceScoreValue,
+            lastPerformanceScoreRawValue: lastPerformanceScore?.rawValue,
+            snapshots: snapshots
+                .sorted { lhs, rhs in
+                    if lhs.weekStartDate == rhs.weekStartDate {
+                        return lhs.id.uuidString < rhs.id.uuidString
+                    }
+                    return lhs.weekStartDate < rhs.weekStartDate
+                }
+                .map { $0.toSyncDTO() }
+        )
+    }
+
+    func apply(syncDTO dto: LiftPerformanceTrendSyncDTO, programRun: ProgramRun?, trainingProgram: TrainingProgram?) {
+        syncStableID = dto.metadata.stableID
+        syncVersion = dto.metadata.version
+        syncLastModifiedAt = dto.metadata.lastModifiedAt
+        syncDeletedAt = dto.metadata.deletedAt
+        updatedAt = dto.updatedAt
+        self.programRun = programRun
+        self.trainingProgram = trainingProgram
+        canonicalLiftKey = dto.canonicalLiftKey
+        liftDisplayName = dto.liftDisplayName
+        totalDataPoints = dto.totalDataPoints
+        programLinkedDataPoints = dto.programLinkedDataPoints
+        standaloneDataPoints = dto.standaloneDataPoints
+        weightedSignalCount = dto.weightedSignalCount
+        confidenceScore = dto.confidenceScore
+        firstObservationDate = dto.firstObservationDate
+        lastObservationDate = dto.lastObservationDate
+        currentEstimated1RM = dto.currentEstimated1RM
+        previousEstimated1RM = dto.previousEstimated1RM
+        rollingBestEstimated1RM = dto.rollingBestEstimated1RM
+        fourWeekChangePercent = dto.fourWeekChangePercent
+        trendStatus = LiftTrendStatus(rawValue: dto.trendStatusRawValue) ?? .insufficientData
+        fatigueStatus = FatigueStatus(rawValue: dto.fatigueStatusRawValue) ?? .manageable
+        latestTopSetWeight = dto.latestTopSetWeight
+        latestTopSetReps = dto.latestTopSetReps
+        latestPerformanceScoreValue = dto.latestPerformanceScoreValue
+        lastPerformanceScore = dto.lastPerformanceScoreRawValue.flatMap(PerformanceScore.init(rawValue:))
+    }
+}
+
+extension AdaptationEventHistory {
+    func toSyncDTO() -> AdaptationEventHistorySyncDTO {
+        initializeSyncMetadataIfNeeded()
+        return AdaptationEventHistorySyncDTO(
+            metadata: SyncMapperUtilities.metadata(for: self, deletedAt: syncDeletedAt),
+            timestamp: timestamp,
+            programRunStableID: programRun?.resolvedSyncStableID,
+            trainingProgramStableID: trainingProgram?.resolvedSyncStableID,
+            analysisStableID: analysis?.resolvedSyncStableID,
+            proposalStableID: proposal?.resolvedSyncStableID,
+            overlayStableID: overlay?.resolvedSyncStableID,
+            eventTypeRawValue: eventType.rawValue,
+            analysisWeekNumber: analysisWeekNumber,
+            targetLiftKey: targetLiftKey,
+            message: message,
+            explanation: explanation,
+            adjustmentReasonRawValue: adjustmentReason?.rawValue,
+            performanceScoreSnapshotRawValue: performanceScoreSnapshot?.rawValue,
+            fatigueStatusSnapshotRawValue: fatigueStatusSnapshot?.rawValue,
+            liftTrendStatusSnapshotRawValue: liftTrendStatusSnapshot?.rawValue,
+            confidenceSnapshot: confidenceSnapshot,
+            requiresUserAction: requiresUserAction,
+            userActionTaken: userActionTaken
+        )
+    }
+
+    func apply(
+        syncDTO dto: AdaptationEventHistorySyncDTO,
+        programRun: ProgramRun?,
+        trainingProgram: TrainingProgram?,
+        analysis: WeeklyTrainingAnalysis?,
+        proposal: AdaptationProposal?,
+        overlay: AppliedProgramOverlay?
+    ) {
+        syncStableID = dto.metadata.stableID
+        syncVersion = dto.metadata.version
+        syncLastModifiedAt = dto.metadata.lastModifiedAt
+        syncDeletedAt = dto.metadata.deletedAt
+        timestamp = dto.timestamp
+        self.programRun = programRun
+        self.trainingProgram = trainingProgram
+        self.analysis = analysis
+        self.proposal = proposal
+        self.overlay = overlay
+        eventType = AdaptationEventType(rawValue: dto.eventTypeRawValue) ?? .proposalCreated
+        analysisWeekNumber = dto.analysisWeekNumber
+        targetLiftKey = dto.targetLiftKey
+        message = dto.message
+        explanation = dto.explanation
+        adjustmentReason = dto.adjustmentReasonRawValue.flatMap(AdjustmentReason.init(rawValue:))
+        performanceScoreSnapshot = dto.performanceScoreSnapshotRawValue.flatMap(PerformanceScore.init(rawValue:))
+        fatigueStatusSnapshot = dto.fatigueStatusSnapshotRawValue.flatMap(FatigueStatus.init(rawValue:))
+        liftTrendStatusSnapshot = dto.liftTrendStatusSnapshotRawValue.flatMap(LiftTrendStatus.init(rawValue:))
+        confidenceSnapshot = dto.confidenceSnapshot
+        requiresUserAction = dto.requiresUserAction
+        userActionTaken = dto.userActionTaken
     }
 }
 
