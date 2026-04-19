@@ -66,6 +66,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     private var session: WCSession?
     private var queuedUserInfoEvents: [WatchBridgeMessage] = []
     private var latestAppliedSentAtByKind: [WatchPayloadKind: Date] = [:]
+    private var latestAppliedFingerprintByKind: [WatchPayloadKind: WatchPayloadFingerprint] = [:]
     private var latestActiveSentAt: Date?
     private var latestCompletionSentAt: Date?
     private var terminalWorkoutID: UUID?
@@ -257,6 +258,11 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     }
 
     private func shouldAccept(_ message: WatchBridgeMessage) -> Bool {
+        let fingerprint = WatchPayloadFingerprint(message: message)
+        if latestAppliedFingerprintByKind[message.kind] == fingerprint {
+            return false
+        }
+
         if let previous = latestAppliedSentAtByKind[message.kind], message.sentAt < previous {
             return false
         }
@@ -278,6 +284,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
 
     private func markApplied(_ message: WatchBridgeMessage) {
         latestAppliedSentAtByKind[message.kind] = message.sentAt
+        latestAppliedFingerprintByKind[message.kind] = WatchPayloadFingerprint(message: message)
         if message.kind.isActiveWorkoutPayload {
             latestActiveSentAt = max(latestActiveSentAt ?? .distantPast, message.sentAt)
         }

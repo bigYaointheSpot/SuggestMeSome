@@ -3503,6 +3503,27 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 9 [Watch transport dedupe and replay gating] — 2026-04-18
+
+- Reduced duplicate phone-to-watch transport churn by introducing shared payload diffing and replay gating:
+  - added `WatchPayloadFingerprint` and `WatchReplayState` to compare payload bodies independent of their send timestamps
+  - `DefaultWatchCompanionBridge` now dedupes identical non-critical sends, keeps workout lifecycle channels immediate, and only replays the latest payloads after reconnect when the payload body changed or the watch explicitly requested a fresh replay
+  - watch presence heartbeats now mark the current payload categories as replay-needed once, instead of causing every activation/reachability callback to rebroadcast the full latest state
+- Hardened the watch-side receiver against redundant reapplication:
+  - `WatchCompanionSessionStore` now tracks the last applied fingerprint per payload kind, so identical replayed application-context or user-info messages no longer retrigger view-state writes and widget mutations on the watch
+- Added focused Prompt 9 coverage in `Feature16Prompt9WatchReplayStateTests.swift`:
+  - non-critical payload deduplication
+  - one-time replay forcing after the peer marks payloads missing
+  - immediate-channel send allowance
+  - timestamp-insensitive fingerprint equivalence for bridge messages
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt9WatchReplayStateTests`
+
+**Commit:** `refactor: dedupe watch sync and replay traffic`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

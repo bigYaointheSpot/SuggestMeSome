@@ -44,6 +44,8 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
     private var latestLiveWorkoutSnapshot: WatchLiveWorkoutSnapshot?
     private var latestCurrentSessionContext: WatchCurrentSessionContext?
     private var latestSessionCompletionPayload: WatchSessionCompletionPayload?
+    private var latestPremiumLockedSnapshot: WatchTodayPlanSnapshot?
+    private var replayState = WatchReplayState()
 
 #if canImport(WatchConnectivity)
     private let session: WCSession?
@@ -112,6 +114,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
             return
         }
         guard canSendPayloads(on: session) else { return }
+        guard shouldSendPayload(kind: .workoutLaunch, payload: payload, dedupeIdentical: false) else { return }
         guard let message = Self.makeTransferMessage(kind: .workoutLaunch, payload: payload) else { return }
         sendTransferMessage(message, on: session)
 #else
@@ -129,6 +132,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
             return
         }
         guard canSendPayloads(on: session) else { return }
+        guard shouldSendPayload(kind: .workoutProgress, payload: snapshot, dedupeIdentical: false) else { return }
         guard let message = Self.makeTransferMessage(kind: .workoutProgress, payload: snapshot) else { return }
         sendTransferMessage(message, on: session)
 #else
@@ -160,6 +164,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
             return
         }
         guard canSendPayloads(on: session) else { return }
+        guard shouldSendPayload(kind: .liveWorkoutSnapshot, payload: snapshot, dedupeIdentical: true) else { return }
         guard let message = Self.makeContextMessage(kind: .liveWorkoutSnapshot, payload: snapshot) else { return }
         sendContextMessage(message, on: session)
 #else
@@ -177,6 +182,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
             return
         }
         guard canSendPayloads(on: session) else { return }
+        guard shouldSendPayload(kind: .currentSessionContext, payload: context, dedupeIdentical: true) else { return }
         guard let message = Self.makeContextMessage(kind: .currentSessionContext, payload: context) else { return }
         sendContextMessage(message, on: session)
 #else
@@ -198,6 +204,7 @@ final class DefaultWatchCompanionBridge: NSObject, WatchCompanionBridge {
             return
         }
         guard canSendPayloads(on: session) else { return }
+        guard shouldSendPayload(kind: .sessionCompletion, payload: payload, dedupeIdentical: false) else { return }
         guard let message = Self.makeContextMessage(kind: .sessionCompletion, payload: payload) else { return }
         sendContextMessage(
             message,
@@ -434,6 +441,7 @@ private extension DefaultWatchCompanionBridge {
 #if canImport(WatchConnectivity)
         guard let session,
               canSendPayloads(on: session),
+              shouldSendPayload(kind: .todayPlanSnapshot, payload: snapshot, dedupeIdentical: true),
               let message = Self.makeContextMessage(kind: .todayPlanSnapshot, payload: snapshot) else {
             return
         }
@@ -446,6 +454,7 @@ private extension DefaultWatchCompanionBridge {
 #if canImport(WatchConnectivity)
         guard let session,
               canSendPayloads(on: session),
+              shouldSendPayload(kind: .sessionCompletion, payload: completion, dedupeIdentical: true),
               let message = Self.makeContextMessage(kind: .sessionCompletion, payload: completion) else {
             return
         }
@@ -466,21 +475,25 @@ private extension DefaultWatchCompanionBridge {
         }
 
         if let payload = latestWorkoutLaunchPayload,
+           shouldSendPayload(kind: .workoutLaunch, payload: payload, dedupeIdentical: true),
            let message = Self.makeTransferMessage(kind: .workoutLaunch, payload: payload) {
             sendTransferMessage(message, on: session)
         }
 
         if let snapshot = latestWorkoutProgressSnapshot,
+           shouldSendPayload(kind: .workoutProgress, payload: snapshot, dedupeIdentical: true),
            let message = Self.makeTransferMessage(kind: .workoutProgress, payload: snapshot) {
             sendTransferMessage(message, on: session)
         }
 
         if let snapshot = latestLiveWorkoutSnapshot,
+           shouldSendPayload(kind: .liveWorkoutSnapshot, payload: snapshot, dedupeIdentical: true),
            let message = Self.makeContextMessage(kind: .liveWorkoutSnapshot, payload: snapshot) {
             sendContextMessage(message, on: session)
         }
 
         if let context = latestCurrentSessionContext,
+           shouldSendPayload(kind: .currentSessionContext, payload: context, dedupeIdentical: true),
            let message = Self.makeContextMessage(kind: .currentSessionContext, payload: context) {
             sendContextMessage(message, on: session)
         }
@@ -509,6 +522,7 @@ private extension DefaultWatchCompanionBridge {
             } else {
                 latestStatus = .unsupported()
             }
+            replayState.markPeerMissing(currentReplayableKinds)
             replayLatestSnapshotsIfPossible()
 
         case .workoutExecutionAction:
@@ -559,14 +573,59 @@ private extension DefaultWatchCompanionBridge {
     }
 
     func sendPremiumLockedStateIfPossible(on session: WCSession) {
-        guard canSendLockedState(on: session),
-              let message = Self.makeContextMessage(
-                kind: .todayPlanSnapshot,
-                payload: premiumLockedTodayPlanSnapshot()
-              ) else {
+        guard canSendLockedState(on: session) else {
+            return
+        }
+        let snapshot = latestPremiumLockedSnapshot ?? premiumLockedTodayPlanSnapshot()
+        latestPremiumLockedSnapshot = snapshot
+        guard shouldSendPayload(
+            kind: .todayPlanSnapshot,
+            payload: snapshot,
+            dedupeIdentical: true
+        ) else {
+            return
+        }
+        guard let message = Self.makeContextMessage(
+            kind: .todayPlanSnapshot,
+            payload: snapshot
+        ) else {
             return
         }
         sendContextMessage(message, on: session)
+    }
+
+    var currentReplayableKinds: Set<WatchPayloadKind> {
+        var kinds: Set<WatchPayloadKind> = []
+        if latestTodayPlanSnapshot != nil {
+            kinds.insert(.todayPlanSnapshot)
+        }
+        if latestWorkoutLaunchPayload != nil {
+            kinds.insert(.workoutLaunch)
+        }
+        if latestWorkoutProgressSnapshot != nil {
+            kinds.insert(.workoutProgress)
+        }
+        if latestLiveWorkoutSnapshot != nil {
+            kinds.insert(.liveWorkoutSnapshot)
+        }
+        if latestCurrentSessionContext != nil {
+            kinds.insert(.currentSessionContext)
+        }
+        if latestSessionCompletionPayload != nil {
+            kinds.insert(.sessionCompletion)
+        }
+        return kinds
+    }
+
+    func shouldSendPayload<Payload: Encodable>(
+        kind: WatchPayloadKind,
+        payload: Payload,
+        dedupeIdentical: Bool
+    ) -> Bool {
+        guard let fingerprint = WatchPayloadFingerprint(kind: kind, payload: payload) else {
+            return true
+        }
+        return replayState.shouldSend(fingerprint, dedupeIdentical: dedupeIdentical)
     }
 
     func premiumLockedTodayPlanSnapshot(now: Date = Date()) -> WatchTodayPlanSnapshot {

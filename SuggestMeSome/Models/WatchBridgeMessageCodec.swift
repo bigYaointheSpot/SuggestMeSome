@@ -157,3 +157,49 @@ enum WatchBridgeMessageCodec {
         }
     }
 }
+
+struct WatchPayloadFingerprint: Equatable, Hashable {
+    let kind: WatchPayloadKind
+    let payloadJSON: Data
+
+    init(kind: WatchPayloadKind, payloadJSON: Data) {
+        self.kind = kind
+        self.payloadJSON = payloadJSON
+    }
+
+    init?<Payload: Encodable>(kind: WatchPayloadKind, payload: Payload) {
+        guard let payloadJSON = try? WatchBridgeMessageCodec.encodePayload(payload) else {
+            return nil
+        }
+        self.init(kind: kind, payloadJSON: payloadJSON)
+    }
+
+    init(message: WatchBridgeMessage) {
+        self.init(kind: message.kind, payloadJSON: message.payloadJSON)
+    }
+}
+
+struct WatchReplayState {
+    private(set) var lastSentFingerprintByKind: [WatchPayloadKind: WatchPayloadFingerprint] = [:]
+    private(set) var pendingReplayKinds: Set<WatchPayloadKind> = []
+
+    mutating func markPeerMissing(_ kinds: Set<WatchPayloadKind>) {
+        for kind in kinds where lastSentFingerprintByKind[kind] != nil {
+            pendingReplayKinds.insert(kind)
+        }
+    }
+
+    mutating func shouldSend(
+        _ fingerprint: WatchPayloadFingerprint,
+        dedupeIdentical: Bool
+    ) -> Bool {
+        let needsReplay = pendingReplayKinds.remove(fingerprint.kind) != nil
+        if dedupeIdentical,
+           !needsReplay,
+           lastSentFingerprintByKind[fingerprint.kind] == fingerprint {
+            return false
+        }
+        lastSentFingerprintByKind[fingerprint.kind] = fingerprint
+        return true
+    }
+}
