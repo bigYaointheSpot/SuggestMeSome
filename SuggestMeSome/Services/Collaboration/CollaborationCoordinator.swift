@@ -147,16 +147,45 @@ final class CollaborationCoordinator {
         errorTracker.clearError(endpoint)
     }
 
+    /// Resolves the current premium entitlement at gate-check time. Injected
+    /// so tests can drive non-premium flows without touching the shared
+    /// PurchaseManager singleton.
+    private let entitlementStateProvider: @MainActor () -> EntitlementState
+
     init(
         collaborationClient: CloudCollaborationClient? = nil,
         backendClient: CloudBackendClient? = nil,
         tokenStore: CloudSessionTokenStore? = nil,
-        syncStateStore: CloudSyncStateStore? = nil
+        syncStateStore: CloudSyncStateStore? = nil,
+        entitlementStateProvider: (@MainActor () -> EntitlementState)? = nil
     ) {
         self.collaborationClient = collaborationClient ?? HTTPCloudCollaborationClient()
         self.backendClient = backendClient ?? HTTPCloudBackendClient()
         self.tokenStore = tokenStore ?? KeychainCloudSessionTokenStore.shared
         self.syncStateStore = syncStateStore ?? CloudSyncStateStore()
+        self.entitlementStateProvider = entitlementStateProvider ?? { PurchaseManager.shared.entitlementState }
+    }
+
+    /// Defense-in-depth gate on every collaboration mutation. UI already
+    /// wraps these flows in `PremiumFeatureGate`, but we also block them at
+    /// the coordinator boundary so a mis-wired view can't bypass the gate
+    /// and emit a network call. Gate failures surface through the shared
+    /// error tracker so they render via the same InlineErrorBanner pattern
+    /// as any other endpoint error.
+    private func ensurePremiumAccess(for endpoint: CollaborationEndpoint) -> Bool {
+        switch FeatureAccessPolicy.decision(
+            for: .coachCollaboration,
+            entitlementState: entitlementStateProvider()
+        ) {
+        case .granted:
+            return true
+        case .premiumRequired:
+            errorTracker.recordErrorMessage(
+                endpoint,
+                message: "Coach collaboration requires a premium subscription."
+            )
+            return false
+        }
     }
 
     var currentAccountID: UUID? {
@@ -480,6 +509,7 @@ final class CollaborationCoordinator {
         _ update: NotificationPreferenceUpdateRequest
     ) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .notificationPreferences) else { return }
         do {
             let accessToken = try await validAccessToken()
             let dto = try await collaborationClient.updateNotificationPreferences(
@@ -504,6 +534,7 @@ final class CollaborationCoordinator {
         scopes: [CollaborationVisibilityScope]
     ) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .invites) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.createInvite(
@@ -527,6 +558,7 @@ final class CollaborationCoordinator {
 
     func respondToInvite(_ invite: CoachInvite, action: CoachInviteStatus) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .invites) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.respondToInvite(
@@ -546,6 +578,7 @@ final class CollaborationCoordinator {
 
     func revokeInvite(_ invite: CoachInvite) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .invites) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.revokeInvite(
@@ -566,6 +599,7 @@ final class CollaborationCoordinator {
         scopes: [CollaborationVisibilityScope]
     ) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .relationships) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.updateRelationshipScopes(
@@ -591,6 +625,7 @@ final class CollaborationCoordinator {
         tags: [String]
     ) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .blueprints) else { return }
         do {
             let accessToken = try await validAccessToken()
             let dto = program.toSyncDTO()
@@ -628,6 +663,7 @@ final class CollaborationCoordinator {
         startGuidance: String?
     ) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .assignments) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.createAssignment(
@@ -654,6 +690,7 @@ final class CollaborationCoordinator {
         status: ProgramAssignmentStatus
     ) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .assignments) else { return }
         do {
             let accessToken = try await validAccessToken()
             let response = try await collaborationClient.updateAssignmentStatus(
@@ -686,6 +723,7 @@ final class CollaborationCoordinator {
         requiresReview: Bool = false
     ) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .notes) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.createCoachNote(
@@ -714,6 +752,7 @@ final class CollaborationCoordinator {
 
     func markNoteRead(_ note: CoachNote) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .notes) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.markCoachNoteRead(
@@ -737,6 +776,7 @@ final class CollaborationCoordinator {
         messageText: String?
     ) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .programShares) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.createProgramShare(
@@ -761,6 +801,7 @@ final class CollaborationCoordinator {
 
     func revokeProgramShare(_ share: ProgramShareGrant) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .programShares) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.revokeProgramShare(
@@ -786,6 +827,7 @@ final class CollaborationCoordinator {
         payloadJSON: String
     ) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .progressShares) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.createProgressShare(
@@ -811,6 +853,7 @@ final class CollaborationCoordinator {
 
     func revokeProgressShare(_ share: ProgressShareCard) async {
         guard let modelContext else { return }
+        guard ensurePremiumAccess(for: .progressShares) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.revokeProgressShare(

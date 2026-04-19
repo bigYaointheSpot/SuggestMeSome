@@ -238,7 +238,8 @@ struct Feature19CollaborationFoundationTests {
             collaborationClient: collaborationClient,
             backendClient: MockCloudBackendClient(),
             tokenStore: tokenStore,
-            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
         )
         coordinator.configure(modelContext: container.mainContext)
 
@@ -317,7 +318,8 @@ struct Feature19CollaborationFoundationTests {
             collaborationClient: collaborationClient,
             backendClient: MockCloudBackendClient(),
             tokenStore: tokenStore,
-            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
         )
         coordinator.configure(modelContext: container.mainContext)
 
@@ -442,7 +444,8 @@ struct Feature19CollaborationFoundationTests {
             collaborationClient: collaborationClient,
             backendClient: MockCloudBackendClient(),
             tokenStore: tokenStore,
-            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
         )
         coordinator.configure(modelContext: container.mainContext)
 
@@ -463,7 +466,8 @@ struct Feature19CollaborationFoundationTests {
             collaborationClient: MockCollaborationClient(),
             backendClient: MockCloudBackendClient(),
             tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
-            syncStateStore: CloudSyncStateStore(userDefaults: UserDefaults(suiteName: "Feature19Roles.\(UUID().uuidString)")!)
+            syncStateStore: CloudSyncStateStore(userDefaults: UserDefaults(suiteName: "Feature19Roles.\(UUID().uuidString)")!),
+            entitlementStateProvider: { .premiumUnlocked }
         )
         coordinator.configure(modelContext: container.mainContext)
 
@@ -495,7 +499,8 @@ struct Feature19CollaborationFoundationTests {
             collaborationClient: collaborationClient,
             backendClient: MockCloudBackendClient(),
             tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
-            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
         )
         coordinator.configure(modelContext: container.mainContext)
 
@@ -525,7 +530,8 @@ struct Feature19CollaborationFoundationTests {
             collaborationClient: collaborationClient,
             backendClient: MockCloudBackendClient(),
             tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
-            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
         )
         coordinator.configure(modelContext: container.mainContext)
         coordinator.hydrateAccountState(feature19SignedInState())
@@ -548,7 +554,8 @@ struct Feature19CollaborationFoundationTests {
             collaborationClient: collaborationClient,
             backendClient: MockCloudBackendClient(),
             tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
-            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
         )
         coordinator.configure(modelContext: container.mainContext)
         coordinator.hydrateAccountState(feature19SignedInState())
@@ -695,7 +702,8 @@ struct Feature19CollaborationFoundationTests {
             collaborationClient: collaborationClient,
             backendClient: MockCloudBackendClient(),
             tokenStore: tokenStore,
-            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
         )
         coordinator.configure(modelContext: container.mainContext)
         await coordinator.handleAccountStateDidChange(feature19SignedInState())
@@ -740,7 +748,8 @@ struct Feature19CollaborationFoundationTests {
             collaborationClient: collaborationClient,
             backendClient: MockCloudBackendClient(),
             tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
-            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
         )
         coordinator.configure(modelContext: container.mainContext)
         coordinator.hydrateAccountState(feature19SignedInState())
@@ -1093,6 +1102,35 @@ struct Feature19CollaborationFoundationTests {
         #expect(remainingNotes.map(\.stableID) == ["note-keep"])
     }
 
+    @Test func coachOnlyMutationGatesWithoutPremium() async throws {
+        let container = try makeInMemoryContainer()
+        let defaults = UserDefaults(suiteName: "Feature19Gate.\(UUID().uuidString)")!
+        defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+
+        let collaborationClient = MockCollaborationClient()
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: collaborationClient,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .free }
+        )
+        coordinator.configure(modelContext: container.mainContext)
+        coordinator.hydrateAccountState(feature19SignedInState())
+
+        await coordinator.createCoachInvite(
+            inviteeEmail: "athlete@example.com",
+            noteText: nil,
+            inviterRole: .coach,
+            scopes: []
+        )
+
+        // Gate rejects the call: no network fire, error surfaces, banner set.
+        #expect(collaborationClient.invites.isEmpty)
+        #expect(coordinator.endpointError(.invites) == "Coach collaboration requires a premium subscription.")
+        #expect(coordinator.lastErrorMessage == "Coach collaboration requires a premium subscription.")
+    }
+
     @Test func refreshCoalescerSharesInFlightTask() async {
         let coalescer = CollaborationRefreshCoalescer()
         let runCount = ActorCounter()
@@ -1123,7 +1161,8 @@ struct Feature19CollaborationFoundationTests {
             collaborationClient: MockCollaborationClient(),
             backendClient: MockCloudBackendClient(),
             tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
-            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
         )
         coordinator.configure(modelContext: container.mainContext)
         coordinator.hydrateAccountState(feature19SignedInState())
