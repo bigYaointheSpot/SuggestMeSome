@@ -3789,6 +3789,28 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 **Commit:** `feat: reorderable exercises with watch sync and ui polish`
 
+#### Prompt 2 [Draft exercise ordering correctness hardening] — 2026-04-19
+
+- Fixed the Feature 17 draft-order regression by adding a shared `normalizedExerciseOrder()` seam on `[DraftExerciseEntry]`:
+  - the helper preserves the current visible exercise array order while rewriting `orderIndex` into a contiguous 0-based sequence
+  - this keeps persisted ordering stable without introducing any new view model or watch-specific branching
+- Applied that normalization to the live workout draft flow in `WorkoutView`:
+  - delete, add, and drag-reorder paths now all normalize the draft after structural edits
+  - new sessions are normalized before they enter `ActiveWorkoutSessionStore`
+  - hydrating an already-persisted active session now self-heals any malformed `orderIndex` values from the earlier reorder/delete/add bug before continuing the workout
+- Reused the same normalization helper in `WorkoutEditView` where it was a no-behavior-change cleanup:
+  - existing workout drafts normalize on load
+  - add/remove actions keep indices contiguous there too
+- Expanded `Feature17ReorderRosterTests.swift` with Prompt 2 coverage:
+  - reorder -> delete -> add now proves `orderIndex` remains unique and contiguous
+  - malformed restored draft order normalizes to the visible array order during hydration
+  - the existing locked-prefix reorder tests remain intact
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests`
+
+**Commit:** `fix: normalize draft exercise order after structural edits`
+
 ---
 
 ## Project Setup

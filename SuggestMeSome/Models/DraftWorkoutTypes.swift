@@ -115,3 +115,15 @@ struct DraftExerciseEntry: Identifiable, Codable, Equatable {
         self.prescribedTargetEffortType = prescribedTargetEffortType
     }
 }
+
+extension Array where Element == DraftExerciseEntry {
+    /// Preserve the current visible draft order while rewriting persisted
+    /// indices into a contiguous 0-based sequence.
+    func normalizedExerciseOrder() -> [DraftExerciseEntry] {
+        enumerated().map { index, entry in
+            var normalizedEntry = entry
+            normalizedEntry.orderIndex = index
+            return normalizedEntry
+        }
+    }
+}

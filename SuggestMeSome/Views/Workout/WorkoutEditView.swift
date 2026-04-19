@@ -69,7 +69,7 @@ struct WorkoutEditView: View {
                     )
                 }
             }
-        _exerciseEntries = State(initialValue: drafts)
+        _exerciseEntries = State(initialValue: drafts.normalizedExerciseOrder())
     }
 
     // MARK: - Body
@@ -103,6 +103,7 @@ struct WorkoutEditView: View {
                     sets: sets,
                     isCardio: isCardio
                 ))
+                exerciseEntries = exerciseEntries.normalizedExerciseOrder()
             }
         }
         .confirmationDialog("Save Changes?", isPresented: $showingSaveConfirmation, titleVisibility: .visible) {
@@ -135,6 +136,7 @@ struct WorkoutEditView: View {
                 ForEach($exerciseEntries) { $entry in
                     ExerciseEntryCard(entry: $entry) {
                         exerciseEntries.removeAll { $0.id == entry.id }
+                        exerciseEntries = exerciseEntries.normalizedExerciseOrder()
                     }
                 }
             }

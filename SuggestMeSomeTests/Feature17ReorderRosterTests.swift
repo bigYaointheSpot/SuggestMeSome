@@ -135,6 +135,38 @@ struct Feature17ReorderRosterTests {
         #expect(entries.map(\.orderIndex) == [0, 1, 2])
     }
 
+    @Test func normalizedExerciseOrderRepairsDeleteAndAddSequence() {
+        var entries = [
+            makePendingEntry(name: "A", orderIndex: 0, totalSets: 3),
+            makePendingEntry(name: "B", orderIndex: 1, totalSets: 3),
+            makePendingEntry(name: "C", orderIndex: 2, totalSets: 3)
+        ]
+
+        entries.move(fromOffsets: IndexSet(integer: 2), toOffset: 0)
+        entries = entries.normalizedExerciseOrder()
+        entries.removeAll { $0.exerciseName == "A" }
+        entries.append(makePendingEntry(name: "D", orderIndex: entries.count, totalSets: 3))
+
+        let normalized = entries.normalizedExerciseOrder()
+
+        #expect(normalized.map(\.exerciseName) == ["C", "B", "D"])
+        #expect(normalized.map(\.orderIndex) == [0, 1, 2])
+        #expect(Set(normalized.map(\.orderIndex)).count == normalized.count)
+    }
+
+    @Test func normalizedExerciseOrderPreservesVisibleArrayOrderDuringHydration() {
+        let entries = [
+            makePendingEntry(name: "Bench Press", orderIndex: 4, totalSets: 3),
+            makePendingEntry(name: "Row", orderIndex: 1, totalSets: 3),
+            makePendingEntry(name: "Curl", orderIndex: 9, totalSets: 3)
+        ]
+
+        let normalized = entries.normalizedExerciseOrder()
+
+        #expect(normalized.map(\.exerciseName) == ["Bench Press", "Row", "Curl"])
+        #expect(normalized.map(\.orderIndex) == [0, 1, 2])
+    }
+
     // MARK: - Helpers
 
     private func makePartialEntry(

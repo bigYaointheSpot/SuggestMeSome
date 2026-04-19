@@ -62,6 +62,7 @@ struct WorkoutView: View {
             ForEach($exerciseEntries) { $entry in
                 ExerciseEntryCard(entry: $entry) {
                     exerciseEntries.removeAll { $0.id == entry.id }
+                    exerciseEntries = exerciseEntries.normalizedExerciseOrder()
                 }
                 .plainWorkoutRow(horizontalInset: DSSpacing.l, verticalInset: DSSpacing.xs)
                 .moveDisabled(!canMoveExercise(entry))
@@ -102,6 +103,7 @@ struct WorkoutView: View {
                     isCardio: isCardio
                 )
                 exerciseEntries.append(entry)
+                exerciseEntries = exerciseEntries.normalizedExerciseOrder()
             }
         }
         .sheet(isPresented: $showBlockReview, onDismiss: {
@@ -249,9 +251,7 @@ struct WorkoutView: View {
     private func handleExerciseMove(from source: IndexSet, to destination: Int) {
         let clamped = max(firstMovableIndex, destination)
         exerciseEntries.move(fromOffsets: source, toOffset: clamped)
-        for idx in exerciseEntries.indices {
-            exerciseEntries[idx].orderIndex = idx
-        }
+        exerciseEntries = exerciseEntries.normalizedExerciseOrder()
     }
 
     // MARK: - Helpers
@@ -264,6 +264,7 @@ struct WorkoutView: View {
     private func configureWorkoutSession() {
         if let activeSession = activeWorkoutSessionStore.session {
             applyActiveSession(activeSession)
+            healPersistedExerciseOrderIfNeeded(for: activeSession)
             broadcastActiveSessionToWatch(includeLaunch: true)
             return
         }
@@ -286,6 +287,7 @@ struct WorkoutView: View {
         with entries: [DraftExerciseEntry],
         programContext: ActiveWorkoutProgramContext?
     ) {
+        let normalizedEntries = entries.normalizedExerciseOrder()
         let now = Date.now
         let workoutID = programWorkout?.workoutID ?? UUID()
         let sourceLabels = watchSourceLabels()
@@ -295,14 +297,14 @@ struct WorkoutView: View {
         )
         startTime = now
         lifecycleState = .running
-        exerciseEntries = entries
+        exerciseEntries = normalizedEntries
         caloriesText = ""
         comments = ""
         isActive = true
         activeWorkoutSessionStore.startSession(
             id: workoutID,
             startTime: now,
-            exerciseEntries: entries,
+            exerciseEntries: normalizedEntries,
             programContext: programContext,
             sessionPlanKind: programWorkout?.watchSessionPlanKind ?? (programContext == nil ? nil : .planned),
             sessionSourceLabels: sourceLabels,
@@ -314,11 +316,26 @@ struct WorkoutView: View {
 
     private func applyActiveSession(_ session: ActiveWorkoutSession) {
         startTime = session.startTime
-        exerciseEntries = session.exerciseEntries
+        exerciseEntries = session.exerciseEntries.normalizedExerciseOrder()
         caloriesText = session.caloriesText
         comments = session.comments
         lifecycleState = session.lifecycleState
         isActive = true
+    }
+
+    private func healPersistedExerciseOrderIfNeeded(for session: ActiveWorkoutSession) {
+        let normalizedEntries = session.exerciseEntries.normalizedExerciseOrder()
+        guard normalizedEntries != session.exerciseEntries else { return }
+        _ = activeWorkoutSessionStore.updateSession(
+            startTime: session.startTime,
+            exerciseEntries: normalizedEntries,
+            caloriesText: session.caloriesText,
+            comments: session.comments,
+            programContext: session.programContext,
+            sessionPlanKind: session.sessionPlanKind,
+            sessionSourceLabels: session.sessionSourceLabels,
+            sessionVersionStableID: session.sessionVersionStableID
+        )
     }
 
     private func scheduleDraftPersistence() {
