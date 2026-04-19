@@ -3709,6 +3709,22 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 19 [Fix duplicated program-session lookup regression] — 2026-04-18
+
+- Fixed the repeated-session regression in the programs snapshot path by reusing the canonical `ProgramRunProgressReadSnapshot` semantics instead of rebuilding session-to-workout lookup a second way inside `ProgramRunListSnapshot`.
+  - duplicate completions of the same `(week, session)` for a run now resolve to the latest completed workout in the programs list/detail surfaces
+  - existing row ordering, workout-count semantics, proposal/event counts, and block-review availability stay unchanged because the row metrics still come from the same run-scoped workout inputs
+- Added focused Prompt 19 regression coverage in `Feature16Prompt6TrainingProgramsSnapshotTests.swift`:
+  - duplicated program-session completions now resolve to the newest workout in the list snapshot
+  - canonical progress snapshot behavior remains covered alongside the list snapshot regression case
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt6TrainingProgramsSnapshotTests -only-testing:SuggestMeSomeTests/Feature16Prompt13ProgramRunProgressTests`
+
+**Commit:** `refactor: fix program session snapshot regression`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

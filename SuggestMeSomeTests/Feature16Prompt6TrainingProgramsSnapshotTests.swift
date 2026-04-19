@@ -99,6 +99,47 @@ struct Feature16Prompt6TrainingProgramsSnapshotTests {
         #expect(completedSnapshot.blockReviewAvailable)
     }
 
+    @Test func programRunListSnapshotUsesLatestWorkoutForRepeatedCompletedSession() {
+        let run = makeRun(
+            name: "Repeated Session Run",
+            source: .template,
+            startDate: day(-14),
+            isCompleted: false
+        )
+
+        let earliestWorkout = makeWorkout(
+            run: run,
+            date: day(-6),
+            weekNumber: 1,
+            sessionNumber: 1,
+            exerciseName: "Bench Press"
+        )
+        let latestWorkout = makeWorkout(
+            run: run,
+            date: day(-2),
+            weekNumber: 1,
+            sessionNumber: 1,
+            exerciseName: "Incline Bench Press"
+        )
+
+        let snapshot = ProgramRunListSnapshot.build(
+            programRuns: [run],
+            workouts: [latestWorkout, earliestWorkout],
+            proposals: [],
+            events: []
+        )
+
+        let rowSnapshot = snapshot.snapshot(for: run)
+        #expect(rowSnapshot.completedWorkoutCount == 2)
+        #expect(
+            rowSnapshot.completedWorkout(
+                weekNumber: 1,
+                sessionNumber: 1,
+                runID: run.id
+            )?.id == latestWorkout.id
+        )
+    }
+
     @Test func programRunListRefreshTokenChangesWhenOverlayChanges() {
         let run = makeRun(
             name: "Overlay Run",

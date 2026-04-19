@@ -135,28 +135,25 @@ struct ProgramRunListSnapshot {
 
         let rowSnapshotsByRunID = orderedRuns.reduce(into: [UUID: ProgramRunRowSnapshot]()) { result, run in
             let runWorkouts = workoutsByRunID[run.id] ?? []
-            let completedWorkoutBySessionKey = runWorkouts.reduce(
+            let progressSnapshot = ProgramRunProgressReadSnapshot.build(
+                for: run,
+                workouts: runWorkouts
+            )
+            let completedWorkoutBySessionKey = progressSnapshot.workoutBySessionKey.reduce(
                 into: [ProgramRunSessionPreviewKey: Workout]()
-            ) { workoutsBySessionKey, workout in
-                guard
-                    let weekNumber = workout.programWeekNumber,
-                    let sessionNumber = workout.programSessionNumber
-                else {
-                    return
-                }
-
+            ) { workoutsBySessionKey, entry in
                 workoutsBySessionKey[
                     ProgramRunSessionPreviewKey(
                         runID: run.id,
-                        weekNumber: weekNumber,
-                        sessionNumber: sessionNumber
+                        weekNumber: entry.key.weekNumber,
+                        sessionNumber: entry.key.sessionNumber
                     )
-                ] = workout
+                ] = entry.value
             }
 
             result[run.id] = ProgramRunRowSnapshot(
-                completedWorkoutCount: runWorkouts.count,
-                totalWorkoutCount: (run.program?.lengthInWeeks ?? 0) * (run.program?.sessionsPerWeek ?? 0),
+                completedWorkoutCount: progressSnapshot.completedWorkoutCount,
+                totalWorkoutCount: progressSnapshot.totalSessions,
                 pendingProposalCount: pendingProposalCountByRunID[run.id] ?? 0,
                 adaptationEventCount: adaptationEventCountByRunID[run.id] ?? 0,
                 sourceLabel: ProgramRunRowSnapshot.fallback(for: run).sourceLabel,
