@@ -105,6 +105,8 @@ struct WorkoutView: View {
                 exerciseEntries.append(entry)
                 exerciseEntries = exerciseEntries.normalizedExerciseOrder()
             }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showBlockReview, onDismiss: {
             pendingBlockReviewSnapshot = nil
@@ -1273,51 +1275,57 @@ struct ExercisePickerSheet: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    @State private var searchText: String = ""
     @State private var expandedGroups: Set<String> = []
     @State private var selectedExercise: String?
     @State private var showingSetCount = false
     @State private var selectedSetCount: Int = 3
 
+    private var trimmedQuery: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var flatMatches: [(group: MuscleGroup, exercise: Exercise)] {
+        guard !trimmedQuery.isEmpty else { return [] }
+        var rows: [(MuscleGroup, Exercise)] = []
+        for group in muscleGroups {
+            for exercise in group.exercises.sorted(by: { $0.name < $1.name })
+            where exercise.name.localizedCaseInsensitiveContains(trimmedQuery) {
+                rows.append((group, exercise))
+            }
+        }
+        return rows
+    }
+
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(muscleGroups) { group in
-                    DisclosureGroup(
-                        isExpanded: Binding(
-                            get: { expandedGroups.contains(group.name) },
-                            set: { isExpanded in
-                                if isExpanded {
-                                    expandedGroups.insert(group.name)
-                                } else {
-                                    expandedGroups.remove(group.name)
-                                }
-                            }
-                        )
-                    ) {
-                        ForEach(group.exercises.sorted { $0.name < $1.name }) { exercise in
-                            Button {
-                                if exercise.exerciseType == .cardio {
-                                    onAdd(exercise.name, true, 0)
-                                    dismiss()
-                                } else {
-                                    selectedExercise = exercise.name
-                                    showingSetCount = true
-                                }
-                            } label: {
-                                Text(exercise.name)
-                                    .foregroundStyle(.primary)
-                            }
+            Group {
+                if trimmedQuery.isEmpty {
+                    groupedList
+                } else if flatMatches.isEmpty {
+                    DSEmptyState(
+                        systemImage: "magnifyingglass",
+                        title: "No exercises match '\(trimmedQuery)'",
+                        message: "Add a new exercise with this name and we'll configure its sets next.",
+                        cta: .init(
+                            title: "Create '\(trimmedQuery)'",
+                            systemImage: "plus.circle.fill"
+                        ) {
+                            selectedExercise = trimmedQuery
+                            showingSetCount = true
                         }
-                    } label: {
-                        Text(group.name)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                    }
+                    )
+                } else {
+                    matchesList
                 }
             }
-            .listStyle(.insetGrouped)
             .navigationTitle("Select Exercise")
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search exercises"
+            )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -1328,6 +1336,64 @@ struct ExercisePickerSheet: View {
                     setCountView(for: name)
                 }
             }
+        }
+    }
+
+    private var groupedList: some View {
+        List {
+            ForEach(muscleGroups) { group in
+                DisclosureGroup(
+                    isExpanded: Binding(
+                        get: { expandedGroups.contains(group.name) },
+                        set: { isExpanded in
+                            if isExpanded {
+                                expandedGroups.insert(group.name)
+                            } else {
+                                expandedGroups.remove(group.name)
+                            }
+                        }
+                    )
+                ) {
+                    ForEach(group.exercises.sorted { $0.name < $1.name }) { exercise in
+                        Button { selectExercise(exercise) } label: {
+                            Text(exercise.name)
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                } label: {
+                    Text(group.name)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    private var matchesList: some View {
+        List {
+            ForEach(Array(flatMatches.enumerated()), id: \.offset) { _, row in
+                Button { selectExercise(row.exercise) } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.exercise.name)
+                            .foregroundStyle(.primary)
+                        Text(row.group.name)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    private func selectExercise(_ exercise: Exercise) {
+        if exercise.exerciseType == .cardio {
+            onAdd(exercise.name, true, 0)
+            dismiss()
+        } else {
+            selectedExercise = exercise.name
+            showingSetCount = true
         }
     }
 
