@@ -1,12 +1,18 @@
 import SwiftData
 import SwiftUI
 
+// MARK: - Hub
+
 struct CollaborationHubView: View {
     @Environment(AccountManager.self) private var accountManager
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
     @Environment(PurchaseManager.self) private var purchaseManager
 
     @State private var showingInviteComposer = false
+
+    private var isCoachCollaborationUnlocked: Bool {
+        FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState)
+    }
 
     var body: some View {
         List {
@@ -15,24 +21,34 @@ struct CollaborationHubView: View {
             if accountManager.currentUser == nil {
                 CollaborationSignedOutSection()
             } else {
-                Section("Relationships") {
+                if let errorMessage = collaborationCoordinator.lastErrorMessage {
+                    Section {
+                        InlineErrorBanner(message: errorMessage) {
+                            await collaborationCoordinator.refreshAll(reason: "Retry from collaboration hub", force: true)
+                        }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
+                }
+
+                Section("Your Coaches") {
                     NavigationLink {
                         MyCoachView()
                     } label: {
                         hubRow(
                             title: "My Coach",
-                            subtitle: "\(collaborationCoordinator.athleteRelationships.count) active coach relationship(s)",
+                            subtitle: subtitle(for: collaborationCoordinator.athleteRelationships.count, singular: "active connection", plural: "active connections"),
                             systemImage: "person.crop.circle.badge.checkmark"
                         )
                     }
 
-                    if FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState) {
+                    if isCoachCollaborationUnlocked {
                         NavigationLink {
                             CoachRosterView()
                         } label: {
                             hubRow(
-                                title: "Coach Roster",
-                                subtitle: "\(collaborationCoordinator.coachRosterSnapshots.count) athlete snapshot(s)",
+                                title: "Athlete Roster",
+                                subtitle: subtitle(for: collaborationCoordinator.coachRosterSnapshots.count, singular: "athlete snapshot", plural: "athlete snapshots"),
                                 systemImage: "person.3.sequence.fill"
                             )
                         }
@@ -41,8 +57,8 @@ struct CollaborationHubView: View {
                             PaywallView(feature: .coachCollaboration)
                         } label: {
                             hubRow(
-                                title: "Coach Roster",
-                                subtitle: "Premium unlock required for coach-facing tools",
+                                title: "Athlete Roster",
+                                subtitle: "Premium — coach-side tools",
                                 systemImage: "lock.circle"
                             )
                         }
@@ -51,12 +67,12 @@ struct CollaborationHubView: View {
                     Button {
                         showingInviteComposer = true
                     } label: {
-                        Label("Send Coach Invite", systemImage: "envelope.badge")
+                        Label("Send a Coach Invite", systemImage: "envelope.badge")
                     }
-                    .disabled(!FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState))
+                    .disabled(!isCoachCollaborationUnlocked)
                 }
 
-                if collaborationCoordinator.outgoingPendingInvites.isEmpty == false {
+                if !collaborationCoordinator.outgoingPendingInvites.isEmpty {
                     Section("Sent Invites") {
                         ForEach(collaborationCoordinator.outgoingPendingInvites) { invite in
                             InviteRow(invite: invite)
@@ -69,8 +85,8 @@ struct CollaborationHubView: View {
                         AssignmentInboxView()
                     } label: {
                         hubRow(
-                            title: "Assignment Inbox",
-                            subtitle: "\(collaborationCoordinator.inboxAssignments.count) pending assignment(s)",
+                            title: "From Your Coach",
+                            subtitle: subtitle(for: collaborationCoordinator.inboxAssignments.count, singular: "pending program", plural: "pending programs"),
                             systemImage: "tray.full"
                         )
                     }
@@ -79,8 +95,8 @@ struct CollaborationHubView: View {
                         BlueprintLibraryView()
                     } label: {
                         hubRow(
-                            title: "Blueprint Library",
-                            subtitle: "\(collaborationCoordinator.blueprints.count) saved blueprint(s)",
+                            title: "Saved Programs",
+                            subtitle: subtitle(for: collaborationCoordinator.blueprints.count, singular: "saved program", plural: "saved programs"),
                             systemImage: "square.stack.3d.up.fill"
                         )
                     }
@@ -90,39 +106,25 @@ struct CollaborationHubView: View {
                     } label: {
                         hubRow(
                             title: "Private Sharing",
-                            subtitle: "\(collaborationCoordinator.programShares.count + collaborationCoordinator.progressShares.count) active share(s)",
+                            subtitle: subtitle(for: collaborationCoordinator.programShares.count + collaborationCoordinator.progressShares.count, singular: "active share", plural: "active shares"),
                             systemImage: "person.crop.circle.badge.arrow.forward"
                         )
                     }
                 }
 
-                Section("Coach Notes & Digests") {
+                Section("Notes & Updates") {
                     NavigationLink {
                         CoachNotesInboxView()
                     } label: {
                         hubRow(
                             title: "Coach Notes",
-                            subtitle: "\(collaborationCoordinator.unreadCoachNotes.count) unread note(s), \(collaborationCoordinator.unreadDigests.count) unread digest(s)",
+                            subtitle: notesSubtitle,
                             systemImage: "text.bubble.fill"
                         )
                     }
                 }
 
-                if let statusMessage = collaborationCoordinator.statusMessage {
-                    Section("Status") {
-                        Text(statusMessage)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if let lastErrorMessage = collaborationCoordinator.lastErrorMessage {
-                    Section("Issue") {
-                        Text(lastErrorMessage)
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                if collaborationCoordinator.recentActivity.isEmpty == false {
+                if !collaborationCoordinator.recentActivity.isEmpty {
                     Section("Recent Activity") {
                         ForEach(collaborationCoordinator.recentActivity.prefix(6)) { activity in
                             VStack(alignment: .leading, spacing: 4) {
@@ -138,27 +140,55 @@ struct CollaborationHubView: View {
         }
         .navigationTitle("Collaboration")
         .navigationBarTitleDisplayMode(.inline)
+        .refreshable {
+            await collaborationCoordinator.refreshAll(reason: "Pull-to-refresh", force: true)
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Task {
-                        await collaborationCoordinator.refreshAll(reason: "Manual collaboration refresh")
+                if collaborationCoordinator.phase == .loading {
+                    ProgressView()
+                } else {
+                    Button {
+                        Task {
+                            await collaborationCoordinator.refreshAll(reason: "Manual collaboration refresh", force: true)
+                        }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
                     }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
+                    .accessibilityLabel("Refresh collaboration")
+                    .disabled(accountManager.currentUser == nil)
                 }
-                .disabled(accountManager.currentUser == nil)
             }
         }
         .sheet(isPresented: $showingInviteComposer) {
             NavigationStack {
-                if FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState) {
+                if isCoachCollaborationUnlocked {
                     CreateCoachInviteView()
                 } else {
                     PaywallView(feature: .coachCollaboration)
                 }
             }
         }
+    }
+
+    private var notesSubtitle: String {
+        let unreadNotes = collaborationCoordinator.unreadCoachNotes.count
+        let unreadDigests = collaborationCoordinator.unreadDigests.count
+        if unreadNotes == 0 && unreadDigests == 0 {
+            return "All caught up"
+        }
+        var parts: [String] = []
+        if unreadNotes > 0 {
+            parts.append("\(unreadNotes) new \(unreadNotes == 1 ? "note" : "notes")")
+        }
+        if unreadDigests > 0 {
+            parts.append("\(unreadDigests) new \(unreadDigests == 1 ? "digest" : "digests")")
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    private func subtitle(for count: Int, singular: String, plural: String) -> String {
+        count == 1 ? "1 \(singular)" : "\(count) \(plural)"
     }
 
     private func hubRow(title: String, subtitle: String, systemImage: String) -> some View {
@@ -168,8 +198,12 @@ struct CollaborationHubView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(subtitle).")
     }
 }
+
+// MARK: - Notification Preferences
 
 struct NotificationPreferencesView: View {
     @Environment(AccountManager.self) private var accountManager
@@ -177,6 +211,8 @@ struct NotificationPreferencesView: View {
     @Environment(PushNotificationManager.self) private var pushNotificationManager
 
     @State private var draft = NotificationPreferenceDraft()
+    @State private var isSaving = false
+    @State private var didSaveTrigger = 0
 
     var body: some View {
         List {
@@ -187,20 +223,24 @@ struct NotificationPreferencesView: View {
                     LabeledContent("Status", value: pushNotificationManager.authorizationState.title)
                     if let deviceToken = pushNotificationManager.deviceTokenHex {
                         LabeledContent("Device Token", value: String(deviceToken.prefix(12)) + "…")
+                            .font(.footnote.monospaced())
                     }
-                    Button("Enable Push Notifications") {
-                        Task {
-                            await collaborationCoordinator.requestPushAuthorization()
+                    if pushNotificationManager.authorizationState != .authorized
+                        && pushNotificationManager.authorizationState != .provisional {
+                        Button {
+                            Task { await collaborationCoordinator.requestPushAuthorization() }
+                        } label: {
+                            Label("Turn On Notifications", systemImage: "bell.badge")
                         }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .disabled(pushNotificationManager.authorizationState == .authorized || pushNotificationManager.authorizationState == .provisional)
                 } header: {
-                    Text("Push Access")
+                    Text("Notifications")
                 } footer: {
-                    Text("Push is the only outbound delivery channel in Feature 19. Notifications deep-link into the existing iPhone surfaces.")
+                    Text("We only use push notifications — no email or SMS. Tapping a notification opens the relevant tab in this app.")
                 }
 
-                Section {
+                Section("What you'll be notified about") {
                     preferenceToggle(.coachInvites)
                     preferenceToggle(.assignmentUpdates)
                     preferenceToggle(.coachNotes)
@@ -208,25 +248,25 @@ struct NotificationPreferencesView: View {
                     preferenceToggle(.checkInReminders)
                     preferenceToggle(.pendingProposalReminders)
                     preferenceToggle(.weeklyDigests)
-                } header: {
-                    Text("Coach Collaboration Alerts")
                 }
 
                 Section {
-                    Button("Save Preferences") {
-                        Task {
+                    MutationButton(
+                        title: "Save Preferences",
+                        prominent: true,
+                        action: {
                             await collaborationCoordinator.updateNotificationPreferences(draft.asRequest())
+                            didSaveTrigger &+= 1
                         }
-                    }
+                    )
                 }
             }
         }
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
+        .sensoryFeedback(.success, trigger: didSaveTrigger)
         .onAppear {
-            draft = NotificationPreferenceDraft(
-                preference: collaborationCoordinator.notificationPreference
-            )
+            draft = NotificationPreferenceDraft(preference: collaborationCoordinator.notificationPreference)
         }
     }
 
@@ -240,38 +280,44 @@ struct NotificationPreferencesView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(category.title)
                 Text(category.subtitle)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
     }
 }
 
+// MARK: - My Coach
+
 struct MyCoachView: View {
     @Environment(AccountManager.self) private var accountManager
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
+
+    @State private var showingInviteComposer = false
 
     var body: some View {
         List {
             if accountManager.currentUser == nil {
                 CollaborationSignedOutSection()
             } else if collaborationCoordinator.shouldShowMyCoachEmptyState {
-                ContentUnavailableView(
-                    "No Coach Yet",
+                EmptyStateRow(
+                    title: "No Coach Yet",
                     systemImage: "person.crop.circle.badge.questionmark",
-                    description: Text("Accept an invite or ask your coach to send one to connect training, assignments, notes, and deterministic insights.")
+                    description: "Invite a coach to share programs, get assignments, and exchange notes.",
+                    actionTitle: "Send a Coach Invite",
+                    action: { showingInviteComposer = true }
                 )
             } else {
-                if collaborationCoordinator.incomingPendingInvites.isEmpty == false {
-                    Section("Pending Invites") {
+                if !collaborationCoordinator.incomingPendingInvites.isEmpty {
+                    Section("Incoming Invites") {
                         ForEach(collaborationCoordinator.incomingPendingInvites) { invite in
                             InviteRow(invite: invite)
                         }
                     }
                 }
 
-                if collaborationCoordinator.athleteRelationships.isEmpty == false {
-                    Section("Active Coach Relationships") {
+                if !collaborationCoordinator.athleteRelationships.isEmpty {
+                    Section("Connected Coaches") {
                         ForEach(collaborationCoordinator.athleteRelationships) { relationship in
                             NavigationLink {
                                 RelationshipDetailView(relationship: relationship)
@@ -279,10 +325,11 @@ struct MyCoachView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(relationship.participantDisplayName(for: collaborationCoordinator.currentAccountID))
                                         .font(.headline)
-                                    Text("\(relationship.unreadCoachNoteCount) unread notes • \(relationship.pendingAssignmentCount) pending assignments")
+                                    Text(relationshipSubtitle(relationship))
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
                                 }
+                                .accessibilityElement(children: .combine)
                             }
                         }
                     }
@@ -291,8 +338,26 @@ struct MyCoachView: View {
         }
         .navigationTitle("My Coach")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingInviteComposer) {
+            NavigationStack {
+                CreateCoachInviteView()
+            }
+        }
+    }
+
+    private func relationshipSubtitle(_ relationship: CoachRelationship) -> String {
+        var parts: [String] = []
+        if relationship.unreadCoachNoteCount > 0 {
+            parts.append("\(relationship.unreadCoachNoteCount) unread \(relationship.unreadCoachNoteCount == 1 ? "note" : "notes")")
+        }
+        if relationship.pendingAssignmentCount > 0 {
+            parts.append("\(relationship.pendingAssignmentCount) pending")
+        }
+        return parts.isEmpty ? "Up to date" : parts.joined(separator: " • ")
     }
 }
+
+// MARK: - Coach Roster
 
 struct CoachRosterView: View {
     @Environment(AccountManager.self) private var accountManager
@@ -308,10 +373,10 @@ struct CoachRosterView: View {
                     if accountManager.currentUser == nil {
                         CollaborationSignedOutSection()
                     } else if collaborationCoordinator.coachRosterSnapshots.isEmpty {
-                        ContentUnavailableView(
-                            "No Athlete Snapshots Yet",
+                        EmptyStateRow(
+                            title: "No Athletes Yet",
                             systemImage: "person.3.sequence",
-                            description: Text("As invite-only relationships go live, deterministic athlete snapshots will appear here with sync freshness, adherence, fatigue, and review priorities.")
+                            description: "Once an athlete accepts your invite, you'll see their training snapshots here — adherence, fatigue, and what to review next."
                         )
                     } else {
                         ForEach(collaborationCoordinator.coachRosterSnapshots) { snapshot in
@@ -327,16 +392,19 @@ struct CoachRosterView: View {
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
                                 }
+                                .accessibilityElement(children: .combine)
                             }
                         }
                     }
                 }
             }
         }
-        .navigationTitle("Coach Roster")
+        .navigationTitle("Athlete Roster")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
+
+// MARK: - Saved Programs (Blueprints)
 
 struct BlueprintLibraryView: View {
     @Environment(AccountManager.self) private var accountManager
@@ -350,9 +418,9 @@ struct BlueprintLibraryView: View {
             if accountManager.currentUser == nil {
                 CollaborationSignedOutSection()
             } else {
-                Section("Saved Blueprints") {
+                Section("Your Saved Programs") {
                     if collaborationCoordinator.blueprints.isEmpty {
-                        Text("Save an existing program into your account-backed blueprint library to reuse, assign, and privately share it later.")
+                        Text("Save a program to reuse it later, assign it to an athlete, or share it privately.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(collaborationCoordinator.blueprints) { blueprint in
@@ -376,9 +444,9 @@ struct BlueprintLibraryView: View {
                     }
                 }
 
-                Section("Save Existing Program") {
+                Section("Save a Program") {
                     if programs.isEmpty {
-                        Text("Build or generate a program first, then save it into your immutable blueprint library.")
+                        Text("Build or generate a program first, then save it here.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(programs) { program in
@@ -397,7 +465,7 @@ struct BlueprintLibraryView: View {
                 }
             }
         }
-        .navigationTitle("Blueprint Library")
+        .navigationTitle("Saved Programs")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedProgram) { program in
             NavigationStack {
@@ -418,13 +486,13 @@ struct BlueprintDetailView: View {
 
     var body: some View {
         List {
-            Section("Blueprint") {
+            Section("Saved Program") {
                 LabeledContent("Name", value: blueprint.name)
                 if let focusText = blueprint.focusText, !focusText.isEmpty {
                     LabeledContent("Focus", value: focusText)
                 }
                 LabeledContent("Duration", value: "\(blueprint.durationWeeks) weeks")
-                LabeledContent("Sessions / Week", value: "\(blueprint.sessionsPerWeek)")
+                LabeledContent("Sessions / week", value: "\(blueprint.sessionsPerWeek)")
                 if let notesText = blueprint.notesText, !notesText.isEmpty {
                     Text(notesText)
                         .foregroundStyle(.secondary)
@@ -439,13 +507,17 @@ struct BlueprintDetailView: View {
             }
 
             Section("Actions") {
-                Button("Assign to Athlete") {
+                Button {
                     showingAssignmentComposer = true
+                } label: {
+                    Label("Assign to an Athlete", systemImage: "paperplane.fill")
                 }
                 .disabled(!FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState))
 
-                Button("Share Privately") {
+                Button {
                     showingProgramShareComposer = true
+                } label: {
+                    Label("Share Privately", systemImage: "lock.shield")
                 }
                 .disabled(collaborationCoordinator.relationships.isEmpty)
             }
@@ -469,73 +541,102 @@ struct BlueprintDetailView: View {
     }
 }
 
+// MARK: - Assignments (From Your Coach)
+
 struct AssignmentInboxView: View {
     @Environment(AccountManager.self) private var accountManager
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
+
+    @State private var showingInviteComposer = false
 
     var body: some View {
         List {
             if accountManager.currentUser == nil {
                 CollaborationSignedOutSection()
             } else if collaborationCoordinator.inboxAssignments.isEmpty {
-                ContentUnavailableView(
-                    "No Assignments Yet",
+                EmptyStateRow(
+                    title: "Nothing From Your Coach",
                     systemImage: "tray",
-                    description: Text("Assignments from a coach will appear here. Accepted assignments clone a blueprint into your personal training graph and then pull through Cloud Sync.")
+                    description: "When a coach sends you a program, it'll show up here. Accepting one drops it into your training.",
+                    actionTitle: collaborationCoordinator.athleteRelationships.isEmpty ? "Invite a Coach" : nil,
+                    action: { showingInviteComposer = true }
                 )
             } else {
                 ForEach(collaborationCoordinator.inboxAssignments) { assignment in
                     Section {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(assignment.athleteAccountID == collaborationCoordinator.currentAccountID ? assignment.coachDisplayName : assignment.athleteDisplayName)
-                                .font(.headline)
-                            Text(assignment.status.title)
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.indigo.opacity(0.12))
-                                .foregroundStyle(.indigo)
-                                .clipShape(Capsule())
-                            if let notesText = assignment.notesText, !notesText.isEmpty {
-                                Text(notesText)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if let startGuidance = assignment.startGuidance, !startGuidance.isEmpty {
-                                Text(startGuidance)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if collaborationCoordinator.canActOnAssignment(assignment) {
-                                HStack {
-                                    Button("Accept") {
-                                        Task {
-                                            await collaborationCoordinator.updateAssignmentStatus(assignment, status: .accepted)
-                                        }
-                                    }
-                                    Button("Decline", role: .destructive) {
-                                        Task {
-                                            await collaborationCoordinator.updateAssignmentStatus(assignment, status: .declined)
-                                        }
-                                    }
-                                    Button("Archive") {
-                                        Task {
-                                            await collaborationCoordinator.updateAssignmentStatus(assignment, status: .archived)
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-                        .padding(.vertical, 4)
+                        AssignmentCard(assignment: assignment)
                     }
                 }
             }
         }
-        .navigationTitle("Assignments")
+        .navigationTitle("From Your Coach")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingInviteComposer) {
+            NavigationStack {
+                CreateCoachInviteView()
+            }
+        }
     }
 }
+
+private struct AssignmentCard: View {
+    @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
+
+    let assignment: ProgramAssignment
+
+    private var counterpartName: String {
+        assignment.athleteAccountID == collaborationCoordinator.currentAccountID
+            ? assignment.coachDisplayName
+            : assignment.athleteDisplayName
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(counterpartName)
+                    .font(.headline)
+                Spacer()
+                StatusBadge(text: assignment.status.title)
+            }
+
+            if let notesText = assignment.notesText, !notesText.isEmpty {
+                Text(notesText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if let startGuidance = assignment.startGuidance, !startGuidance.isEmpty {
+                Text(startGuidance)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if collaborationCoordinator.canActOnAssignment(assignment) {
+                HStack(spacing: 12) {
+                    MutationButton(
+                        title: "Accept",
+                        prominent: true,
+                        action: { await collaborationCoordinator.updateAssignmentStatus(assignment, status: .accepted) }
+                    )
+                    MutationButton(
+                        title: "Decline",
+                        role: .destructive,
+                        action: { await collaborationCoordinator.updateAssignmentStatus(assignment, status: .declined) }
+                    )
+                }
+                .padding(.top, 2)
+
+                MutationButton(
+                    title: "Archive",
+                    style: .borderless,
+                    action: { await collaborationCoordinator.updateAssignmentStatus(assignment, status: .archived) }
+                )
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Coach Notes & Digests
 
 struct CoachNotesInboxView: View {
     @Environment(AccountManager.self) private var accountManager
@@ -546,40 +647,15 @@ struct CoachNotesInboxView: View {
             if accountManager.currentUser == nil {
                 CollaborationSignedOutSection()
             } else {
-                if collaborationCoordinator.notes.isEmpty == false {
+                if !collaborationCoordinator.notes.isEmpty {
                     Section("Coach Notes") {
                         ForEach(collaborationCoordinator.notes) { note in
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text(note.authorDisplayName)
-                                        .font(.headline)
-                                    Spacer()
-                                    if note.isUnread {
-                                        Text("Unread")
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(.indigo)
-                                    }
-                                }
-                                Text(note.bodyText)
-                                if let summary = note.eventSummaryText {
-                                    Text(summary)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Button("Mark Read") {
-                                    Task {
-                                        await collaborationCoordinator.markNoteRead(note)
-                                    }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(!note.isUnread)
-                            }
-                            .padding(.vertical, 4)
+                            CoachNoteRow(note: note)
                         }
                     }
                 }
 
-                if collaborationCoordinator.weeklyDigests.isEmpty == false {
+                if !collaborationCoordinator.weeklyDigests.isEmpty {
                     Section("Weekly Digests") {
                         ForEach(collaborationCoordinator.weeklyDigests) { digest in
                             NavigationLink {
@@ -598,10 +674,10 @@ struct CoachNotesInboxView: View {
                 }
 
                 if collaborationCoordinator.notes.isEmpty && collaborationCoordinator.weeklyDigests.isEmpty {
-                    ContentUnavailableView(
-                        "No Notes Yet",
+                    EmptyStateRow(
+                        title: "No Notes Yet",
                         systemImage: "text.bubble",
-                        description: Text("Coach notes, deterministic nudges, and weekly digests will surface here.")
+                        description: "Coach notes, smart coaching nudges, and weekly digests will land here."
                     )
                 }
             }
@@ -611,6 +687,40 @@ struct CoachNotesInboxView: View {
     }
 }
 
+private struct CoachNoteRow: View {
+    @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
+    let note: CoachNote
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(note.authorDisplayName)
+                    .font(.headline)
+                Spacer()
+                if note.isUnread {
+                    StatusBadge(text: "New")
+                }
+            }
+            Text(note.bodyText)
+            if let summary = note.eventSummaryText {
+                Text(summary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            if note.isUnread {
+                MutationButton(
+                    title: "Mark as Read",
+                    style: .borderless,
+                    action: { await collaborationCoordinator.markNoteRead(note) }
+                )
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Relationship Detail (with privacy presets)
+
 struct RelationshipDetailView: View {
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
     @Environment(PurchaseManager.self) private var purchaseManager
@@ -619,55 +729,84 @@ struct RelationshipDetailView: View {
 
     @State private var scopeSelection: Set<CollaborationVisibilityScope> = []
     @State private var showingNoteComposer = false
+    @State private var showingScopeDetails = false
+    @State private var didSaveScopesTrigger = 0
 
     var body: some View {
         List {
-            Section("Relationship") {
+            Section("Connection") {
                 LabeledContent("Coach", value: relationship.coachDisplayName)
                 LabeledContent("Athlete", value: relationship.athleteDisplayName)
                 LabeledContent("Status", value: relationship.status.title)
                 LabeledContent("Unread Notes", value: "\(relationship.unreadCoachNoteCount)")
-                LabeledContent("Pending Assignments", value: "\(relationship.pendingAssignmentCount)")
+                LabeledContent("Pending Programs", value: "\(relationship.pendingAssignmentCount)")
             }
 
-            Section("Visibility Scopes") {
-                ForEach(CollaborationVisibilityScope.allCases) { scope in
-                    Toggle(
-                        scope.title,
-                        isOn: Binding(
-                            get: { scopeSelection.contains(scope) },
-                            set: { isEnabled in
-                                if isEnabled {
-                                    scopeSelection.insert(scope)
-                                } else {
-                                    scopeSelection.remove(scope)
-                                }
+            Section {
+                ForEach(VisibilityPreset.allCases) { preset in
+                    Button {
+                        scopeSelection = Set(preset.scopes)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(preset.title)
+                                    .foregroundStyle(.primary)
+                                Text(preset.subtitle)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
                             }
-                        )
-                    )
+                            Spacer()
+                            if scopeSelection == Set(preset.scopes) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.tint)
+                                    .accessibilityLabel("Selected")
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
                 }
 
-                Button("Save Scope Changes") {
-                    Task {
+                Button {
+                    showingScopeDetails = true
+                } label: {
+                    Label("What does each preset share?", systemImage: "info.circle")
+                        .font(.footnote)
+                }
+            } header: {
+                Text("What this coach can see")
+            } footer: {
+                Text("You can change this any time. Apple Health–derived recovery data stays on your device.")
+            }
+
+            Section {
+                MutationButton(
+                    title: "Save Privacy Settings",
+                    prominent: true,
+                    action: {
                         await collaborationCoordinator.updateRelationshipScopes(
                             relationship,
                             scopes: Array(scopeSelection).sorted { $0.rawValue < $1.rawValue }
                         )
+                        didSaveScopesTrigger &+= 1
                     }
-                }
+                )
             }
 
             if FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState)
                 && collaborationCoordinator.canWriteCoachNote(for: relationship) {
-                Section("Coach Actions") {
-                    Button("Write Coach Note") {
+                Section("Coach Tools") {
+                    Button {
                         showingNoteComposer = true
+                    } label: {
+                        Label("Write a Note", systemImage: "square.and.pencil")
                     }
                 }
             }
         }
         .navigationTitle(relationship.participantDisplayName(for: collaborationCoordinator.currentAccountID))
         .navigationBarTitleDisplayMode(.inline)
+        .sensoryFeedback(.success, trigger: didSaveScopesTrigger)
         .onAppear {
             scopeSelection = Set(relationship.visibilityScopes)
         }
@@ -676,8 +815,77 @@ struct RelationshipDetailView: View {
                 CoachNoteComposerView(relationship: relationship)
             }
         }
+        .sheet(isPresented: $showingScopeDetails) {
+            NavigationStack {
+                VisibilityScopeDetailsView()
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 }
+
+private enum VisibilityPreset: String, CaseIterable, Identifiable {
+    case full
+    case coachingOnly
+    case minimal
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .full: return "Full Access"
+        case .coachingOnly: return "Coaching Only"
+        case .minimal: return "Minimal"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .full: return "Programs, workouts, daily coach, insights, and notes"
+        case .coachingOnly: return "Programs and notes — no day-to-day workout data"
+        case .minimal: return "Notes only"
+        }
+    }
+
+    var scopes: [CollaborationVisibilityScope] {
+        switch self {
+        case .full:
+            return CollaborationVisibilityScope.allCases
+        case .coachingOnly:
+            return [.programsAndRuns, .coachNotes]
+        case .minimal:
+            return [.coachNotes]
+        }
+    }
+}
+
+private struct VisibilityScopeDetailsView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            ForEach(VisibilityPreset.allCases) { preset in
+                Section(preset.title) {
+                    Text(preset.subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    ForEach(preset.scopes) { scope in
+                        Label(scope.title, systemImage: "checkmark")
+                    }
+                }
+            }
+        }
+        .navigationTitle("Privacy Presets")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }
+            }
+        }
+    }
+}
+
+// MARK: - Private Sharing
 
 struct PrivateSharingCenterView: View {
     @Environment(AccountManager.self) private var accountManager
@@ -690,44 +898,30 @@ struct PrivateSharingCenterView: View {
             } else {
                 Section("Program Shares") {
                     if collaborationCoordinator.programShares.isEmpty {
-                        Text("Saved blueprints and editable programs can be shared privately with specific accounts. There is no public feed or discovery layer.")
+                        Text("Share a saved program privately with someone you've connected to. Nothing is public.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(collaborationCoordinator.programShares) { share in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("\(share.shareKind.title) → \(share.grantedToDisplayName)")
-                                    .font(.headline)
-                                Text(share.status.rawValue.capitalized)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                Button("Revoke") {
-                                    Task {
-                                        await collaborationCoordinator.revokeProgramShare(share)
-                                    }
-                                }
-                            }
+                            ShareRow(
+                                title: "\(share.shareKind.title) → \(share.grantedToDisplayName)",
+                                subtitle: share.status.rawValue.capitalized,
+                                revoke: { await collaborationCoordinator.revokeProgramShare(share) }
+                            )
                         }
                     }
                 }
 
                 Section("Progress Shares") {
                     if collaborationCoordinator.progressShares.isEmpty {
-                        Text("PR highlights, lift trends, adherence streaks, and completed-block summaries can be shared as invite-scoped, read-only cards.")
+                        Text("Send a read-only card — a PR, a trend, an adherence streak — to a connected coach or training partner.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(collaborationCoordinator.progressShares) { share in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("\(share.shareKind.title) → \(share.grantedToDisplayName)")
-                                    .font(.headline)
-                                Text(share.summaryText)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                Button("Revoke") {
-                                    Task {
-                                        await collaborationCoordinator.revokeProgressShare(share)
-                                    }
-                                }
-                            }
+                            ShareRow(
+                                title: "\(share.shareKind.title) → \(share.grantedToDisplayName)",
+                                subtitle: share.summaryText,
+                                revoke: { await collaborationCoordinator.revokeProgressShare(share) }
+                            )
                         }
                     }
                 }
@@ -737,6 +931,45 @@ struct PrivateSharingCenterView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
+
+private struct ShareRow: View {
+    let title: String
+    let subtitle: String
+    let revoke: () async -> Void
+
+    @State private var showingConfirm = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.headline)
+            Text(subtitle)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button(role: .destructive) {
+                showingConfirm = true
+            } label: {
+                Label("Revoke Access", systemImage: "xmark.shield")
+            }
+            .buttonStyle(.borderless)
+            .confirmationDialog(
+                "Revoke this share?",
+                isPresented: $showingConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Revoke", role: .destructive) {
+                    Task { await revoke() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("They'll lose access immediately. You can share again later.")
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Insight Snapshot Detail
 
 struct InsightSnapshotDetailView: View {
     let snapshot: InsightSnapshot
@@ -781,8 +1014,10 @@ struct InsightSnapshotDetailView: View {
             }
 
             Section("Sharing") {
-                Button("Share This Snapshot") {
+                Button {
                     showingProgressShareComposer = true
+                } label: {
+                    Label("Share This Snapshot", systemImage: "square.and.arrow.up")
                 }
             }
         }
@@ -818,6 +1053,8 @@ struct WeeklyDigestDetailView: View {
     }
 }
 
+// MARK: - Deep-link Sheet Router
+
 struct CollaborationRouteSheetView: View {
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
     let route: AppDeepLinkRoute
@@ -835,10 +1072,8 @@ struct CollaborationRouteSheetView: View {
             CollaborationHubView()
         case .coachInvite(let stableID):
             if let invite = collaborationCoordinator.invites.first(where: { $0.stableID == stableID }) {
-                List {
-                    InviteRow(invite: invite)
-                }
-                .navigationTitle("Invite")
+                List { InviteRow(invite: invite) }
+                    .navigationTitle("Invite")
             } else {
                 routeUnavailableView("Invite")
             }
@@ -846,17 +1081,13 @@ struct CollaborationRouteSheetView: View {
             if let relationship = collaborationCoordinator.relationships.first(where: { $0.stableID == stableID }) {
                 RelationshipDetailView(relationship: relationship)
             } else {
-                routeUnavailableView("Relationship")
+                routeUnavailableView("Connection")
             }
         case .assignment(let stableID):
             if let assignment = collaborationCoordinator.assignments.first(where: { $0.stableID == stableID }) {
                 List {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(assignment.status.title)
-                            .font(.headline)
-                        if let notesText = assignment.notesText {
-                            Text(notesText)
-                        }
+                    Section {
+                        AssignmentCard(assignment: assignment)
                     }
                 }
                 .navigationTitle("Assignment")
@@ -865,10 +1096,8 @@ struct CollaborationRouteSheetView: View {
             }
         case .coachNote(let stableID):
             if let note = collaborationCoordinator.notes.first(where: { $0.stableID == stableID }) {
-                List {
-                    Text(note.bodyText)
-                }
-                .navigationTitle("Coach Note")
+                List { CoachNoteRow(note: note) }
+                    .navigationTitle("Coach Note")
             } else {
                 routeUnavailableView("Coach Note")
             }
@@ -888,7 +1117,7 @@ struct CollaborationRouteSheetView: View {
             if let blueprint = collaborationCoordinator.blueprints.first(where: { $0.stableID == stableID }) {
                 BlueprintDetailView(blueprint: blueprint)
             } else {
-                routeUnavailableView("Blueprint")
+                routeUnavailableView("Saved Program")
             }
         case .programShare:
             PrivateSharingCenterView()
@@ -905,10 +1134,12 @@ struct CollaborationRouteSheetView: View {
         ContentUnavailableView(
             title,
             systemImage: "questionmark.circle",
-            description: Text("This route is no longer available on this device. Pull to refresh collaboration data and try again.")
+            description: Text("Pull to refresh and try again.")
         )
     }
 }
+
+// MARK: - Cards used by core tabs
 
 struct CollaborationInsightSummaryCard: View {
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
@@ -916,7 +1147,7 @@ struct CollaborationInsightSummaryCard: View {
     var body: some View {
         if let snapshot = collaborationCoordinator.athleteFacingSnapshots.first {
             VStack(alignment: .leading, spacing: 10) {
-                Label("Cloud Insight", systemImage: "icloud.fill")
+                Label("Smart Coaching", systemImage: "sparkles")
                     .font(.headline)
                     .foregroundStyle(.indigo)
                 Text(snapshot.headline)
@@ -930,7 +1161,7 @@ struct CollaborationInsightSummaryCard: View {
                             .foregroundStyle(.secondary)
                     }
                     if snapshot.unreadCoachNoteCount > 0 {
-                        Label("\(snapshot.unreadCoachNoteCount) unread notes", systemImage: "text.bubble.fill")
+                        Label("\(snapshot.unreadCoachNoteCount) unread \(snapshot.unreadCoachNoteCount == 1 ? "note" : "notes")", systemImage: "text.bubble.fill")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -938,8 +1169,7 @@ struct CollaborationInsightSummaryCard: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.indigo.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
         }
     }
 }
@@ -948,12 +1178,16 @@ struct DailyCoachCloudUpdatesCard: View {
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
     @Environment(PushNotificationManager.self) private var pushNotificationManager
 
+    private var hasContent: Bool {
+        !collaborationCoordinator.unreadCoachNotes.isEmpty
+            || !collaborationCoordinator.unreadDigests.isEmpty
+            || pushNotificationManager.lastNudgeExplanation != nil
+    }
+
     var body: some View {
-        if collaborationCoordinator.unreadCoachNotes.isEmpty == false ||
-            collaborationCoordinator.unreadDigests.isEmpty == false ||
-            pushNotificationManager.lastNudgeExplanation != nil {
+        if hasContent {
             VStack(alignment: .leading, spacing: 10) {
-                Label("Coach Updates", systemImage: "bell.badge.fill")
+                Label("From Your Coach", systemImage: "bell.badge.fill")
                     .font(.headline)
                     .foregroundStyle(.indigo)
 
@@ -969,7 +1203,7 @@ struct DailyCoachCloudUpdatesCard: View {
 
                 if let note = collaborationCoordinator.unreadCoachNotes.first {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Latest note from \(note.authorDisplayName)")
+                        Text("New note from \(note.authorDisplayName)")
                             .font(.subheadline.weight(.semibold))
                         Text(note.bodyText)
                             .font(.footnote)
@@ -989,18 +1223,19 @@ struct DailyCoachCloudUpdatesCard: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.orange.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
         }
     }
 }
+
+// MARK: - Reusable Hub Sections
 
 private struct CollaborationSummarySection: View {
     @Environment(AccountManager.self) private var accountManager
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
 
     var body: some View {
-        Section("Cloud Collaboration") {
+        Section {
             LabeledContent("Status", value: collaborationCoordinator.phase.title)
             if let currentUser = accountManager.currentUser {
                 LabeledContent("Account", value: currentUser.email)
@@ -1008,26 +1243,31 @@ private struct CollaborationSummarySection: View {
             Text(collaborationCoordinator.statusSummary)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            Text("Invite-only coach workflows, deterministic cloud insights, and private sharing stay separate from the personal Feature 18 sync batch and never include Apple Health-derived recovery data in this release.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+        } header: {
+            Text("Collaboration")
+        } footer: {
+            Text("Coaches and training partners only see what you share. Apple Health–derived recovery data stays on your device.")
         }
     }
 }
 
 private struct CollaborationSignedOutSection: View {
     var body: some View {
-        Section("Connect Account") {
-            Text("Sign in with Apple from Account & Cloud to use invite-only coach collaboration, private sharing, assignment inboxes, and deterministic cloud insights.")
+        Section {
+            Text("Sign in with Apple to invite a coach, swap programs privately, and see smart coaching.")
                 .foregroundStyle(.secondary)
             NavigationLink {
                 AccountSettingsView()
             } label: {
-                Label("Open Account Settings", systemImage: "person.crop.circle.badge.plus")
+                Label("Sign In", systemImage: "person.crop.circle.badge.plus")
             }
+        } header: {
+            Text("Sign In Required")
         }
     }
 }
+
+// MARK: - Invite Row
 
 private struct InviteRow: View {
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
@@ -1043,13 +1283,7 @@ private struct InviteRow: View {
                 Text(invite.inviterDisplayName)
                     .font(.headline)
                 Spacer()
-                Text(invite.status.title)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.indigo.opacity(0.12))
-                    .foregroundStyle(.indigo)
-                    .clipShape(Capsule())
+                StatusBadge(text: invite.status.title)
             }
             Text(invite.inviteeEmail)
                 .font(.footnote)
@@ -1060,105 +1294,89 @@ private struct InviteRow: View {
                     .foregroundStyle(.secondary)
             }
             if presentationMode == .incomingPending {
-                HStack {
-                    Button("Accept") {
-                        Task {
-                            await collaborationCoordinator.respondToInvite(invite, action: .accepted)
-                        }
-                    }
-                    Button("Decline", role: .destructive) {
-                        Task {
-                            await collaborationCoordinator.respondToInvite(invite, action: .declined)
-                        }
-                    }
+                HStack(spacing: 12) {
+                    MutationButton(
+                        title: "Accept",
+                        prominent: true,
+                        action: { await collaborationCoordinator.respondToInvite(invite, action: .accepted) }
+                    )
+                    MutationButton(
+                        title: "Decline",
+                        role: .destructive,
+                        action: { await collaborationCoordinator.respondToInvite(invite, action: .declined) }
+                    )
                 }
-                .buttonStyle(.bordered)
             } else if presentationMode == .outgoingPending {
-                Button("Revoke", role: .destructive) {
-                    Task {
-                        await collaborationCoordinator.revokeInvite(invite)
-                    }
-                }
-                .buttonStyle(.bordered)
+                MutationButton(
+                    title: "Revoke Invite",
+                    role: .destructive,
+                    action: { await collaborationCoordinator.revokeInvite(invite) }
+                )
             }
         }
         .padding(.vertical, 4)
     }
 }
 
+// MARK: - Composers
+
 private struct CreateCoachInviteView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
 
     @State private var inviteeEmail = ""
     @State private var noteText = ""
     @State private var inviterRole: CollaborationRole = .coach
-    @State private var selectedScopes = Set(CollaborationVisibilityScope.defaultInviteScopes)
+    @State private var preset: VisibilityPreset = .full
 
     var body: some View {
-        Form {
-            Section("Invitee") {
+        FormComposerScaffold(
+            title: "Send Invite",
+            sendLabel: "Send",
+            isSendDisabled: inviteeEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            send: {
+                await collaborationCoordinator.createCoachInvite(
+                    inviteeEmail: inviteeEmail,
+                    noteText: noteText.nilIfEmpty,
+                    inviterRole: inviterRole,
+                    scopes: preset.scopes.sorted { $0.rawValue < $1.rawValue }
+                )
+            }
+        ) {
+            Section("Who") {
                 TextField("Email", text: $inviteeEmail)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.emailAddress)
                     .autocorrectionDisabled()
-                Picker("You Are Inviting As", selection: $inviterRole) {
+                Picker("You're inviting them as your", selection: $inviterRole) {
                     ForEach(CollaborationRole.allCases) { role in
                         Text(role.title).tag(role)
                     }
                 }
             }
 
-            Section("Visibility Scopes") {
-                ForEach(CollaborationVisibilityScope.allCases) { scope in
-                    Toggle(
-                        scope.title,
-                        isOn: Binding(
-                            get: { selectedScopes.contains(scope) },
-                            set: { isEnabled in
-                                if isEnabled {
-                                    selectedScopes.insert(scope)
-                                } else {
-                                    selectedScopes.remove(scope)
-                                }
-                            }
-                        )
-                    )
-                }
-            }
-
-            Section("Note") {
-                TextField("Optional note", text: $noteText, axis: .vertical)
-            }
-        }
-        .navigationTitle("Send Invite")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    dismiss()
-                }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Send") {
-                    Task {
-                        await collaborationCoordinator.createCoachInvite(
-                            inviteeEmail: inviteeEmail,
-                            noteText: noteText.nilIfEmpty,
-                            inviterRole: inviterRole,
-                            scopes: Array(selectedScopes).sorted { $0.rawValue < $1.rawValue }
-                        )
-                        dismiss()
+            Section {
+                Picker("Privacy", selection: $preset) {
+                    ForEach(VisibilityPreset.allCases) { preset in
+                        Text(preset.title).tag(preset)
                     }
                 }
-                .disabled(inviteeEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Text(preset.subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("What they'll see")
+            } footer: {
+                Text("You can change this any time after they accept.")
+            }
+
+            Section("Personal note") {
+                TextField("Optional", text: $noteText, axis: .vertical)
             }
         }
     }
 }
 
 private struct BlueprintComposerView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
 
     let program: TrainingProgram
@@ -1168,47 +1386,35 @@ private struct BlueprintComposerView: View {
     @State private var tagsText = ""
 
     var body: some View {
-        Form {
+        FormComposerScaffold(
+            title: "Save Program",
+            sendLabel: "Save",
+            isSendDisabled: false,
+            send: {
+                await collaborationCoordinator.saveBlueprint(
+                    from: program,
+                    focusText: focusText.nilIfEmpty,
+                    notesText: notesText.nilIfEmpty,
+                    tags: CSVListCodec.decode(tagsText)
+                )
+            }
+        ) {
             Section("Program") {
                 Text(program.name)
                 Text("\(program.lengthInWeeks) weeks • \(program.sessionsPerWeek) sessions/week")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-
-            Section("Blueprint Metadata") {
-                TextField("Focus", text: $focusText)
+            Section("Details") {
+                TextField("Focus (e.g. hypertrophy)", text: $focusText)
                 TextField("Notes", text: $notesText, axis: .vertical)
                 TextField("Tags (comma separated)", text: $tagsText)
-            }
-        }
-        .navigationTitle("Save Blueprint")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    dismiss()
-                }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    Task {
-                        await collaborationCoordinator.saveBlueprint(
-                            from: program,
-                            focusText: focusText.nilIfEmpty,
-                            notesText: notesText.nilIfEmpty,
-                            tags: CSVListCodec.decode(tagsText)
-                        )
-                        dismiss()
-                    }
-                }
             }
         }
     }
 }
 
 private struct AssignmentComposerView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
 
     let blueprint: SavedProgramBlueprint
@@ -1222,58 +1428,47 @@ private struct AssignmentComposerView: View {
     }
 
     var body: some View {
-        Form {
-            Section("Blueprint") {
+        FormComposerScaffold(
+            title: "Assign Program",
+            sendLabel: "Send",
+            isSendDisabled: selectedRelationshipID.isEmpty,
+            send: {
+                guard let relationship = coachRelationships.first(where: { $0.stableID == selectedRelationshipID }) else { return }
+                await collaborationCoordinator.createAssignment(
+                    relationship: relationship,
+                    blueprint: blueprint,
+                    notesText: notesText.nilIfEmpty,
+                    startGuidance: startGuidance.nilIfEmpty
+                )
+            }
+        ) {
+            Section("Program") {
                 Text(blueprint.name)
             }
-
             Section("Athlete") {
-                Picker("Relationship", selection: $selectedRelationshipID) {
-                    ForEach(coachRelationships) { relationship in
-                        Text(relationship.athleteDisplayName).tag(relationship.stableID)
+                if coachRelationships.isEmpty {
+                    Text("No active athletes yet.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("Send to", selection: $selectedRelationshipID) {
+                        ForEach(coachRelationships) { relationship in
+                            Text(relationship.athleteDisplayName).tag(relationship.stableID)
+                        }
                     }
                 }
             }
-
-            Section("Delivery") {
-                TextField("Notes", text: $notesText, axis: .vertical)
-                TextField("Start guidance", text: $startGuidance, axis: .vertical)
+            Section("Message") {
+                TextField("Notes for the athlete", text: $notesText, axis: .vertical)
+                TextField("How to start", text: $startGuidance, axis: .vertical)
             }
         }
-        .navigationTitle("Assign Blueprint")
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             selectedRelationshipID = coachRelationships.first?.stableID ?? ""
-        }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    dismiss()
-                }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Send") {
-                    guard let relationship = coachRelationships.first(where: { $0.stableID == selectedRelationshipID }) else {
-                        return
-                    }
-                    Task {
-                        await collaborationCoordinator.createAssignment(
-                            relationship: relationship,
-                            blueprint: blueprint,
-                            notesText: notesText.nilIfEmpty,
-                            startGuidance: startGuidance.nilIfEmpty
-                        )
-                        dismiss()
-                    }
-                }
-                .disabled(selectedRelationshipID.isEmpty)
-            }
         }
     }
 }
 
 private struct CoachNoteComposerView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
 
     let relationship: CoachRelationship
@@ -1284,41 +1479,30 @@ private struct CoachNoteComposerView: View {
     @State private var requiresReview = false
 
     var body: some View {
-        Form {
+        FormComposerScaffold(
+            title: "New Note",
+            sendLabel: "Send",
+            isSendDisabled: noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            send: {
+                await collaborationCoordinator.createCoachNote(
+                    relationship: relationship,
+                    bodyText: noteText,
+                    anchorKind: .general,
+                    eventSummaryText: eventSummary.nilIfEmpty,
+                    priority: priority,
+                    requiresReview: requiresReview
+                )
+            }
+        ) {
             Section("Note") {
-                TextField("Coach note", text: $noteText, axis: .vertical)
-                TextField("Optional event summary", text: $eventSummary)
+                TextField("What do you want to say?", text: $noteText, axis: .vertical)
+                TextField("Event summary (optional)", text: $eventSummary)
                 Picker("Priority", selection: $priority) {
                     ForEach(CollaborationInsightPriority.allCases) { option in
                         Text(option.rawValue.capitalized).tag(option)
                     }
                 }
-                Toggle("Requires review", isOn: $requiresReview)
-            }
-        }
-        .navigationTitle("Coach Note")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    dismiss()
-                }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Send") {
-                    Task {
-                        await collaborationCoordinator.createCoachNote(
-                            relationship: relationship,
-                            bodyText: noteText,
-                            anchorKind: .general,
-                            eventSummaryText: eventSummary.nilIfEmpty,
-                            priority: priority,
-                            requiresReview: requiresReview
-                        )
-                        dismiss()
-                    }
-                }
-                .disabled(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Toggle("Needs a follow-up", isOn: $requiresReview)
             }
         }
     }
@@ -1333,64 +1517,90 @@ private struct ProgramShareComposerView: View {
     @State private var selectedRelationshipID = ""
     @State private var messageText = ""
     @State private var shareKind: ProgramShareKind = .blueprint
+    @State private var showingConfirm = false
+    @State private var isSending = false
+    @State private var errorMessage: String?
 
     private var relationships: [CoachRelationship] {
         collaborationCoordinator.relationships.filter { $0.status == .active }
     }
 
+    private var recipientName: String {
+        relationships.first(where: { $0.stableID == selectedRelationshipID })?
+            .participantDisplayName(for: collaborationCoordinator.currentAccountID) ?? ""
+    }
+
     var body: some View {
         Form {
-            Section("Recipient") {
-                Picker("Relationship", selection: $selectedRelationshipID) {
+            if let errorMessage {
+                InlineErrorBanner(message: errorMessage, retry: nil)
+            }
+            Section("Send to") {
+                Picker("Recipient", selection: $selectedRelationshipID) {
                     ForEach(relationships) { relationship in
                         Text(relationship.participantDisplayName(for: collaborationCoordinator.currentAccountID))
                             .tag(relationship.stableID)
                     }
                 }
-                Picker("Share Type", selection: $shareKind) {
+                Picker("Share as", selection: $shareKind) {
                     ForEach(ProgramShareKind.allCases) { kind in
                         Text(kind.title).tag(kind)
                     }
                 }
             }
-
             Section("Message") {
-                TextField("Optional message", text: $messageText, axis: .vertical)
+                TextField("Optional", text: $messageText, axis: .vertical)
             }
         }
-        .navigationTitle("Share Blueprint")
+        .navigationTitle("Share Program")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             selectedRelationshipID = relationships.first?.stableID ?? ""
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    dismiss()
-                }
+                Button("Cancel") { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Share") {
-                    guard let relationship = relationships.first(where: { $0.stableID == selectedRelationshipID }) else {
-                        return
-                    }
-                    let recipientID = relationship.coachAccountID == collaborationCoordinator.currentAccountID
-                        ? relationship.athleteAccountID
-                        : relationship.coachAccountID
-                    Task {
-                        await collaborationCoordinator.createProgramShare(
-                            relationshipStableID: relationship.stableID,
-                            shareKind: shareKind,
-                            blueprintStableID: blueprint.stableID,
-                            sourceProgramStableID: nil,
-                            grantedToAccountID: recipientID,
-                            messageText: messageText.nilIfEmpty
-                        )
-                        dismiss()
-                    }
+                if isSending {
+                    ProgressView()
+                } else {
+                    Button("Share") { showingConfirm = true }
+                        .disabled(selectedRelationshipID.isEmpty)
                 }
-                .disabled(selectedRelationshipID.isEmpty)
             }
+        }
+        .confirmationDialog(
+            "Share with \(recipientName)?",
+            isPresented: $showingConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Share") { Task { await performShare() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("They'll have read-only access to this program.")
+        }
+    }
+
+    private func performShare() async {
+        guard let relationship = relationships.first(where: { $0.stableID == selectedRelationshipID }) else { return }
+        let recipientID = relationship.coachAccountID == collaborationCoordinator.currentAccountID
+            ? relationship.athleteAccountID
+            : relationship.coachAccountID
+        isSending = true
+        await collaborationCoordinator.createProgramShare(
+            relationshipStableID: relationship.stableID,
+            shareKind: shareKind,
+            blueprintStableID: blueprint.stableID,
+            sourceProgramStableID: nil,
+            grantedToAccountID: recipientID,
+            messageText: messageText.nilIfEmpty
+        )
+        isSending = false
+        if let pending = collaborationCoordinator.lastErrorMessage {
+            errorMessage = pending
+        } else {
+            dismiss()
         }
     }
 }
@@ -1403,28 +1613,38 @@ private struct ProgressShareComposerView: View {
 
     @State private var selectedRelationshipID = ""
     @State private var kind: ProgressShareKind = .completedBlockSummary
+    @State private var showingConfirm = false
+    @State private var isSending = false
+    @State private var errorMessage: String?
 
     private var relationships: [CoachRelationship] {
         collaborationCoordinator.relationships.filter { $0.status == .active }
     }
 
+    private var recipientName: String {
+        relationships.first(where: { $0.stableID == selectedRelationshipID })?
+            .participantDisplayName(for: collaborationCoordinator.currentAccountID) ?? ""
+    }
+
     var body: some View {
         Form {
+            if let errorMessage {
+                InlineErrorBanner(message: errorMessage, retry: nil)
+            }
             Section("Snapshot") {
                 Text(snapshot.headline)
                 Text(snapshot.summaryText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-
-            Section("Recipient") {
-                Picker("Relationship", selection: $selectedRelationshipID) {
+            Section("Send to") {
+                Picker("Recipient", selection: $selectedRelationshipID) {
                     ForEach(relationships) { relationship in
                         Text(relationship.participantDisplayName(for: collaborationCoordinator.currentAccountID))
                             .tag(relationship.stableID)
                     }
                 }
-                Picker("Card Type", selection: $kind) {
+                Picker("Card type", selection: $kind) {
                     ForEach(ProgressShareKind.allCases) { option in
                         Text(option.title).tag(option)
                     }
@@ -1438,41 +1658,264 @@ private struct ProgressShareComposerView: View {
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    dismiss()
-                }
+                Button("Cancel") { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Share") {
-                    guard let relationship = relationships.first(where: { $0.stableID == selectedRelationshipID }) else {
-                        return
-                    }
-                    let recipientID = relationship.coachAccountID == collaborationCoordinator.currentAccountID
-                        ? relationship.athleteAccountID
-                        : relationship.coachAccountID
-                    let payload = ProgressSharePayload(
-                        snapshotStableID: snapshot.stableID,
-                        headline: snapshot.headline,
-                        summaryText: snapshot.summaryText
-                    )
-                    Task {
-                        await collaborationCoordinator.createProgressShare(
-                            relationshipStableID: relationship.stableID,
-                            shareKind: kind,
-                            grantedToAccountID: recipientID,
-                            titleText: snapshot.headline,
-                            subtitleText: snapshot.activeProgramName,
-                            summaryText: snapshot.summaryText,
-                            payloadJSON: payload.encodedJSON
-                        )
-                        dismiss()
-                    }
+                if isSending {
+                    ProgressView()
+                } else {
+                    Button("Share") { showingConfirm = true }
+                        .disabled(selectedRelationshipID.isEmpty)
                 }
-                .disabled(selectedRelationshipID.isEmpty)
             }
+        }
+        .confirmationDialog(
+            "Share with \(recipientName)?",
+            isPresented: $showingConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Share") { Task { await performShare() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("They'll see a read-only card with this progress.")
+        }
+    }
+
+    private func performShare() async {
+        guard let relationship = relationships.first(where: { $0.stableID == selectedRelationshipID }) else { return }
+        let recipientID = relationship.coachAccountID == collaborationCoordinator.currentAccountID
+            ? relationship.athleteAccountID
+            : relationship.coachAccountID
+        let payload = ProgressSharePayload(
+            snapshotStableID: snapshot.stableID,
+            headline: snapshot.headline,
+            summaryText: snapshot.summaryText
+        )
+        isSending = true
+        await collaborationCoordinator.createProgressShare(
+            relationshipStableID: relationship.stableID,
+            shareKind: kind,
+            grantedToAccountID: recipientID,
+            titleText: snapshot.headline,
+            subtitleText: snapshot.activeProgramName,
+            summaryText: snapshot.summaryText,
+            payloadJSON: payload.encodedJSON
+        )
+        isSending = false
+        if let pending = collaborationCoordinator.lastErrorMessage {
+            errorMessage = pending
+        } else {
+            dismiss()
         }
     }
 }
+
+// MARK: - Reusable view-level scaffolding
+
+private struct FormComposerScaffold<Content: View>: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
+
+    let title: String
+    let sendLabel: String
+    let isSendDisabled: Bool
+    let send: () async -> Void
+    @ViewBuilder let content: () -> Content
+
+    @State private var isSending = false
+    @State private var errorMessage: String?
+    @State private var didSendTrigger = 0
+
+    var body: some View {
+        Form {
+            if let errorMessage {
+                InlineErrorBanner(message: errorMessage, retry: nil)
+            }
+            content()
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .sensoryFeedback(.success, trigger: didSendTrigger)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+                    .disabled(isSending)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                if isSending {
+                    ProgressView()
+                } else {
+                    Button(sendLabel) {
+                        Task { await performSend() }
+                    }
+                    .disabled(isSendDisabled)
+                }
+            }
+        }
+    }
+
+    private func performSend() async {
+        isSending = true
+        errorMessage = nil
+        await send()
+        isSending = false
+        if let pending = collaborationCoordinator.lastErrorMessage {
+            errorMessage = pending
+        } else {
+            didSendTrigger &+= 1
+            dismiss()
+        }
+    }
+}
+
+private struct MutationButton: View {
+    enum Style {
+        case bordered
+        case borderless
+    }
+
+    let title: String
+    var prominent: Bool = false
+    var role: ButtonRole? = nil
+    var style: Style = .bordered
+    let action: () async -> Void
+
+    @State private var isPending = false
+    @State private var didCompleteTrigger = 0
+
+    var body: some View {
+        Button(role: role) {
+            Task { await run() }
+        } label: {
+            HStack(spacing: 6) {
+                if isPending {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Text(title)
+            }
+            .frame(minHeight: 28)
+        }
+        .controlSize(.regular)
+        .buttonStyleApplied(prominent: prominent, style: style)
+        .disabled(isPending)
+        .sensoryFeedback(.success, trigger: didCompleteTrigger)
+        .accessibilityLabel(title)
+        .accessibilityHint(isPending ? "In progress" : "")
+    }
+
+    private func run() async {
+        isPending = true
+        await action()
+        isPending = false
+        didCompleteTrigger &+= 1
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func buttonStyleApplied(prominent: Bool, style: MutationButton.Style) -> some View {
+        switch (prominent, style) {
+        case (true, _):
+            self.buttonStyle(.borderedProminent)
+        case (false, .bordered):
+            self.buttonStyle(.bordered)
+        case (false, .borderless):
+            self.buttonStyle(.borderless)
+        }
+    }
+}
+
+private struct StatusBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.indigo.opacity(0.12))
+            .foregroundStyle(.indigo)
+            .clipShape(Capsule())
+            .accessibilityLabel("Status: \(text)")
+    }
+}
+
+private struct InlineErrorBanner: View {
+    let message: String
+    let retry: (() async -> Void)?
+
+    @State private var isRetrying = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.primary)
+                if let retry {
+                    Button {
+                        Task {
+                            isRetrying = true
+                            await retry()
+                            isRetrying = false
+                        }
+                    } label: {
+                        if isRetrying {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("Try Again")
+                                .font(.footnote.weight(.semibold))
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isRetrying)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Issue: \(message)")
+    }
+}
+
+private struct EmptyStateRow: View {
+    let title: String
+    let systemImage: String
+    let description: String
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
+
+    var body: some View {
+        VStack(spacing: 16) {
+            ContentUnavailableView(
+                title,
+                systemImage: systemImage,
+                description: Text(description)
+            )
+            if let actionTitle, let action {
+                Button(action: action) {
+                    Text(actionTitle)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.horizontal)
+            }
+        }
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Color.clear)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Models / Helpers
 
 private struct NotificationPreferenceDraft {
     var coachInvitesEnabled = true
@@ -1508,39 +1951,25 @@ private struct NotificationPreferenceDraft {
 
     mutating func set(_ category: CollaborationNotificationCategory, to isEnabled: Bool) {
         switch category {
-        case .coachInvites:
-            coachInvitesEnabled = isEnabled
-        case .assignmentUpdates:
-            assignmentUpdatesEnabled = isEnabled
-        case .coachNotes:
-            coachNotesEnabled = isEnabled
-        case .missedSessionNudges:
-            missedSessionNudgesEnabled = isEnabled
-        case .checkInReminders:
-            checkInRemindersEnabled = isEnabled
-        case .pendingProposalReminders:
-            pendingProposalRemindersEnabled = isEnabled
-        case .weeklyDigests:
-            weeklyDigestsEnabled = isEnabled
+        case .coachInvites: coachInvitesEnabled = isEnabled
+        case .assignmentUpdates: assignmentUpdatesEnabled = isEnabled
+        case .coachNotes: coachNotesEnabled = isEnabled
+        case .missedSessionNudges: missedSessionNudgesEnabled = isEnabled
+        case .checkInReminders: checkInRemindersEnabled = isEnabled
+        case .pendingProposalReminders: pendingProposalRemindersEnabled = isEnabled
+        case .weeklyDigests: weeklyDigestsEnabled = isEnabled
         }
     }
 
     func value(for category: CollaborationNotificationCategory) -> Bool {
         switch category {
-        case .coachInvites:
-            return coachInvitesEnabled
-        case .assignmentUpdates:
-            return assignmentUpdatesEnabled
-        case .coachNotes:
-            return coachNotesEnabled
-        case .missedSessionNudges:
-            return missedSessionNudgesEnabled
-        case .checkInReminders:
-            return checkInRemindersEnabled
-        case .pendingProposalReminders:
-            return pendingProposalRemindersEnabled
-        case .weeklyDigests:
-            return weeklyDigestsEnabled
+        case .coachInvites: return coachInvitesEnabled
+        case .assignmentUpdates: return assignmentUpdatesEnabled
+        case .coachNotes: return coachNotesEnabled
+        case .missedSessionNudges: return missedSessionNudgesEnabled
+        case .checkInReminders: return checkInRemindersEnabled
+        case .pendingProposalReminders: return pendingProposalRemindersEnabled
+        case .weeklyDigests: return weeklyDigestsEnabled
         }
     }
 }
@@ -1561,9 +1990,7 @@ private struct ProgressSharePayload: Codable {
 
 private extension Optional where Wrapped == String {
     var nilIfEmpty: String? {
-        guard let self, self.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-            return nil
-        }
+        guard let self, !self.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return self
     }
 }
