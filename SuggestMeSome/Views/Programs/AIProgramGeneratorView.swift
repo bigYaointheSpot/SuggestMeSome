@@ -46,6 +46,7 @@ struct AIProgramGeneratorView: View {
     @State private var isGenerating = false
     @State private var generatedProgram: TrainingProgram?
     @State private var lastInput: ProgramGenerationInput?
+    @State private var derivedState = ProgramGeneratorDerivedState.placeholder
 
     private let service = ProgramGenerationService()
 
@@ -104,29 +105,16 @@ struct AIProgramGeneratorView: View {
         }
     }
 
-    private var adaptivePreviewBundle: AdaptiveExplanationBundle? {
-        guard
-            step1Valid,
-            let focus = selectedFocus,
-            let level = selectedLevel
-        else {
-            return initialPrefill?.explanationBundle
-        }
-
-        let previewInput = ProgramGenerationInput(
-            focus: focus,
-            level: level,
+    private var generatorDerivedStateRefreshToken: Int {
+        ProgramGeneratorDerivedState.refreshToken(
+            selectedFocus: selectedFocus,
+            selectedLevel: selectedLevel,
             durationWeeks: selectedDuration,
             sessionsPerWeek: selectedFrequency,
-            oneRepMaxes: [:],
+            steeringProfile: steeringProfile,
             carryForwardContext: initialPrefill?.carryForwardContext,
-            steeringProfile: steeringProfile
+            personalRecords: allPRs
         )
-
-        return service.previewAdaptiveContext(
-            input: previewInput,
-            context: modelContext
-        ).explanationBundle
     }
 
     // MARK: Body
@@ -174,6 +162,9 @@ struct AIProgramGeneratorView: View {
                 }
                 .interactiveDismissDisabled(isGenerating)
                 .onAppear { restoreState() }
+                .task(id: generatorDerivedStateRefreshToken) {
+                    refreshDerivedState()
+                }
                 .onChange(of: selectedFocus) { _, new in
                     savedFocusRaw = new?.rawValue ?? ""
                     if let f = new {
@@ -223,7 +214,7 @@ struct AIProgramGeneratorView: View {
                     title: "Coach Steering",
                     subtitle: "High-level controls only. Big block-shape changes still stay review-driven."
                 ) { steeringProfile = $0 }
-                if let adaptivePreviewBundle {
+                if let adaptivePreviewBundle = derivedState.adaptiveExplanationBundle {
                     AdaptiveExplanationCard(
                         bundle: adaptivePreviewBundle,
                         title: "Coach Preview",
@@ -504,36 +495,22 @@ struct AIProgramGeneratorView: View {
         for lift in lifts {
             guard oneRMValues[lift] == nil else { continue }
 
-            let liftPRs = allPRs.filter { $0.exerciseName == lift }
-            guard let bestPR = liftPRs.max(by: { epleyEst($0) < epleyEst($1) }) else {
+            guard let bestPR = resolvedGeneratorDerivedState().bestPRByExerciseName[lift] else {
                 oneRMUnits[lift] = .lbs
                 continue
             }
 
-            let estimated = epleyEst(bestPR)
-            let rounded = roundOneRM(estimated, unit: bestPR.unit)
             oneRMUnits[lift] = bestPR.unit
 
             switch bestPR.unit {
             case .lbs:
-                oneRMValues[lift] = String(Int(rounded))
+                oneRMValues[lift] = String(Int(bestPR.roundedOneRepMax))
             case .kg:
-                let hasDecimal = rounded != rounded.rounded(.towardZero)
+                let hasDecimal = bestPR.roundedOneRepMax != bestPR.roundedOneRepMax.rounded(.towardZero)
                 oneRMValues[lift] = hasDecimal
-                    ? String(format: "%.1f", rounded)
-                    : String(Int(rounded))
+                    ? String(format: "%.1f", bestPR.roundedOneRepMax)
+                    : String(Int(bestPR.roundedOneRepMax))
             }
-        }
-    }
-
-    private func epleyEst(_ pr: PersonalRecord) -> Double {
-        pr.weight * (1.0 + Double(pr.repCount) / 30.0)
-    }
-
-    private func roundOneRM(_ value: Double, unit: WeightUnit) -> Double {
-        switch unit {
-        case .lbs: return (value / 5.0).rounded() * 5.0
-        case .kg:  return (value / 2.5).rounded() * 2.5
         }
     }
 
@@ -559,10 +536,7 @@ struct AIProgramGeneratorView: View {
             carryForwardContext: initialPrefill?.carryForwardContext,
             steeringProfile: steeringProfile
         )
-        let adaptivePreview = service.previewAdaptiveContext(
-            input: input,
-            context: modelContext
-        )
+        let adaptivePreview = resolvedGeneratorDerivedState().adaptivePreview
         input = ProgramGenerationInput(
             focus: input.focus,
             level: input.level,
@@ -572,7 +546,7 @@ struct AIProgramGeneratorView: View {
             carryForwardContext: input.carryForwardContext,
             stateSnapshotOverride: input.stateSnapshotOverride,
             steeringProfile: input.steeringProfile,
-            explanationBundle: adaptivePreview.explanationBundle
+            explanationBundle: adaptivePreview?.explanationBundle
         )
 
         lastInput = input
@@ -584,6 +558,40 @@ struct AIProgramGeneratorView: View {
             isGenerating = false
             generatedProgram = program
         }
+    }
+
+    private func refreshDerivedState() {
+        derivedState = ProgramGeneratorDerivedState.build(
+            selectedFocus: selectedFocus,
+            selectedLevel: selectedLevel,
+            durationWeeks: selectedDuration,
+            sessionsPerWeek: selectedFrequency,
+            steeringProfile: steeringProfile,
+            carryForwardContext: initialPrefill?.carryForwardContext,
+            personalRecords: allPRs,
+            fallbackExplanationBundle: initialPrefill?.explanationBundle,
+            context: modelContext,
+            previous: derivedState
+        )
+    }
+
+    private func resolvedGeneratorDerivedState() -> ProgramGeneratorDerivedState {
+        if derivedState.refreshToken == generatorDerivedStateRefreshToken {
+            return derivedState
+        }
+
+        return ProgramGeneratorDerivedState.build(
+            selectedFocus: selectedFocus,
+            selectedLevel: selectedLevel,
+            durationWeeks: selectedDuration,
+            sessionsPerWeek: selectedFrequency,
+            steeringProfile: steeringProfile,
+            carryForwardContext: initialPrefill?.carryForwardContext,
+            personalRecords: allPRs,
+            fallbackExplanationBundle: initialPrefill?.explanationBundle,
+            context: modelContext,
+            previous: derivedState
+        )
     }
 }
 

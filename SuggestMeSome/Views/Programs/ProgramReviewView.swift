@@ -8,141 +8,6 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - Review Phase Group
-
-struct ReviewPhaseGroup: Identifiable {
-    let id: String   // stable: derived from title so re-renders don't break expansion state
-    let title: String
-    let weekRange: String
-    let schemeDescription: String
-    var weeks: [ProgramWeekTemplate]
-    let isDeload: Bool
-}
-
-private struct ProgramLogicSnapshot {
-    let progressionModel: String
-    let usedLiftMapping: Bool
-    let usedVolumeBalancing: Bool
-    let usedFatigueBalancing: Bool
-    let usedTopSetBackoff: Bool
-}
-
-// MARK: - Phase Helpers
-
-private func buildPhaseGroups(
-    input: ProgramGenerationInput,
-    weeks: [ProgramWeekTemplate]
-) -> [ReviewPhaseGroup] {
-    let sorted = weeks.sorted { $0.weekNumber < $1.weekNumber }
-    switch input.level {
-    case .beginner, .intermediate:
-        let isDeload: (ProgramWeekTemplate) -> Bool = { week in
-            week.isDeloadWeek
-        }
-        let workingWeeks = sorted.filter { !isDeload($0) }
-        let deloadWeeks  = sorted.filter(isDeload)
-        let scheme = input.level == .beginner
-            ? "Linear: template-anchor %1RM with small weekly increases"
-            : "DUP: heavy/moderate/light anchor-relative intensity shifts"
-        var groups = [
-            ReviewPhaseGroup(
-                id: "working",
-                title: "Working Weeks",
-                weekRange: weekRangeText(workingWeeks.isEmpty ? sorted : workingWeeks),
-                schemeDescription: scheme,
-                weeks: workingWeeks.isEmpty ? sorted : workingWeeks,
-                isDeload: false
-            )
-        ]
-        if !deloadWeeks.isEmpty {
-            groups.append(ReviewPhaseGroup(
-                id: "deload",
-                title: "Deload Weeks",
-                weekRange: weekRangeText(deloadWeeks),
-                schemeDescription: "Reduced volume (~50%) with explicit intensity drop",
-                weeks: deloadWeeks,
-                isDeload: true
-            ))
-        }
-        return groups
-
-    case .advanced:
-        return buildBlockPhaseGroups(durationWeeks: input.durationWeeks, weeks: sorted)
-    }
-}
-
-private func buildBlockPhaseGroups(
-    durationWeeks: Int,
-    weeks: [ProgramWeekTemplate]
-) -> [ReviewPhaseGroup] {
-    let sequence: [(String?, Int)]
-    switch durationWeeks {
-    case 6:  sequence = [("Hypertrophy", 2), (nil, 1), ("Strength", 2), ("Peaking", 1)]
-    case 8:  sequence = [("Hypertrophy", 3), (nil, 1), ("Strength", 2), ("Peaking", 1), (nil, 1)]
-    case 10: sequence = [("Hypertrophy", 3), (nil, 1), ("Strength", 3), (nil, 1), ("Peaking", 2)]
-    case 12: sequence = [("Hypertrophy", 4), (nil, 1), ("Strength", 3), (nil, 1), ("Peaking", 2), (nil, 1)]
-    default: sequence = [("Hypertrophy", 4), (nil, 1), ("Strength", 3), (nil, 1), ("Peaking", 2), (nil, 1)]
-    }
-
-    var groups: [ReviewPhaseGroup] = []
-    var weekIdx = 1
-    for (name, count) in sequence {
-        let phaseWeeks = weeks.filter { $0.weekNumber >= weekIdx && $0.weekNumber < weekIdx + count }
-        let range = count == 1
-            ? "Week \(weekIdx)"
-            : "Weeks \(weekIdx)–\(weekIdx + count - 1)"
-
-        if let phaseName = name {
-            let scheme: String
-            switch phaseName {
-            case "Hypertrophy": scheme = "Anchor-relative lower intensity accumulation"
-            case "Strength":    scheme = "Anchor-relative strength intensification"
-            case "Peaking":     scheme = "Anchor-relative high-intensity peaking"
-            default:            scheme = ""
-            }
-            groups.append(ReviewPhaseGroup(
-                id: phaseName.lowercased(),
-                title: "\(phaseName) Phase",
-                weekRange: range,
-                schemeDescription: scheme,
-                weeks: phaseWeeks,
-                isDeload: false
-            ))
-        } else {
-            // Multiple deload groups possible; make ID unique by week index
-            groups.append(ReviewPhaseGroup(
-                id: "deload-\(weekIdx)",
-                title: "Deload",
-                weekRange: range,
-                schemeDescription: "Reduced volume (~50%) with explicit intensity drop",
-                weeks: phaseWeeks,
-                isDeload: true
-            ))
-        }
-        weekIdx += count
-    }
-    return groups
-}
-
-private func weekRangeText(_ weeks: [ProgramWeekTemplate]) -> String {
-    let nums = weeks.map(\.weekNumber).sorted()
-    guard !nums.isEmpty else { return "" }
-    if nums.count == 1 { return "Week \(nums[0])" }
-
-    var ranges: [ClosedRange<Int>] = []
-    var start = nums[0], end = nums[0]
-    for n in nums.dropFirst() {
-        if n == end + 1 { end = n } else { ranges.append(start...end); start = n; end = n }
-    }
-    ranges.append(start...end)
-
-    return ranges.map { r in
-        r.lowerBound == r.upperBound
-            ? "Week \(r.lowerBound)"
-            : "Weeks \(r.lowerBound)–\(r.upperBound)"
-    }.joined(separator: ", ")
-}
-
 private func resolvedOneRepMax(
     for exerciseName: String,
     oneRepMaxes: [String: (weight: Double, unit: String)]
@@ -301,60 +166,21 @@ struct ProgramReviewView: View {
     let onRegenerate: () -> Void
 
     @Environment(\.modelContext) private var modelContext
-    private let generationService = ProgramGenerationService()
 
     @State private var editableName: String = ""
     @State private var isEditingName = false
     @State private var expandedPhaseIDs: Set<String> = []
     @State private var expandedWeeks: Set<Int> = []
     @State private var expandedSessions: Set<String> = []
+    @State private var derivedState = ProgramReviewDerivedState.placeholder
 
     @State private var editingExercise: ProgramSessionExercise?
     @State private var addingToSession: ProgramSessionTemplate?
     @State private var showRegenerateAlert = false
     @State private var showAdditionalInfo = false
 
-    private var groups: [ReviewPhaseGroup] {
-        buildPhaseGroups(input: input, weeks: program.weeks)
-    }
-
-    private var weeklySummariesByWeek: [Int: ProgramGeneratedWeekSummary] {
-        Dictionary(
-            uniqueKeysWithValues: generationService.weeklySummary(for: program).map { ($0.weekNumber, $0) }
-        )
-    }
-
-    private var programLogic: ProgramLogicSnapshot {
-        let mapped = program.usedLiftMapping
-            ?? program.weeks.flatMap(\.sessions).flatMap(\.exercises).contains { $0.usedMappedSourceLift == true }
-        let topBackoff = program.usedTopSetBackoff
-            ?? program.weeks.flatMap(\.sessions).flatMap(\.exercises).contains {
-                $0.workingSetStyle == .topSet || $0.workingSetStyle == .backoff
-            }
-        let progressionName = (program.progressionModel ?? fallbackProgressionModel).displayName
-
-        return ProgramLogicSnapshot(
-            progressionModel: progressionName,
-            usedLiftMapping: mapped,
-            usedVolumeBalancing: program.usedVolumeBalancing ?? true,
-            usedFatigueBalancing: program.usedFatigueBalancing ?? true,
-            usedTopSetBackoff: topBackoff
-        )
-    }
-
-    private var fallbackProgressionModel: ProgramProgressionModel {
-        switch input.level {
-        case .beginner: return .linear
-        case .intermediate: return .dup
-        case .advanced: return .block
-        }
-    }
-
-    private var adaptiveExplanationBundle: AdaptiveExplanationBundle? {
-        input.explanationBundle ?? generationService.previewAdaptiveContext(
-            input: input,
-            context: modelContext
-        ).explanationBundle
+    private var reviewRefreshToken: Int {
+        ProgramReviewDerivedState.refreshToken(program: program, input: input)
     }
 
     var body: some View {
@@ -369,6 +195,9 @@ struct ProgramReviewView: View {
         }
         .safeAreaInset(edge: .bottom) { actionBarView }
         .onAppear { editableName = program.name }
+        .task(id: reviewRefreshToken) {
+            refreshDerivedState()
+        }
         .alert("Regenerate Program?", isPresented: $showRegenerateAlert) {
             Button("Regenerate", role: .destructive) { onRegenerate() }
             Button("Cancel", role: .cancel) {}
@@ -436,7 +265,7 @@ struct ProgramReviewView: View {
                 programLogicSection
             }
 
-            if let adaptiveExplanationBundle {
+            if let adaptiveExplanationBundle = derivedState.adaptiveExplanationBundle {
                 AdaptiveExplanationCard(
                     bundle: adaptiveExplanationBundle,
                     title: "Coach Notes",
@@ -471,11 +300,11 @@ struct ProgramReviewView: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 6) {
-                logicRow("Progression", value: programLogic.progressionModel)
-                logicRow("Lift Mapping", value: boolLabel(programLogic.usedLiftMapping))
-                logicRow("Volume Balance", value: boolLabel(programLogic.usedVolumeBalancing))
-                logicRow("Fatigue Balance", value: boolLabel(programLogic.usedFatigueBalancing))
-                logicRow("Top+Backoff", value: boolLabel(programLogic.usedTopSetBackoff))
+                logicRow("Progression", value: derivedState.programLogic.progressionModel)
+                logicRow("Lift Mapping", value: boolLabel(derivedState.programLogic.usedLiftMapping))
+                logicRow("Volume Balance", value: boolLabel(derivedState.programLogic.usedVolumeBalancing))
+                logicRow("Fatigue Balance", value: boolLabel(derivedState.programLogic.usedFatigueBalancing))
+                logicRow("Top+Backoff", value: boolLabel(derivedState.programLogic.usedTopSetBackoff))
             }
         }
         .padding(10)
@@ -541,7 +370,7 @@ struct ProgramReviewView: View {
 
     private var phaseListView: some View {
         VStack(spacing: 0) {
-            ForEach(groups) { group in
+            ForEach(derivedState.phaseGroups) { group in
                 PhaseCardView(
                     group: group,
                     isExpanded: expandedPhaseIDs.contains(group.id),
@@ -550,7 +379,7 @@ struct ProgramReviewView: View {
                     expandedSessions: $expandedSessions,
                     editingExercise: $editingExercise,
                     addingToSession: $addingToSession,
-                    weeklySummariesByWeek: weeklySummariesByWeek,
+                    weeklySummariesByWeek: derivedState.weeklySummariesByWeek,
                     input: input,
                     onTogglePhase: { togglePhase(id: group.id) },
                     onDeleteExercise: deleteExercise
@@ -646,6 +475,15 @@ struct ProgramReviewView: View {
 
     private func deleteExercise(_ exercise: ProgramSessionExercise) {
         modelContext.delete(exercise)
+    }
+
+    private func refreshDerivedState() {
+        derivedState = ProgramReviewDerivedState.build(
+            program: program,
+            input: input,
+            context: modelContext,
+            previous: derivedState
+        )
     }
 }
 

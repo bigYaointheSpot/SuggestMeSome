@@ -3457,6 +3457,29 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 7 [Generator and review derived-state caching] — 2026-04-18
+
+- Replaced the remaining program-generation render-path recomputation with explicit cached derived state:
+  - added `ProgramGeneratorDerivedState` to cache the adaptive preview/explanation bundle plus the best PR-by-exercise lookup used for 1RM prefill
+  - `AIProgramGeneratorView` now refreshes that state from a single `.task(id:)` token keyed to focus, level, duration, frequency, steering profile, carry-forward context, and PR history
+  - the generator now reuses the cached best-PR snapshot for 1RM initialization and carries the cached adaptive explanation bundle into program generation instead of rebuilding preview context inside the view body and button path
+- Reworked the review screen into a snapshot-driven data flow:
+  - added `ProgramReviewDerivedState` to precompute phase groups, weekly summaries by week, program-logic metadata, and the adaptive explanation bundle
+  - moved the phase-grouping and program-logic derivation out of `ProgramReviewView` so the review surface consumes one cached snapshot refreshed from a single token keyed to the program structure and generation input
+  - preserved the existing review UX for rename/edit, regenerate, start program, add/delete exercise, continuity carry-forward handling, and explainability display
+- Added focused Prompt 7 coverage in `Feature16Prompt7ProgramDerivedStateTests.swift`:
+  - best-PR selection and rounded 1RM prefill lookup
+  - generator refresh-token invalidation when adaptive inputs change
+  - review derived-state parity for weekly summaries, phase grouping, and inferred program logic
+  - review refresh-token invalidation when program exercises change
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt7ProgramDerivedStateTests`
+
+**Commit:** `refactor: cache generator and review derived state`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
