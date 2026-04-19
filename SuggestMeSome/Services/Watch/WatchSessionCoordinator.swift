@@ -220,8 +220,36 @@ enum WatchPayloadMapper {
             usesLinkedWatchHealthSession: usesLinkedWatchHealthSession,
             sessionSourceLabels: normalizeSourceLabels(sessionSourceLabels),
             sessionVersionStableID: sessionVersionStableID,
+            sessionExerciseRoster: makeExerciseRoster(entries: entries, activeIndex: index),
             capturedAt: capturedAt
         )
+    }
+
+    /// Build the ordered roster transmitted on every context update. Status is
+    /// derived from completion + the resolved active index so the watch can
+    /// highlight the currently-executing exercise and show upcoming entries
+    /// without re-deriving state.
+    static func makeExerciseRoster(
+        entries: [DraftExerciseEntry],
+        activeIndex: Int
+    ) -> [WatchSessionExerciseRosterEntry] {
+        entries.enumerated().map { offset, entry in
+            let status: WatchRosterExerciseStatus
+            if isExerciseComplete(entry) {
+                status = .completed
+            } else if offset == activeIndex {
+                status = .active
+            } else {
+                status = .upcoming
+            }
+            return WatchSessionExerciseRosterEntry(
+                id: entry.id,
+                name: entry.exerciseName,
+                orderIndex: entry.orderIndex,
+                status: status,
+                isCardio: entry.isCardio
+            )
+        }
     }
 
     // MARK: Live Workout Snapshot

@@ -52,19 +52,37 @@ struct WorkoutView: View {
     @State private var draftPersistenceTask: Task<Void, Never>?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                dateHeader
-                timerSection
-                Divider().padding(.horizontal)
-                exerciseList
-                addExerciseButton
-                caloriesField
-                notesField
-                endWorkoutButton
+        List {
+            dateHeader
+                .plainWorkoutRow()
+            timerSection
+                .plainWorkoutRow(horizontalInset: 0, verticalInset: DSSpacing.s)
+            Divider()
+                .plainWorkoutRow(horizontalInset: DSSpacing.l, verticalInset: 0)
+            ForEach($exerciseEntries) { $entry in
+                ExerciseEntryCard(entry: $entry) {
+                    exerciseEntries.removeAll { $0.id == entry.id }
+                }
+                .plainWorkoutRow(horizontalInset: DSSpacing.l, verticalInset: DSSpacing.xs)
+                .moveDisabled(!canMoveExercise(entry))
             }
-            .padding(.vertical)
+            .onMove(perform: handleExerciseMove)
+            if isActive {
+                addExerciseButton
+                    .plainWorkoutRow()
+            }
+            caloriesField
+                .plainWorkoutRow()
+            notesField
+                .plainWorkoutRow()
+            if isActive {
+                endWorkoutButton
+                    .plainWorkoutRow(verticalInset: DSSpacing.m)
+            }
         }
+        .listStyle(.plain)
+        .sensoryFeedback(.selection, trigger: exerciseEntries.map(\.id))
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: exerciseEntries.map(\.id))
         .overlay {
             if showPRCelebration {
                 prCelebrationOverlay
@@ -128,7 +146,6 @@ struct WorkoutView: View {
         Text(startTime ?? Date.now, format: .dateTime.weekday(.wide).month(.wide).day().year())
             .font(.title2.weight(.semibold))
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal)
     }
 
     private var timerSection: some View {
@@ -149,86 +166,91 @@ struct WorkoutView: View {
         )
     }
 
-    @ViewBuilder
-    private var exerciseList: some View {
-        if !exerciseEntries.isEmpty {
-            VStack(spacing: 12) {
-                ForEach($exerciseEntries) { $entry in
-                    ExerciseEntryCard(entry: $entry) {
-                        exerciseEntries.removeAll { $0.id == entry.id }
-                    }
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-
-    @ViewBuilder
     private var addExerciseButton: some View {
-        if isActive {
-            Button {
-                showingExercisePicker = true
-            } label: {
-                Label("Add Exercise", systemImage: "plus.circle.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.horizontal)
+        Button {
+            showingExercisePicker = true
+        } label: {
+            Label("Add Exercise", systemImage: "plus.circle.fill")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(DSColor.primaryAction.opacity(0.12))
+                .foregroundStyle(DSColor.primaryAction)
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.m))
         }
     }
 
     private var caloriesField: some View {
         HStack {
             Label("Calories Burned", systemImage: "flame.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(DSColor.signalCaution)
             Spacer()
             TextField("Optional", text: $caloriesText)
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 100)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal)
+        .padding(DSSpacing.l)
+        .background(DSColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.m))
     }
 
     private var notesField: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DSSpacing.s) {
             Label("Workout Notes", systemImage: "note.text")
                 .font(.headline)
             TextEditor(text: $comments)
                 .frame(minHeight: 120)
                 .padding(6)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .background(DSColor.surface)
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.s + 2))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: DSRadius.s + 2)
                         .stroke(Color(.separator), lineWidth: 0.5)
                 )
         }
-        .padding(.horizontal)
     }
 
-    @ViewBuilder
     private var endWorkoutButton: some View {
-        if isActive {
-            Button {
-                showingEndConfirmation = true
-            } label: {
-                Label("End Workout", systemImage: "checkmark.circle.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.red)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+        Button {
+            showingEndConfirmation = true
+        } label: {
+            Label("End Workout", systemImage: "checkmark.circle.fill")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(DSColor.signalCritical)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: DSRadius.m))
+        }
+    }
+
+    // MARK: - Reorder
+
+    /// The currently-active exercise is the first exercise whose sets are
+    /// not all logged. Matches `WatchSessionCoordinator.resolveCurrentExerciseIndex`
+    /// so the iPhone UI and watch cursor agree on which card is locked.
+    private var activeExerciseID: UUID? {
+        exerciseEntries.first(where: { !WatchPayloadMapper.isExerciseComplete($0) })?.id
+    }
+
+    private func canMoveExercise(_ entry: DraftExerciseEntry) -> Bool {
+        guard isActive else { return true }
+        if WatchPayloadMapper.isExerciseComplete(entry) { return false }
+        return entry.id != activeExerciseID
+    }
+
+    /// Lowest index a movable row may land on, so the user can't drop an
+    /// upcoming exercise above the locked (completed + active) prefix.
+    private var firstMovableIndex: Int {
+        exerciseEntries.firstIndex(where: canMoveExercise) ?? exerciseEntries.count
+    }
+
+    private func handleExerciseMove(from source: IndexSet, to destination: Int) {
+        let clamped = max(firstMovableIndex, destination)
+        exerciseEntries.move(fromOffsets: source, toOffset: clamped)
+        for idx in exerciseEntries.indices {
+            exerciseEntries[idx].orderIndex = idx
         }
     }
 
@@ -746,6 +768,8 @@ private struct WorkoutElapsedTimerText: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             Text(presentation.formattedElapsed(at: context.date))
                 .font(.system(size: 56, weight: .thin, design: .monospaced))
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.25), value: presentation.formattedElapsed(at: context.date))
                 .frame(maxWidth: .infinity, alignment: .center)
         }
     }
@@ -763,24 +787,31 @@ struct ExerciseEntryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header row
-            HStack(spacing: 12) {
+            HStack(spacing: DSSpacing.m) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isExpanded.toggle()
                     }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DSSpacing.s) {
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(isExpanded ? 90 : 0))
                             .animation(.easeInOut(duration: 0.2), value: isExpanded)
-                        Text(entry.exerciseName)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(entry.exerciseName)
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Text(progressSubtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                     }
                 }
+                .buttonStyle(.plain)
                 Spacer()
                 if !entry.isCardio {
                     Picker("Unit", selection: $entry.unit) {
@@ -793,12 +824,12 @@ struct ExerciseEntryCard: View {
                 }
                 Button(action: onDelete) {
                     Image(systemName: "trash")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(DSColor.signalCritical)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color(.secondarySystemBackground))
+            .padding(.horizontal, DSSpacing.m)
+            .padding(.vertical, DSSpacing.s + 2)
+            .background(DSColor.surface)
 
             if isExpanded {
                 if entry.isCardio {
@@ -866,12 +897,57 @@ struct ExerciseEntryCard: View {
                     }
                 }
             }
+            progressRail
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: DSRadius.m))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: DSRadius.m)
                 .stroke(Color(.separator), lineWidth: 0.5)
         )
+    }
+
+    // MARK: - Progress Helpers
+
+    /// One-line subtitle under the exercise name. Summarizes logged/total
+    /// sets for strength entries, or duration target for cardio. Mirrors
+    /// the watch's exercise summary so the two surfaces read the same.
+    private var progressSubtitle: String {
+        if entry.isCardio {
+            let minutes = Int(entry.cardioMinutesText) ?? 0
+            let seconds = Int(entry.cardioSecondsText) ?? 0
+            if minutes == 0 && seconds == 0 { return "Cardio" }
+            return String(format: "Cardio · %d:%02d", minutes, seconds)
+        }
+        let total = entry.sets.count
+        guard total > 0 else { return "No sets" }
+        let logged = entry.sets.filter { WatchPayloadMapper.isSetLogged($0) }.count
+        return "\(logged) of \(total) sets"
+    }
+
+    /// Fraction of the exercise completed, used by the progress rail. Cardio
+    /// is binary (logged or not) because duration is captured in a single
+    /// input rather than per-set increments.
+    private var progressFraction: Double {
+        if entry.isCardio {
+            return WatchPayloadMapper.isExerciseComplete(entry) ? 1 : 0
+        }
+        let total = entry.sets.count
+        guard total > 0 else { return 0 }
+        let logged = entry.sets.filter { WatchPayloadMapper.isSetLogged($0) }.count
+        return min(1, Double(logged) / Double(total))
+    }
+
+    private var progressRail: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(DSColor.signalPositive.opacity(0.15))
+                Capsule()
+                    .fill(DSColor.signalPositive)
+                    .frame(width: max(0, geo.size.width * progressFraction))
+                    .animation(.easeOut(duration: 0.25), value: progressFraction)
+            }
+        }
+        .frame(height: 2)
     }
 
     // MARK: - Effort Capture
@@ -1154,5 +1230,28 @@ struct ExercisePickerSheet: View {
                 .fontWeight(.semibold)
             }
         }
+    }
+}
+
+// MARK: - List row helpers
+
+private extension View {
+    /// Applies the baseline row treatment used by the live-workout List:
+    /// zero separator, transparent row background, and token-driven insets.
+    /// Centralized so every section row reads consistently without
+    /// repeating five modifiers.
+    func plainWorkoutRow(
+        horizontalInset: CGFloat = DSSpacing.l,
+        verticalInset: CGFloat = DSSpacing.s
+    ) -> some View {
+        self
+            .listRowInsets(EdgeInsets(
+                top: verticalInset,
+                leading: horizontalInset,
+                bottom: verticalInset,
+                trailing: horizontalInset
+            ))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 }

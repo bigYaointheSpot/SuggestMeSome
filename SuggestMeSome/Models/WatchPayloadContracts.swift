@@ -207,7 +207,30 @@ struct WatchCurrentSessionContext: Codable, Equatable {
     /// tests and future companion app to detect when the phone swapped
     /// planned → runtime-adjusted mid-session.
     var sessionVersionStableID: String? = nil
+    /// Ordered exercise roster for the active session. Each entry carries a
+    /// stable identifier so the watch can track the same exercise across
+    /// iOS-side reorders instead of pinning to a positional index. Optional
+    /// for backward compatibility with pre-Feature-17 builds.
+    var sessionExerciseRoster: [WatchSessionExerciseRosterEntry]? = nil
     var capturedAt: Date
+}
+
+/// Per-exercise roster entry. Transmitted within
+/// `WatchCurrentSessionContext.sessionExerciseRoster` so the watch can
+/// render the upcoming exercise list and follow the same exercise across
+/// reorders even though `exerciseIndex` is positional.
+struct WatchSessionExerciseRosterEntry: Codable, Equatable, Identifiable {
+    var id: UUID
+    var name: String
+    var orderIndex: Int
+    var status: WatchRosterExerciseStatus
+    var isCardio: Bool
+}
+
+enum WatchRosterExerciseStatus: String, Codable, Equatable {
+    case completed
+    case active
+    case upcoming
 }
 
 // MARK: - Watch Presence Heartbeat

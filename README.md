@@ -3761,6 +3761,36 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+### Feature 17 — Reorderable exercises and in-workout UI polish
+
+**Status:** In Progress
+
+#### Prompt 1 [Drag-to-reorder exercises with watch roster sync and design-token polish] — 2026-04-19
+
+- Added long-press drag-to-reorder for exercises during planning and live workouts:
+  - `WorkoutView` now renders its exercise list inside a `List` with `.onMove`, `.moveDisabled`, and `.sensoryFeedback(.selection)` so a card can be grabbed and reordered with a light haptic on drop
+  - during a live workout only upcoming (not-yet-started) exercises are movable — the completed prefix and the currently active exercise stay locked, and the drop destination is clamped to the first movable slot so an upcoming row can never land above the locked prefix
+  - reorder commits renumber `DraftExerciseEntry.orderIndex` in place so persisted order stays stable across pause/resume and force-quit
+- Extended the watch payload so reorders show up on the companion without relying on positional index:
+  - `WatchCurrentSessionContext` now carries an optional `sessionExerciseRoster: [WatchSessionExerciseRosterEntry]` with stable `DraftExerciseEntry` IDs and a `.completed | .active | .upcoming` status enum
+  - `WatchPayloadMapper.makeExerciseRoster(entries:activeIndex:)` builds the roster from the current draft entries and `WatchPayloadMapper.makeCurrentSessionContext(...)` embeds it on every context rebuild, including the rebuild fired by a reorder
+  - `WatchActiveWorkoutView` Summary tab now renders an "Up Next" sub-view filtered to upcoming roster entries so the watch reflects iOS-side reorders within one context push
+  - the new field decodes as `nil` on older iOS payloads and is ignored by older watch builds, so the change stays backward compatible
+- Polished in-workout surfaces without a layout overhaul:
+  - adopted `DSSpacing`, `DSRadius`, and `DSColor` tokens across `WorkoutView`'s exercise rows, add-exercise button, calories field, notes field, and end-workout button
+  - tightened `ExerciseEntryCard` typography with a headline title plus a caption subtitle showing set-count progress / cardio target, and added a thin bottom progress rail backed by `DSColor.signalPositive`
+  - added `.contentTransition(.numericText())` to `WorkoutElapsedTimerText` so the timer digits roll instead of snapping, and a spring animation on the entries array so reorders settle gracefully
+- Added Feature 17 test coverage in `Feature17ReorderRosterTests.swift`:
+  - `WatchSessionExerciseRosterEntry` Codable roundtrip and legacy `WatchCurrentSessionContext` decode (back-compat with `sessionExerciseRoster == nil`)
+  - `WatchPayloadMapper.makeExerciseRoster` labels completed / active / upcoming correctly and `makeCurrentSessionContext` embeds the roster with the active entry tracked by ID
+  - reorder helper clamps an upcoming-row drop above the locked prefix to the first movable slot, and renumbers `orderIndex` after a move
+- Verification:
+  - succeeded: `xcodebuild -scheme SuggestMeSome -destination 'platform=iOS Simulator,id=0AE3854C-F79D-4A3C-B7F1-7264EAD8B4E9' -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests test`
+
+**Commit:** `feat: reorderable exercises with watch sync and ui polish`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

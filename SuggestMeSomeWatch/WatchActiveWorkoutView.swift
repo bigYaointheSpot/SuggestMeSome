@@ -132,12 +132,52 @@ struct WatchActiveWorkoutView: View {
             VStack(alignment: .leading, spacing: 10) {
                 sessionHeader
                 elapsedAndProgress
+                upNextRosterSection
                 WatchConnectionDot(status: sessionStatus)
                     .padding(.top, 2)
             }
             .padding(.horizontal, 2)
             .padding(.top, 2)
             .padding(.bottom, 8)
+        }
+    }
+
+    // MARK: - Up Next Roster
+
+    /// Ordered list of remaining exercises for the active session. Rendered
+    /// only when the phone ships a roster (Feature 17+) and at least one
+    /// upcoming exercise exists; pre-Feature-17 payloads fall through to
+    /// the existing progress-card-only layout.
+    @ViewBuilder
+    private var upNextRosterSection: some View {
+        let roster = currentContext?.sessionExerciseRoster ?? []
+        let upcoming = roster.filter { $0.status == .upcoming }
+        if !upcoming.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "list.bullet")
+                        .font(.caption2.weight(.semibold))
+                    Text("Up Next")
+                        .font(.caption2.weight(.semibold))
+                        .textCase(.uppercase)
+                        .tracking(0.4)
+                }
+                .foregroundStyle(WatchPalette.primary)
+                ForEach(upcoming) { entry in
+                    HStack(spacing: 6) {
+                        Image(systemName: entry.isCardio ? "figure.run" : "dumbbell.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 14)
+                        Text(entry.name)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .watchCard()
         }
     }
 
