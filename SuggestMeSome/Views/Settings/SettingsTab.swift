@@ -167,33 +167,19 @@ struct SettingsTab: View {
 
     private var preferencesSection: some View {
         Section("Preferences") {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Default Weight Unit")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Picker("Default Weight Unit", selection: weightUnitBinding) {
-                    ForEach(WeightUnit.allCases, id: \.self) {
-                        Text($0.rawValue).tag($0)
-                    }
+            Picker("Default Weight Unit", selection: weightUnitBinding) {
+                ForEach(WeightUnit.allCases, id: \.self) {
+                    Text($0.rawValue).tag($0)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
             }
-            .padding(.vertical, 4)
+            .pickerStyle(.segmented)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Appearance")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Picker("Appearance", selection: $appColorScheme) {
-                    Text("System").tag("system")
-                    Text("Light").tag("light")
-                    Text("Dark").tag("dark")
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+            Picker("Appearance", selection: $appColorScheme) {
+                Text("System").tag("system")
+                Text("Light").tag("light")
+                Text("Dark").tag("dark")
             }
-            .padding(.vertical, 4)
+            .pickerStyle(.segmented)
         }
     }
 

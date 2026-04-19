@@ -14,22 +14,18 @@ struct ManageExercisesView: View {
 
     // Add group
     @State private var showingAddGroup = false
-    @State private var newGroupName = ""
 
     // Rename group
     @State private var groupToRename: MuscleGroup?
-    @State private var renameGroupText = ""
 
     // Delete group
     @State private var groupToDelete: MuscleGroup?
 
     // Add exercise
     @State private var groupForNewExercise: MuscleGroup?
-    @State private var newExerciseName = ""
 
     // Rename exercise
     @State private var exerciseToRename: Exercise?
-    @State private var renameExerciseText = ""
 
     // Delete exercise
     @State private var exerciseToDelete: Exercise?
@@ -77,25 +73,48 @@ struct ManageExercisesView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    newGroupName = ""
                     showingAddGroup = true
                 } label: {
                     Label("Add Group", systemImage: "plus")
                 }
             }
         }
-        .alert("New Muscle Group", isPresented: $showingAddGroup) {
-            TextField("Group name", text: $newGroupName)
-            Button("Add") { addGroup() }
-            Button("Cancel", role: .cancel) { newGroupName = "" }
+        .sheet(isPresented: $showingAddGroup) {
+            NameEditorSheet(
+                title: "New Muscle Group",
+                placeholder: "Group name",
+                actionLabel: "Add"
+            ) { name in
+                addGroup(named: name)
+            }
         }
-        .alert("Rename Group", isPresented: Binding(
-            get: { groupToRename != nil },
-            set: { if !$0 { groupToRename = nil } }
-        )) {
-            TextField("Group name", text: $renameGroupText)
-            Button("Save") { saveGroupRename() }
-            Button("Cancel", role: .cancel) { groupToRename = nil }
+        .sheet(item: $groupToRename) { group in
+            NameEditorSheet(
+                title: "Rename Group",
+                placeholder: "Group name",
+                initialValue: group.name
+            ) { name in
+                group.name = name
+            }
+        }
+        .sheet(item: $groupForNewExercise) { group in
+            NameEditorSheet(
+                title: "New Exercise",
+                placeholder: "Exercise name",
+                actionLabel: "Add",
+                subtitle: "Adding to \(group.name)"
+            ) { name in
+                modelContext.insert(Exercise(name: name, muscleGroup: group))
+            }
+        }
+        .sheet(item: $exerciseToRename) { exercise in
+            NameEditorSheet(
+                title: "Rename Exercise",
+                placeholder: "Exercise name",
+                initialValue: exercise.name
+            ) { name in
+                exercise.name = name
+            }
         }
         .confirmationDialog(
             "Delete \"\(groupToDelete?.name ?? "")\"?",
@@ -116,26 +135,6 @@ struct ManageExercisesView: View {
             if let group = groupToDelete, !group.exercises.isEmpty {
                 Text(groupDeleteMessage(group))
             }
-        }
-        .alert("New Exercise", isPresented: Binding(
-            get: { groupForNewExercise != nil },
-            set: { if !$0 { groupForNewExercise = nil } }
-        )) {
-            TextField("Exercise name", text: $newExerciseName)
-            Button("Add") { addExercise() }
-            Button("Cancel", role: .cancel) { groupForNewExercise = nil }
-        } message: {
-            if let group = groupForNewExercise {
-                Text("Adding to \(group.name)")
-            }
-        }
-        .alert("Rename Exercise", isPresented: Binding(
-            get: { exerciseToRename != nil },
-            set: { if !$0 { exerciseToRename = nil } }
-        )) {
-            TextField("Exercise name", text: $renameExerciseText)
-            Button("Save") { saveExerciseRename() }
-            Button("Cancel", role: .cancel) { exerciseToRename = nil }
         }
         .confirmationDialog(
             "Delete \"\(exerciseToDelete?.name ?? "")\"?",
@@ -171,7 +170,6 @@ struct ManageExercisesView: View {
             }
             Button {
                 groupForNewExercise = group
-                newExerciseName = ""
             } label: {
                 Label("Add Exercise", systemImage: "plus.circle")
                     .foregroundStyle(.blue)
@@ -191,18 +189,19 @@ struct ManageExercisesView: View {
                 .textCase(nil)
             Spacer()
             Button {
-                renameGroupText = group.name
                 groupToRename = group
             } label: {
                 Image(systemName: "pencil").foregroundStyle(.blue)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Rename \(group.name)")
             Button {
                 groupToDelete = group
             } label: {
                 Image(systemName: "trash").foregroundStyle(.red)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Delete \(group.name)")
         }
         .padding(.vertical, 2)
     }
@@ -218,7 +217,6 @@ struct ManageExercisesView: View {
                     Label("Delete", systemImage: "trash")
                 }
                 Button {
-                    renameExerciseText = exercise.name
                     exerciseToRename = exercise
                 } label: {
                     Label("Rename", systemImage: "pencil")
@@ -229,33 +227,8 @@ struct ManageExercisesView: View {
 
     // MARK: - Library actions
 
-    private func addGroup() {
-        let name = newGroupName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
+    private func addGroup(named name: String) {
         modelContext.insert(MuscleGroup(name: name))
-        newGroupName = ""
-    }
-
-    private func saveGroupRename() {
-        let name = renameGroupText.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, let group = groupToRename else { return }
-        group.name = name
-        groupToRename = nil
-    }
-
-    private func addExercise() {
-        let name = newExerciseName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, let group = groupForNewExercise else { return }
-        modelContext.insert(Exercise(name: name, muscleGroup: group))
-        newExerciseName = ""
-        groupForNewExercise = nil
-    }
-
-    private func saveExerciseRename() {
-        let name = renameExerciseText.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, let exercise = exerciseToRename else { return }
-        exercise.name = name
-        exerciseToRename = nil
     }
 
     private func refreshExerciseUsageSummary() {

@@ -8,127 +8,14 @@
 import SwiftUI
 import SwiftData
 
-private func resolvedOneRepMax(
-    for exerciseName: String,
-    oneRepMaxes: [String: (weight: Double, unit: String)]
-) -> (weight: Double, unit: String)? {
-    if let direct = oneRepMaxes[exerciseName] {
-        return direct
-    }
-
-    guard
-        let mapping = FocusTemplateLibrary.loadMapping(for: exerciseName),
-        let sourceORM = oneRepMaxes[mapping.sourceLift]
-    else {
-        return nil
-    }
-
-    return (
-        weight: sourceORM.weight * mapping.multiplier,
-        unit: sourceORM.unit
-    )
-}
-
-// MARK: - Exercise Display Helper
-
 private func exerciseDisplayText(
     exercise: ProgramSessionExercise,
     oneRepMaxes: [String: (weight: Double, unit: String)]
 ) -> String {
-    // Cardio: no targetSets, targetReps holds duration in minutes
-    if exercise.targetSets == nil, let mins = exercise.targetReps {
-        return "\(mins) min"
-    }
-
-    let sStr = exercise.targetSets.map(String.init) ?? "—"
-    let rStr = exercise.targetReps.map(String.init) ?? "—"
-
-    if let pct = exercise.targetPercentage1RM {
-        let pctInt = Int((pct * 100).rounded())
-
-        // Prefer weight stored at generation time
-        if let w = exercise.prescribedWeight, let unit = exercise.prescribedWeightUnit {
-            let wStr = w == w.rounded(.towardZero)
-                ? "\(Int(w)) \(unit)"
-                : String(format: "%.1f \(unit)", w)
-            var detail = "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
-            if let rir = exercise.targetRIR {
-                let rirStr = rir.truncatingRemainder(dividingBy: 1) == 0
-                    ? String(Int(rir))
-                    : String(format: "%.1f", rir)
-                detail += " · RIR \(rirStr)"
-            } else if let rpe = exercise.targetRPE {
-                let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
-                    ? String(Int(rpe))
-                    : String(format: "%.1f", rpe)
-                detail += " · RPE \(rpeStr)"
-            }
-            if exercise.workingSetStyle == .backoff, let drop = exercise.backoffPercentageDrop {
-                detail += String(format: " · -%.0f%%", drop * 100.0)
-            }
-            return detail
-        }
-
-        // Fallback: compute from oneRepMaxes (programs generated before fix)
-        // Supports mapped variation lifts when direct 1RM is unavailable.
-        if let orm = resolvedOneRepMax(for: exercise.exerciseName, oneRepMaxes: oneRepMaxes) {
-            let raw = pct * orm.weight
-            let rounded = orm.unit == "lbs"
-                ? (raw / 5.0).rounded() * 5.0
-                : (raw / 2.5).rounded() * 2.5
-            let wStr = rounded == rounded.rounded(.towardZero)
-                ? "\(Int(rounded)) \(orm.unit)"
-                : String(format: "%.1f \(orm.unit)", rounded)
-            var detail = "\(sStr)×\(rStr) @ \(wStr) (\(pctInt)%)"
-            if let rir = exercise.targetRIR {
-                let rirStr = rir.truncatingRemainder(dividingBy: 1) == 0
-                    ? String(Int(rir))
-                    : String(format: "%.1f", rir)
-                detail += " · RIR \(rirStr)"
-            } else if let rpe = exercise.targetRPE {
-                let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
-                    ? String(Int(rpe))
-                    : String(format: "%.1f", rpe)
-                detail += " · RPE \(rpeStr)"
-            }
-            if exercise.workingSetStyle == .backoff, let drop = exercise.backoffPercentageDrop {
-                detail += String(format: " · -%.0f%%", drop * 100.0)
-            }
-            return detail
-        }
-        var detail = "\(sStr)×\(rStr) @ \(pctInt)%"
-        if let rir = exercise.targetRIR {
-            let rirStr = rir.truncatingRemainder(dividingBy: 1) == 0
-                ? String(Int(rir))
-                : String(format: "%.1f", rir)
-            detail += " · RIR \(rirStr)"
-        } else if let rpe = exercise.targetRPE {
-            let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
-                ? String(Int(rpe))
-                : String(format: "%.1f", rpe)
-            detail += " · RPE \(rpeStr)"
-        }
-        if exercise.workingSetStyle == .backoff, let drop = exercise.backoffPercentageDrop {
-            detail += String(format: " · -%.0f%%", drop * 100.0)
-        }
-        return detail
-    }
-
-    if let rir = exercise.targetRIR {
-        let rirStr = rir.truncatingRemainder(dividingBy: 1) == 0
-            ? String(Int(rir))
-            : String(format: "%.1f", rir)
-        return "\(sStr)×\(rStr) @ RIR \(rirStr)"
-    }
-
-    if let rpe = exercise.targetRPE {
-        let rpeStr = rpe.truncatingRemainder(dividingBy: 1) == 0
-            ? String(Int(rpe))
-            : String(format: "%.1f", rpe)
-        return "\(sStr)×\(rStr) @ RPE \(rpeStr)"
-    }
-
-    return "\(sStr)×\(rStr)"
+    ExerciseDisplayFormatter.exerciseDisplayText(
+        exercise: exercise,
+        oneRepMaxes: oneRepMaxes
+    )
 }
 
 private func workingSetStyleLabel(for exercise: ProgramSessionExercise) -> String {
@@ -1055,7 +942,7 @@ struct ExerciseEditSheet: View {
             exercise.targetEffortType = .percentage1RM
 
             let name = selectedName.isEmpty ? exercise.exerciseName : selectedName
-            if let orm = resolvedOneRepMax(for: name, oneRepMaxes: input.oneRepMaxes) {
+            if let orm = ExerciseDisplayFormatter.resolvedOneRepMax(for: name, oneRepMaxes: input.oneRepMaxes) {
                 let raw = normalizedPct * orm.weight
                 let rounded = orm.unit == "lbs"
                     ? max(5.0, (raw / 5.0).rounded() * 5.0)
