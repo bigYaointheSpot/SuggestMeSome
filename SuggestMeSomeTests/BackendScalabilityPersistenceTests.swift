@@ -123,6 +123,60 @@ struct BackendScalabilityPersistenceTests {
         )
     }
 
+    @Test func deferredStartupSyncAuditUsingFreshContainerContextStoresLastAuditAfterAuditCompletes() throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "BackendScalabilityPersistenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        var auditSawStoredLastAuditAt: Date?
+
+        let report = PersistenceMaintenanceCoordinator.runDeferredStartupSyncAuditIfNeeded(
+            container: container,
+            shouldRunSyncAudit: true,
+            userDefaults: defaults,
+            now: day(10),
+            auditRunner: { _, auditedAt in
+                auditSawStoredLastAuditAt = PersistenceMaintenanceCoordinator.storedLastAuditAt(
+                    userDefaults: defaults
+                )
+                return .skipped(auditedAt: auditedAt)
+            }
+        )
+
+        #expect(report.didRunSyncMetadataAudit)
+        #expect(auditSawStoredLastAuditAt == nil)
+        #expect(
+            PersistenceMaintenanceCoordinator.storedLastAuditAt(userDefaults: defaults)
+            == day(10)
+        )
+    }
+
+    @Test func deferredStartupSyncAuditUsingFreshContainerContextSkipsAndPreservesLastAuditWhenNotNeeded() throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "BackendScalabilityPersistenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(
+            day(5).timeIntervalSince1970,
+            forKey: PersistenceMaintenanceCoordinator.lastAuditAtDefaultsKey
+        )
+
+        let report = PersistenceMaintenanceCoordinator.runDeferredStartupSyncAuditIfNeeded(
+            container: container,
+            shouldRunSyncAudit: false,
+            userDefaults: defaults,
+            now: day(10)
+        )
+
+        #expect(report.didRunSyncMetadataAudit == false)
+        #expect(report.syncAuditReport.entityReports.isEmpty)
+        #expect(
+            PersistenceMaintenanceCoordinator.storedLastAuditAt(userDefaults: defaults)
+            == day(5)
+        )
+    }
+
     @Test func persistenceMaintenanceCoordinatorSkipsAuditWhenSchemaUnchangedAndAuditIsFreshWithinSevenDays() throws {
         let container = try makeInMemoryContainer()
         let suiteName = "BackendScalabilityPersistenceTests.\(UUID().uuidString)"
@@ -178,7 +232,7 @@ struct BackendScalabilityPersistenceTests {
         #expect(report.performedSteps.contains("syncMetadataAuditAndRepair"))
         #expect(
             PersistenceMaintenanceCoordinator.storedLastAuditAt(userDefaults: defaults)
-            == day(12)
+            == day(18)
         )
     }
 

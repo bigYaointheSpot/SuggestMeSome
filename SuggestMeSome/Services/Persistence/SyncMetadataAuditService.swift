@@ -29,7 +29,6 @@ struct SyncMetadataAuditReport: Equatable {
     }
 }
 
-@MainActor
 enum SyncMetadataAuditService {
     @discardableResult
     static func auditAndRepair(

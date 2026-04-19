@@ -28,7 +28,6 @@ struct DeferredStartupSyncAuditReport: Equatable {
     let syncAuditReport: SyncMetadataAuditReport
 }
 
-@MainActor
 enum PersistenceMaintenanceCoordinator {
     static let schemaVersionDefaultsKey = "persistence.schemaVersion"
     static let lastAuditAtDefaultsKey = "persistence.lastAuditAt"
@@ -38,6 +37,7 @@ enum PersistenceMaintenanceCoordinator {
         category: "PersistenceMaintenance"
     )
 
+    @MainActor
     static func runStartupMaintenance(
         context: ModelContext,
         userDefaults: UserDefaults = .standard,
@@ -77,6 +77,7 @@ enum PersistenceMaintenanceCoordinator {
         return report
     }
 
+    @MainActor
     static func runBlockingStartupMaintenance(
         context: ModelContext,
         userDefaults: UserDefaults = .standard,
@@ -137,6 +138,36 @@ enum PersistenceMaintenanceCoordinator {
             context: context,
             auditedAt: now
         )
+        userDefaults.set(now.timeIntervalSince1970, forKey: lastAuditAtDefaultsKey)
+
+        return DeferredStartupSyncAuditReport(
+            didRunSyncMetadataAudit: true,
+            syncAuditReport: syncAuditReport
+        )
+    }
+
+    static func runDeferredStartupSyncAuditIfNeeded(
+        container: ModelContainer,
+        shouldRunSyncAudit: Bool,
+        userDefaults: UserDefaults = .standard,
+        now: Date = .now,
+        makeContext: (ModelContainer) -> ModelContext = { ModelContext($0) },
+        auditRunner: (ModelContext, Date) -> SyncMetadataAuditReport = { context, auditedAt in
+            SyncMetadataAuditService.auditAndRepair(
+                context: context,
+                auditedAt: auditedAt
+            )
+        }
+    ) -> DeferredStartupSyncAuditReport {
+        guard shouldRunSyncAudit else {
+            return DeferredStartupSyncAuditReport(
+                didRunSyncMetadataAudit: false,
+                syncAuditReport: .skipped(auditedAt: now)
+            )
+        }
+
+        let context = makeContext(container)
+        let syncAuditReport = auditRunner(context, now)
         userDefaults.set(now.timeIntervalSince1970, forKey: lastAuditAtDefaultsKey)
 
         return DeferredStartupSyncAuditReport(

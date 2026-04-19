@@ -120,10 +120,10 @@ struct SuggestMeSomeApp: App {
                         await purchaseManager.bootstrap()
                     }
                     if maintenanceReport.shouldRunDeferredSyncMetadataAudit {
-                        Task { @MainActor in
-                            await Task.yield()
+                        let modelContainer = sharedModelContainer
+                        Task.detached(priority: .utility) {
                             _ = PersistenceMaintenanceCoordinator.runDeferredStartupSyncAuditIfNeeded(
-                                context: sharedModelContainer.mainContext,
+                                container: modelContainer,
                                 shouldRunSyncAudit: true
                             )
                         }

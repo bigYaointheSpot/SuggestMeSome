@@ -3725,6 +3725,24 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 20 [Move deferred startup sync audit fully off the main launch path] — 2026-04-18
+
+- Moved the app-launch deferred sync metadata audit off the first-render main-actor path without changing the existing audit gating rules:
+  - `SuggestMeSomeApp` now schedules the deferred audit from a detached utility-priority task instead of reusing `mainContext` after launch
+  - `PersistenceMaintenanceCoordinator` now exposes a container-backed deferred audit seam that creates a fresh `ModelContext` for the audit execution path
+  - blocking startup maintenance still stays limited to seed data, migrations, and schema version writeback
+- Kept sync repair behavior intact while tightening the persistence verification around audit completion:
+  - `SyncMetadataAuditService` now runs against the caller-provided context without forcing main-actor execution
+  - added Prompt 20 coverage in `BackendScalabilityPersistenceTests.swift` to verify the fresh-container deferred audit path only writes `lastAuditAt` after the audit finishes and preserves the stored timestamp when the audit is skipped
+  - corrected the stale seven-day cadence test expectation so the audit timestamp now matches the actual follow-up audit run date
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/BackendScalabilityPersistenceTests`
+
+**Commit:** `refactor: move deferred audit off launch actor`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
