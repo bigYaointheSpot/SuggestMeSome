@@ -322,6 +322,7 @@ struct DailyCoachView: View {
     @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(AppRouteCoordinator.self) private var appRouteCoordinator
+    @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
 
     // MARK: Queries
 
@@ -443,7 +444,9 @@ struct DailyCoachView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     todayTrainingCard
-                    DailyCoachCloudUpdatesCard()
+                    if collaborationCoordinator.hasAnyCollaboration {
+                        DailyCoachCloudUpdatesCard()
+                    }
                     if isBetweenBlocks {
                         betweenBlocksContextCard
                     }

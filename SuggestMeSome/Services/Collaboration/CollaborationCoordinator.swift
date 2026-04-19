@@ -177,6 +177,15 @@ final class CollaborationCoordinator {
         athleteRelationships.isEmpty && incomingPendingInvites.isEmpty
     }
 
+    var hasAnyCollaboration: Bool {
+        !relationships.isEmpty
+            || !incomingPendingInvites.isEmpty
+            || !outgoingPendingInvites.isEmpty
+            || !unreadCoachNotes.isEmpty
+            || !unreadDigests.isEmpty
+            || !athleteFacingSnapshots.isEmpty
+    }
+
     func configure(modelContext: ModelContext) {
         self.modelContext = modelContext
         loadCache()

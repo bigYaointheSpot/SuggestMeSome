@@ -34,7 +34,7 @@ struct TrainingProgramsTab: View {
         NavigationStack {
             VStack(spacing: 0) {
                 programButtonRow
-                collaborationButtonRow
+                coachHubRow
                 Divider()
                 programRunList
             }
@@ -73,17 +73,41 @@ struct TrainingProgramsTab: View {
             NavigationLink {
                 CreateProgramView()
             } label: {
-                programButtonLabel("Create Program", systemImage: "plus.rectangle")
+                programButtonLabel("Create", systemImage: "plus.rectangle")
             }
 
             NavigationLink {
                 SelectProgramView()
             } label: {
-                programButtonLabel("Use Template", systemImage: "list.bullet.rectangle")
+                programButtonLabel("Template", systemImage: "list.bullet.rectangle")
             }
 
             Button(action: { showingAIGenerator = true }) {
-                programButtonLabel("Smart Generate", systemImage: "wand.and.stars")
+                programButtonLabel("Smart Gen", systemImage: "wand.and.stars")
+            }
+
+            NavigationLink {
+                AssignmentInboxView()
+            } label: {
+                programButtonLabel(
+                    "From Coach",
+                    systemImage: "tray.full",
+                    badge: collaborationCoordinator.inboxAssignments.isEmpty
+                        ? nil
+                        : "\(collaborationCoordinator.inboxAssignments.count)"
+                )
+            }
+
+            NavigationLink {
+                BlueprintLibraryView()
+            } label: {
+                programButtonLabel(
+                    "Saved",
+                    systemImage: "square.stack.3d.up.fill",
+                    badge: collaborationCoordinator.blueprints.isEmpty
+                        ? nil
+                        : "\(collaborationCoordinator.blueprints.count)"
+                )
             }
         }
         .padding(.horizontal)
@@ -91,74 +115,66 @@ struct TrainingProgramsTab: View {
         .padding(.bottom, 8)
     }
 
-    private var collaborationButtonRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                NavigationLink {
-                    AssignmentInboxView()
-                } label: {
-                    collaborationPill(
-                        "Assignments",
-                        systemImage: "tray.full",
-                        detail: "\(collaborationCoordinator.inboxAssignments.count) pending"
-                    )
+    private var coachHubRow: some View {
+        NavigationLink {
+            CollaborationHubView()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "person.2.wave.2.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.indigo)
+                Text("Coach Hub")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                if !collaborationCoordinator.relationships.isEmpty {
+                    Text("\(collaborationCoordinator.relationships.count) linked")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-
-                NavigationLink {
-                    BlueprintLibraryView()
-                } label: {
-                    collaborationPill(
-                        "Blueprints",
-                        systemImage: "square.stack.3d.up.fill",
-                        detail: "\(collaborationCoordinator.blueprints.count) saved"
-                    )
-                }
-
-                NavigationLink {
-                    CollaborationHubView()
-                } label: {
-                    collaborationPill(
-                        "Coach Hub",
-                        systemImage: "person.2.wave.2.fill",
-                        detail: "\(collaborationCoordinator.relationships.count) linked"
-                    )
-                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
+        .padding(.bottom, 8)
     }
 
-    private func programButtonLabel(_ title: String, systemImage: String) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.title3.weight(.semibold))
-                .frame(height: 24)
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(Color.indigo.gradient)
-        .foregroundStyle(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
+    private func programButtonLabel(_ title: String, systemImage: String, badge: String? = nil) -> some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.title3.weight(.semibold))
+                    .frame(height: 24)
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color.indigo.gradient)
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
 
-    private func collaborationPill(_ title: String, systemImage: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.semibold))
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if let badge {
+                Text(badge)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.red)
+                    .clipShape(Capsule())
+                    .offset(x: 4, y: -4)
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder

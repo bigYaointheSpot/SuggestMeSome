@@ -1146,15 +1146,14 @@ struct CollaborationInsightSummaryCard: View {
 
     var body: some View {
         if let snapshot = collaborationCoordinator.athleteFacingSnapshots.first {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("Smart Coaching", systemImage: "sparkles")
-                    .font(.headline)
-                    .foregroundStyle(.indigo)
+            VStack(alignment: .leading, spacing: DSSpacing.s) {
+                DSSectionHeader(icon: "sparkles", title: "Smart Coaching", iconColor: .indigo)
                 Text(snapshot.headline)
                     .font(.title3.weight(.semibold))
                 Text(snapshot.summaryText)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                HStack(spacing: 12) {
+                HStack(spacing: DSSpacing.m) {
                     if let adherence = snapshot.recentAdherenceScore {
                         Label("\(Int(adherence.rounded()))% adherence", systemImage: "chart.line.uptrend.xyaxis")
                             .font(.footnote)
@@ -1167,9 +1166,8 @@ struct CollaborationInsightSummaryCard: View {
                     }
                 }
             }
-            .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+            .dsCardStyle()
         }
     }
 }

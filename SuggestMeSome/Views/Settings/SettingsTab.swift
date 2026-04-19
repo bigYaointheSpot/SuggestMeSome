@@ -35,6 +35,7 @@ struct SettingsTab: View {
     @State private var showingDeleteAllConfirm = false
     @State private var showingDeleteRangeSheet = false
     @State private var workoutCount = 0
+    @State private var showingCollaborationInfo = false
 
     // MARK: - Helpers
 
@@ -155,6 +156,9 @@ struct SettingsTab: View {
                 )
             ) { route in
                 CollaborationRouteSheetView(route: route)
+            }
+            .sheet(isPresented: $showingCollaborationInfo) {
+                collaborationInfoSheet
             }
         }
     }
@@ -300,9 +304,67 @@ struct SettingsTab: View {
                 }
             }
         } header: {
-            Text("Coach Collaboration")
+            HStack {
+                Text("Coach Collaboration")
+                Spacer()
+                Button {
+                    showingCollaborationInfo = true
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("About Coach Collaboration")
+            }
         } footer: {
-            Text("Invite-only coach workflows, deterministic cloud insight snapshots, private program sharing, private progress sharing, and push delivery are layered on top of the Feature 18 account-backed sync foundation.")
+            Text("Invite-only sharing with coaches. Tap the ? above to learn more.")
+        }
+    }
+
+    private var collaborationInfoSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Label("What's included", systemImage: "sparkles")
+                        .font(.headline)
+                    VStack(alignment: .leading, spacing: 10) {
+                        infoBullet("Invite coaches by email — no accounts needed on their side until they accept.")
+                        infoBullet("Share programs or progress read-only, and pull it back whenever you want.")
+                        infoBullet("Get weekly summaries and smart nudges based on what you actually trained.")
+                        infoBullet("We only use push notifications — no email or SMS.")
+                    }
+
+                    Label("Your privacy", systemImage: "lock.shield")
+                        .font(.headline)
+                        .padding(.top, 8)
+                    VStack(alignment: .leading, spacing: 10) {
+                        infoBullet("Every share is explicit — we don't broadcast anything without your tap.")
+                        infoBullet("Coaches see only what you choose: programs, runs, notes, or summaries.")
+                        infoBullet("Apple Health recovery data stays on your device and is never shared.")
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Coach Collaboration")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showingCollaborationInfo = false }
+                }
+            }
+        }
+    }
+
+    private func infoBullet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 5))
+                .foregroundStyle(.indigo)
+                .padding(.top, 7)
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
     }
 
