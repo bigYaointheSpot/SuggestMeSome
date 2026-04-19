@@ -26,12 +26,4 @@ extension View {
     func dsMetricLarge() -> some View {
         modifier(DSMetricFont(size: 48, weight: .semibold))
     }
-
-    func dsMetricMedium() -> some View {
-        modifier(DSMetricFont(size: 28, weight: .semibold))
-    }
-
-    func dsMetricSmall() -> some View {
-        modifier(DSMetricFont(size: 17, weight: .semibold))
-    }
 }

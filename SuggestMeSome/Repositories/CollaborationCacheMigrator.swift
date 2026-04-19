@@ -75,7 +75,15 @@ enum CollaborationCacheMigrator {
         dedupProgressShareCards(context: context, removedCountsByModel: &removedCountsByModel)
 
         if context.hasChanges {
-            try? context.save()
+            do {
+                try context.save()
+            } catch {
+                // Leave the flag unset so the next launch retries. Flipping
+                // it here would lock us out of retrying after a transient
+                // save failure, risking the @Attribute(.unique) constraint
+                // tripping on stale duplicates next launch.
+                return Report(didRun: false, removedCountsByModel: [:])
+            }
         }
 
         userDefaults.set(true, forKey: dedupFlagKey)

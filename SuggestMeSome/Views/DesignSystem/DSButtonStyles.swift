@@ -41,18 +41,3 @@ struct DSSecondaryButtonStyle: ButtonStyle {
     }
 }
 
-struct DSDestructiveButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.body.weight(.semibold))
-            .padding(.vertical, DSSpacing.m)
-            .padding(.horizontal, DSSpacing.l)
-            .frame(maxWidth: .infinity)
-            .background(DSColor.signalCritical.opacity(configuration.isPressed ? 0.22 : 0.14))
-            .foregroundStyle(DSColor.signalCritical)
-            .clipShape(RoundedRectangle(cornerRadius: DSRadius.m, style: .continuous))
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
-            .sensoryFeedback(.impact(weight: .medium), trigger: configuration.isPressed)
-    }
-}
