@@ -784,12 +784,19 @@ private struct WorkoutElapsedTimerText: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             Text(presentation.formattedElapsed(at: context.date))
-                .font(.system(size: 56, weight: .thin, design: .monospaced))
-                .contentTransition(.numericText())
+                .dsMetricLarge()
+                .fontWeight(.thin)
                 .animation(.snappy(duration: 0.25), value: presentation.formattedElapsed(at: context.date))
                 .frame(maxWidth: .infinity, alignment: .center)
         }
     }
+}
+
+// MARK: - Focus identity for set-entry text fields
+
+enum WorkoutSetField: Hashable {
+    case reps(UUID)
+    case weight(UUID)
 }
 
 // MARK: - ExerciseEntryCard
@@ -800,6 +807,7 @@ struct ExerciseEntryCard: View {
 
     @State private var isExpanded: Bool = true
     @State private var showRPEField: Bool = false
+    @FocusState private var focusedField: WorkoutSetField?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -900,7 +908,14 @@ struct ExerciseEntryCard: View {
                     .background(Color(.tertiarySystemBackground))
 
                     ForEach($entry.sets) { $set in
-                        SetEntryRow(set: $set)
+                        SetEntryRow(
+                            set: $set,
+                            focusedField: $focusedField,
+                            onSubmitReps: { advanceFocusFromReps(setID: set.id) },
+                            onSubmitWeight: { advanceFocusFromWeight(setID: set.id) },
+                            onDelete: { deleteSet(id: set.id) },
+                            onToggleWarmup: { toggleWarmup(id: set.id) }
+                        )
                         if set.id != entry.sets.last?.id {
                             Divider().padding(.leading, 12)
                         }
@@ -924,6 +939,39 @@ struct ExerciseEntryCard: View {
     }
 
     // MARK: - Progress Helpers
+
+    // MARK: - Focus & Set Mutation
+
+    private func advanceFocusFromReps(setID: UUID) {
+        focusedField = .weight(setID)
+    }
+
+    private func advanceFocusFromWeight(setID: UUID) {
+        guard let idx = entry.sets.firstIndex(where: { $0.id == setID }) else {
+            focusedField = nil
+            return
+        }
+        let nextIdx = idx + 1
+        if nextIdx < entry.sets.count {
+            focusedField = .reps(entry.sets[nextIdx].id)
+        } else {
+            focusedField = nil
+        }
+    }
+
+    private func deleteSet(id: UUID) {
+        if case .reps(id) = focusedField { focusedField = nil }
+        if case .weight(id) = focusedField { focusedField = nil }
+        entry.sets.removeAll { $0.id == id }
+        for idx in entry.sets.indices {
+            entry.sets[idx].setNumber = idx + 1
+        }
+    }
+
+    private func toggleWarmup(id: UUID) {
+        guard let idx = entry.sets.firstIndex(where: { $0.id == id }) else { return }
+        entry.sets[idx].isWarmup.toggle()
+    }
 
     /// One-line subtitle under the exercise name. Summarizes logged/total
     /// sets for strength entries, or duration target for cardio. Mirrors
@@ -1094,9 +1142,18 @@ private extension WorkoutEffortFeedback {
 
 struct SetEntryRow: View {
     @Binding var set: DraftSet
+    @FocusState.Binding var focusedField: WorkoutSetField?
+    let onSubmitReps: () -> Void
+    let onSubmitWeight: () -> Void
+    let onDelete: () -> Void
+    let onToggleWarmup: () -> Void
 
     @State private var starScale: CGFloat = 1.0
     @State private var starGlowRadius: CGFloat = 0
+
+    private var hasEntryData: Bool {
+        !set.repsText.isEmpty && !set.weightText.isEmpty && !set.isWarmup
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -1113,6 +1170,14 @@ struct SetEntryRow: View {
                 .background(Color(.tertiarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .foregroundStyle(set.isWarmup ? .secondary : .primary)
+                .focused($focusedField, equals: .reps(set.id))
+                .submitLabel(.next)
+                .onSubmit(onSubmitReps)
+                .onChange(of: set.repsText) { _, newValue in
+                    let sanitized = SetEntryRow.sanitizeReps(newValue)
+                    if sanitized != newValue { set.repsText = sanitized }
+                }
+                .accessibilityLabel("Reps for set \(set.setNumber)")
 
             TextField("–", text: $set.weightText)
                 .keyboardType(.decimalPad)
@@ -1122,6 +1187,14 @@ struct SetEntryRow: View {
                 .background(Color(.tertiarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .foregroundStyle(set.isWarmup ? .secondary : .primary)
+                .focused($focusedField, equals: .weight(set.id))
+                .submitLabel(.done)
+                .onSubmit(onSubmitWeight)
+                .onChange(of: set.weightText) { _, newValue in
+                    let sanitized = SetEntryRow.sanitizeWeight(newValue)
+                    if sanitized != newValue { set.weightText = sanitized }
+                }
+                .accessibilityLabel("Weight for set \(set.setNumber)")
 
             Image(systemName: set.isPR ? "star.fill" : "star")
                 .foregroundStyle(set.isPR ? .yellow : Color(.systemGray3))
@@ -1140,10 +1213,54 @@ struct SetEntryRow: View {
                         starGlowRadius = 0
                     }
                 }
+                .accessibilityLabel(set.isPR ? "Personal record" : "Not a personal record")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color(.systemBackground))
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                onToggleWarmup()
+            } label: {
+                Label(
+                    set.isWarmup ? "Mark as working set" : "Mark as warm-up",
+                    systemImage: set.isWarmup ? "flame" : "flame.fill"
+                )
+            }
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete set", systemImage: "trash")
+            }
+        }
+        .sensoryFeedback(.success, trigger: hasEntryData)
+        .sensoryFeedback(.increase, trigger: set.isPR)
+    }
+
+    // MARK: - Sanitizers
+
+    /// Reps: digits only, capped at 4 characters. Mutates in place as a
+    /// String (never round-trips through Int) so DraftSet persistence stays
+    /// exact.
+    static func sanitizeReps(_ input: String) -> String {
+        String(input.filter(\.isNumber).prefix(4))
+    }
+
+    /// Weight: digits plus at most one decimal separator (`.` or `,` —
+    /// whichever the user typed first). Capped at 6 characters. Mutates in
+    /// place as a String so DraftSet persistence stays exact.
+    static func sanitizeWeight(_ input: String) -> String {
+        let separator: Character = (input.contains(",") && !input.contains(".")) ? "," : "."
+        var seenSeparator = false
+        var result = ""
+        for char in input {
+            if char.isNumber {
+                result.append(char)
+            } else if char == separator && !seenSeparator {
+                result.append(char)
+                seenSeparator = true
+            }
+        }
+        return String(result.prefix(6))
     }
 }
 
