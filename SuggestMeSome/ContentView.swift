@@ -2,11 +2,10 @@
 //  ContentView.swift
 //  SuggestMeSome
 //
-//  Created by Alex Yao on 4/5/26.
+//  Root tab shell with an isolated active-workout banner host.
 //
 
 import SwiftUI
-import SwiftData
 
 // MARK: - Main Tab Identity
 

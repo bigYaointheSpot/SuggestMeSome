@@ -2,7 +2,7 @@
 //  WorkoutView.swift
 //  SuggestMeSome
 //
-//  Created by Alex Yao on 4/5/26.
+//  Live workout editor with draft persistence and isolated timer chrome.
 //
 
 import SwiftUI

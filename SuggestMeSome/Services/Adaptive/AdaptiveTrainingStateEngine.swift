@@ -401,7 +401,7 @@ struct AdaptiveTrainingStateEngine {
         if let latestCompleted = TrainingContextQueryService.latestCompletedRun(from: completedRuns),
            let program = latestCompleted.program {
             let completionRatio = Double(
-                TrainingContextQueryService.completedWorkoutCount(for: latestCompleted, in: recentWorkouts)
+                TrainingContextQueryService.runScopedWorkouts(for: latestCompleted, in: recentWorkouts).count
             ) / Double(max(1, program.lengthInWeeks * program.sessionsPerWeek))
             return adherenceTier(for: completionRatio)
         }

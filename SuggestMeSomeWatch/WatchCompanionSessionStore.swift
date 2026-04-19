@@ -68,14 +68,6 @@ final class WatchCompanionSessionStore: NSObject {
         applyApplicationContext(session.applicationContext)
     }
 
-    var rootMode: WatchCompanionRootMode {
-        presentationState.rootMode
-    }
-
-    var hasActiveWorkout: Bool {
-        liveWorkoutState.hasActiveWorkout
-    }
-
     func dismissCompletion() {
         passiveContextState.setCompletion(nil)
         refreshPresentationState()
@@ -104,10 +96,6 @@ final class WatchCompanionSessionStore: NSObject {
 
         session.transferUserInfo(message)
         refreshSessionStatus(message: "Watch presence queued for iPhone.")
-    }
-
-    var connectionMessage: String {
-        connectionState.sessionStatus.message
     }
 
     private func applyApplicationContext(_ applicationContext: [String: Any]) {

@@ -2,7 +2,7 @@
 //  TrainingContextQueryService.swift
 //  SuggestMeSome
 //
-//  Shared query helpers for commonly reused training-context reads.
+//  Pure array-backed helpers for commonly reused training-context reads.
 //
 
 import Foundation
@@ -31,10 +31,6 @@ enum TrainingContextQueryService {
 
     static func runScopedWorkouts(for run: ProgramRun, in workouts: [Workout]) -> [Workout] {
         workouts.filter { $0.programRun?.id == run.id }
-    }
-
-    static func completedWorkoutCount(for run: ProgramRun, in workouts: [Workout]) -> Int {
-        runScopedWorkouts(for: run, in: workouts).count
     }
 
     static func relevantStandaloneWorkouts(

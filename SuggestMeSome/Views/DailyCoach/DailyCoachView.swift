@@ -84,8 +84,8 @@ struct DailyCoachDerivedState {
         let activeOverlaysForRun = focusRun.map { run in
             allOverlays.filter { $0.programRun?.id == run.id && $0.overlayStatus == .active }
         } ?? []
-        let completedWorkoutCountForRun = focusRun.map {
-            TrainingContextQueryService.completedWorkoutCount(for: $0, in: recentWorkouts)
+        let completedWorkoutCountForRun = focusRun.map { run in
+            TrainingContextQueryService.runScopedWorkouts(for: run, in: recentWorkouts).count
         } ?? 0
         let completedSessionKeysForRun = focusRun.map { run in
             Set(recentWorkouts.compactMap { workout -> ProgramSessionCompletionKey? in

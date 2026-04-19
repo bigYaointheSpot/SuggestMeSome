@@ -55,20 +55,6 @@ enum ReadQueryRepository {
         TrainingReadRepository.fetchActiveOverlays(for: run, context: context)
     }
 
-    static func completedProgramSessionKeys(for run: ProgramRun, context: ModelContext) -> Set<ProgramSessionCompletionKey> {
-        TrainingReadRepository.programRunProgressSnapshot(
-            for: run,
-            context: context
-        ).completedSessionKeys
-    }
-
-    static func programWorkoutCount(for run: ProgramRun, context: ModelContext) -> Int {
-        TrainingReadRepository.programRunProgressSnapshot(
-            for: run,
-            context: context
-        ).completedWorkoutCount
-    }
-
     static func adaptationHistorySnapshot(
         for run: ProgramRun,
         context: ModelContext,

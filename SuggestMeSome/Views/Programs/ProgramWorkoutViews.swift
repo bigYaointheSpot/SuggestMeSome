@@ -2,7 +2,7 @@
 //  ProgramWorkoutViews.swift
 //  SuggestMeSome
 //
-//  Created by Alex Yao on 4/6/26.
+//  Program start, execution, and detail surfaces backed by scoped run reads.
 //
 
 import SwiftUI

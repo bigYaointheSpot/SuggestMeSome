@@ -3691,6 +3691,24 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 18 [Dead helper pruning and touched-area stale cleanup] — 2026-04-18
+
+- Removed stale compatibility helpers that were only supporting the older broad-query paths touched earlier in Feature 16:
+  - `TrainingContextQueryService` no longer carries the redundant `completedWorkoutCount(...)` wrapper, and the remaining array-backed helper surface now reflects its actual role
+  - `ReadQueryRepository` no longer exposes unused program-progress passthroughs that had become dead once the run-scoped snapshot path took over
+  - touched callers in `AdaptiveTrainingStateEngine` and `DailyCoachView` now read directly from the still-supported scoped workout helper instead of bouncing through compatibility shims
+- Trimmed touched watch and workout surfaces so their file headers and APIs match shipped behavior instead of older scaffolding:
+  - `WatchCompanionSessionStore` no longer exposes unused passthrough properties that were left behind after the Prompt 16 state partition
+  - touched shell/workout/program view files now describe their current responsibilities in the file header comments
+  - `ContentView` drops the stale unused `SwiftData` import from the root shell
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt13ProgramRunProgressTests -only-testing:SuggestMeSomeTests/Feature16Prompt14ActiveProgramSnapshotTests -only-testing:SuggestMeSomeTests/Feature16Prompt15ScopedMesocycleReviewTests -only-testing:SuggestMeSomeTests/Feature16Prompt16WatchStatePartitionTests -only-testing:SuggestMeSomeTests/Feature16Prompt17TimerPresentationTests`
+
+**Commit:** `refactor: prune stale training helpers`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
