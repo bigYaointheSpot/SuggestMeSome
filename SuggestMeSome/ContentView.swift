@@ -7,7 +7,6 @@
 
 import SwiftUI
 import SwiftData
-import Combine
 
 // MARK: - Main Tab Identity
 
@@ -117,7 +116,6 @@ struct ContentView: View {
 
 struct ActiveWorkoutBanner: View {
     @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
-    @State private var elapsedSeconds = 0
 
     let onResume: () -> Void
 
@@ -130,9 +128,11 @@ struct ActiveWorkoutBanner: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Workout in Progress")
                             .font(.subheadline.weight(.semibold))
-                        Text("\(formattedElapsed) · \(exerciseCountLabel(session.exerciseEntries.count))")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.85))
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text("\(formattedElapsed(for: session, at: context.date)) · \(exerciseCountLabel(session.exerciseEntries.count))")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.85))
+                        }
                     }
                     Spacer()
                     Text("Resume")
@@ -146,16 +146,11 @@ struct ActiveWorkoutBanner: View {
                 .background(Color.indigo)
             }
             .buttonStyle(.plain)
-            .onAppear {
-                elapsedSeconds = Int(Date.now.timeIntervalSince(session.startTime))
-            }
-            .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-                elapsedSeconds = Int(Date.now.timeIntervalSince(session.startTime))
-            }
         }
     }
 
-    private var formattedElapsed: String {
+    private func formattedElapsed(for session: ActiveWorkoutSession, at date: Date) -> String {
+        let elapsedSeconds = session.elapsedSeconds(at: date)
         let h = elapsedSeconds / 3600
         let m = (elapsedSeconds % 3600) / 60
         let s = elapsedSeconds % 60

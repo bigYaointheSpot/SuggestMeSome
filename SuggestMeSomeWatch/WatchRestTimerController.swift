@@ -37,7 +37,6 @@ enum WatchRestHapticCue {
 
 @MainActor
 final class WatchRestTimerController: ObservableObject {
-    @Published private(set) var remainingSeconds: Int = 0
     @Published private(set) var totalSeconds: Int = 0
     @Published private(set) var isRunning: Bool = false
     @Published private(set) var isPaused: Bool = false
@@ -46,11 +45,23 @@ final class WatchRestTimerController: ObservableObject {
     private var hasFiredHalfwayCue: Bool = false
     private var backgroundNotificationFallbackEnabled = false
     private var pendingNotificationIdentifier: String?
+    private var pausedRemainingSeconds: Int = 0
+    private var targetEndDate: Date?
 
-    var progress: Double {
+    func progress(at date: Date = .now) -> Double {
         guard totalSeconds > 0 else { return 0 }
-        let elapsed = totalSeconds - remainingSeconds
+        let elapsed = totalSeconds - remainingSeconds(at: date)
         return min(1, max(0, Double(elapsed) / Double(totalSeconds)))
+    }
+
+    func remainingSeconds(at date: Date = .now) -> Int {
+        guard isRunning else {
+            return max(0, pausedRemainingSeconds)
+        }
+        guard !isPaused, let targetEndDate else {
+            return max(0, pausedRemainingSeconds)
+        }
+        return max(0, Int(ceil(targetEndDate.timeIntervalSince(date))))
     }
 
     func start(duration: Int, allowsBackgroundNotificationFallback: Bool = false) {
@@ -58,11 +69,12 @@ final class WatchRestTimerController: ObservableObject {
         stop(resetVisible: false)
         guard clamped > 0 else { return }
         totalSeconds = clamped
-        remainingSeconds = clamped
+        pausedRemainingSeconds = clamped
         hasFiredHalfwayCue = false
         backgroundNotificationFallbackEnabled = allowsBackgroundNotificationFallback
         isRunning = true
         isPaused = false
+        targetEndDate = Date().addingTimeInterval(TimeInterval(clamped))
         playHaptic(.start)
         scheduleBackgroundNotificationIfNeeded(secondsFromNow: clamped)
 
@@ -74,7 +86,7 @@ final class WatchRestTimerController: ObservableObject {
                 guard self.isRunning else { return }
                 guard !self.isPaused else { continue }
                 self.tick()
-                if self.remainingSeconds == 0 { return }
+                if self.remainingSeconds() == 0 { return }
             }
         }
     }
@@ -85,9 +97,10 @@ final class WatchRestTimerController: ObservableObject {
         isRunning = false
         isPaused = false
         backgroundNotificationFallbackEnabled = false
+        targetEndDate = nil
         cancelBackgroundNotification()
         if resetVisible {
-            remainingSeconds = 0
+            pausedRemainingSeconds = 0
             totalSeconds = 0
         }
     }
@@ -99,22 +112,27 @@ final class WatchRestTimerController: ObservableObject {
 
     func pause() {
         guard isRunning, !isPaused else { return }
+        pausedRemainingSeconds = remainingSeconds()
         isPaused = true
+        targetEndDate = nil
         cancelBackgroundNotification()
     }
 
     func resume() {
         guard isRunning, isPaused else { return }
         isPaused = false
-        scheduleBackgroundNotificationIfNeeded(secondsFromNow: remainingSeconds)
+        targetEndDate = Date().addingTimeInterval(TimeInterval(pausedRemainingSeconds))
+        scheduleBackgroundNotificationIfNeeded(secondsFromNow: pausedRemainingSeconds)
     }
 
     private func tick() {
+        let remainingSeconds = remainingSeconds()
+        pausedRemainingSeconds = remainingSeconds
+
         guard remainingSeconds > 0 else {
             finish()
             return
         }
-        remainingSeconds -= 1
         // Subtle wrist tap at the midpoint so users feel the pacing without
         // needing to glance. Only fires once per rest period and only when
         // the rest is long enough to have a meaningful midpoint.
@@ -138,6 +156,8 @@ final class WatchRestTimerController: ObservableObject {
         tickTask = nil
         isRunning = false
         isPaused = false
+        pausedRemainingSeconds = 0
+        targetEndDate = nil
         cancelBackgroundNotification()
         playHaptic(.complete)
     }

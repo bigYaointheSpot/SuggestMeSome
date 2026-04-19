@@ -65,6 +65,10 @@ struct WatchWidgetSnapshot: Codable, Equatable {
         return .empty
     }
 
+    func matchesWidgetContent(of other: WatchWidgetSnapshot) -> Bool {
+        todayPlan == other.todayPlan && liveWorkout == other.liveWorkout
+    }
+
     static func mergingTodayPlan(
         _ plan: WatchTodayPlanSnapshot,
         into existing: WatchWidgetSnapshot = .empty(),
@@ -175,6 +179,89 @@ struct WatchWidgetSnapshot: Codable, Equatable {
             return false
         }
         return true
+    }
+}
+
+enum WatchWidgetRefreshUrgency {
+    case deferred
+    case immediate
+}
+
+@MainActor
+final class WatchWidgetRefreshCoordinator {
+    private let coalescingDelayNanoseconds: UInt64
+    private let saveSnapshot: (WatchWidgetSnapshot) -> Void
+    private let reloadTimelines: () -> Void
+    private let sleeper: @Sendable (UInt64) async -> Void
+
+    private(set) var persistedSnapshot: WatchWidgetSnapshot
+    private var pendingSnapshot: WatchWidgetSnapshot?
+    private var pendingFlushTask: Task<Void, Never>?
+
+    init(
+        initialSnapshot: WatchWidgetSnapshot,
+        coalescingDelayNanoseconds: UInt64 = 2_000_000_000,
+        saveSnapshot: @escaping (WatchWidgetSnapshot) -> Void,
+        reloadTimelines: @escaping () -> Void,
+        sleeper: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
+            try? await Task.sleep(nanoseconds: nanoseconds)
+        }
+    ) {
+        self.persistedSnapshot = initialSnapshot
+        self.coalescingDelayNanoseconds = coalescingDelayNanoseconds
+        self.saveSnapshot = saveSnapshot
+        self.reloadTimelines = reloadTimelines
+        self.sleeper = sleeper
+    }
+
+    func apply(
+        _ transform: (WatchWidgetSnapshot) -> WatchWidgetSnapshot,
+        urgency: WatchWidgetRefreshUrgency = .deferred
+    ) {
+        let baseSnapshot = pendingSnapshot ?? persistedSnapshot
+        let updatedSnapshot = transform(baseSnapshot)
+        guard !updatedSnapshot.matchesWidgetContent(of: baseSnapshot) else {
+            return
+        }
+
+        pendingSnapshot = updatedSnapshot
+        switch urgency {
+        case .immediate:
+            flushPending()
+        case .deferred:
+            scheduleDeferredFlush()
+        }
+    }
+
+    func flushPending() {
+        pendingFlushTask?.cancel()
+        pendingFlushTask = nil
+
+        guard let pendingSnapshot else {
+            return
+        }
+
+        self.pendingSnapshot = nil
+        guard !pendingSnapshot.matchesWidgetContent(of: persistedSnapshot) else {
+            return
+        }
+
+        persistedSnapshot = pendingSnapshot
+        saveSnapshot(pendingSnapshot)
+        reloadTimelines()
+    }
+
+    private func scheduleDeferredFlush() {
+        pendingFlushTask?.cancel()
+        let delay = coalescingDelayNanoseconds
+        let sleeper = self.sleeper
+        pendingFlushTask = Task { [weak self] in
+            await sleeper(delay)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.flushPending()
+            }
+        }
     }
 }
 

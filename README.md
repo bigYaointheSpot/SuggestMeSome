@@ -3524,6 +3524,28 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 10 [Watch widget refresh policy and timer invalidation isolation] — 2026-04-18
+
+- Reworked watch widget persistence around a coalescing coordinator instead of immediate refreshes on every session-store mutation:
+  - added `WatchWidgetRefreshCoordinator` with a 2-second trailing coalescing window for non-critical widget-facing changes and immediate flushes for critical lifecycle transitions
+  - widget refreshes now compare only the actual widget-facing content, so unchanged snapshots no longer rewrite storage or call `WidgetCenter.shared.reloadAllTimelines()`
+  - `WatchCompanionSessionStore` now routes today-plan, live-workout, and current-context widget updates through that coordinator and flushes active-workout clearing immediately on session completion
+- Reduced watch/iPhone render churn from unrelated observable writes and timer ticks:
+  - `WatchCompanionSessionStore` now uses equality-guarded assignments for its published state so duplicate payload applications do not invalidate the watch root view tree
+  - `WatchRestTimerController` now derives countdown/progress values from `targetEndDate` instead of publishing a new remaining-seconds value every second
+  - `WatchActiveWorkoutView`, `ContentView`'s active workout banner, and `WorkoutView` now isolate elapsed-time and rest-timer updates inside small `TimelineView` subtrees rather than invalidating the larger surrounding screens once per second
+- Added focused Prompt 10 coverage in `Feature16Prompt10WatchWidgetCoordinatorTests.swift`:
+  - deferred widget updates coalesce into one save/reload window
+  - immediate updates bypass the deferred window
+  - unchanged widget content skips persistence and timeline reloads entirely
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt10WatchWidgetCoordinatorTests`
+
+**Commit:** `refactor: coalesce watch widget refresh and isolate timers`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift

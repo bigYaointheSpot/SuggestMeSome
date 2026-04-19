@@ -7,7 +7,6 @@
 
 import SwiftUI
 import SwiftData
-import Combine
 
 // MARK: - WorkoutView
 
@@ -30,7 +29,6 @@ struct WorkoutView: View {
     // Timer
     @State private var isActive = false
     @State private var startTime: Date?
-    @State private var elapsedSeconds: Int = 0
     @State private var lifecycleState: WatchWorkoutLifecycleState = .running
 
     // Workout data
@@ -75,15 +73,6 @@ struct WorkoutView: View {
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Log Workout")
         .navigationBarTitleDisplayMode(.inline)
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            guard isActive else { return }
-            guard lifecycleState == .running else { return }
-            if let session = activeWorkoutSessionStore.session {
-                elapsedSeconds = session.elapsedSeconds(at: .now)
-            } else if let start = startTime {
-                elapsedSeconds = Int(Date.now.timeIntervalSince(start))
-            }
-        }
         .sheet(isPresented: $showingExercisePicker) {
             ExercisePickerSheet(muscleGroups: muscleGroups) { name, isCardio, setCount in
                 let sets: [DraftSet] = isCardio ? [] : (1...max(1, setCount)).map { DraftSet(setNumber: $0) }
@@ -144,9 +133,11 @@ struct WorkoutView: View {
 
     private var timerSection: some View {
         VStack(spacing: 14) {
-            Text(formattedElapsed)
-                .font(.system(size: 56, weight: .thin, design: .monospaced))
-                .frame(maxWidth: .infinity, alignment: .center)
+            WorkoutElapsedTimerText(
+                session: activeWorkoutSessionStore.session,
+                startTime: startTime,
+                isActive: isActive
+            )
 
             if isActive {
                 if lifecycleState == .paused {
@@ -324,7 +315,6 @@ struct WorkoutView: View {
             healthKitEnabled: healthKitEnabled && purchaseManager.isPremiumUnlocked
         )
         startTime = now
-        elapsedSeconds = 0
         lifecycleState = .running
         exerciseEntries = entries
         caloriesText = ""
@@ -345,7 +335,6 @@ struct WorkoutView: View {
 
     private func applyActiveSession(_ session: ActiveWorkoutSession) {
         startTime = session.startTime
-        elapsedSeconds = session.elapsedSeconds(at: .now)
         exerciseEntries = session.exerciseEntries
         caloriesText = session.caloriesText
         comments = session.comments
@@ -425,7 +414,6 @@ struct WorkoutView: View {
         let now = Date.now
         activeWorkoutSessionStore.pauseSession(at: now)
         lifecycleState = .paused
-        elapsedSeconds = activeWorkoutSessionStore.resolvedElapsedSeconds(at: now)
         broadcastActiveSessionToWatch()
     }
 
@@ -435,7 +423,6 @@ struct WorkoutView: View {
         let now = Date.now
         activeWorkoutSessionStore.resumeSession(at: now)
         lifecycleState = .running
-        elapsedSeconds = activeWorkoutSessionStore.resolvedElapsedSeconds(at: now)
         broadcastActiveSessionToWatch()
     }
 
@@ -554,13 +541,6 @@ struct WorkoutView: View {
                 context: modelContext
             )
         }
-    }
-
-    private var formattedElapsed: String {
-        let h = elapsedSeconds / 3600
-        let m = (elapsedSeconds % 3600) / 60
-        let s = elapsedSeconds % 60
-        return String(format: "%02d:%02d:%02d", h, m, s)
     }
 
     // MARK: - Save
@@ -720,6 +700,37 @@ struct WorkoutView: View {
             }
             .scaleEffect(celebrationScale)
         }
+    }
+}
+
+private struct WorkoutElapsedTimerText: View {
+    let session: ActiveWorkoutSession?
+    let startTime: Date?
+    let isActive: Bool
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            Text(formattedElapsed(at: context.date))
+                .font(.system(size: 56, weight: .thin, design: .monospaced))
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    private func formattedElapsed(at date: Date) -> String {
+        let elapsedSeconds = resolvedElapsedSeconds(at: date)
+        let h = elapsedSeconds / 3600
+        let m = (elapsedSeconds % 3600) / 60
+        let s = elapsedSeconds % 60
+        return String(format: "%02d:%02d:%02d", h, m, s)
+    }
+
+    private func resolvedElapsedSeconds(at date: Date) -> Int {
+        guard isActive else { return 0 }
+        if let session {
+            return session.elapsedSeconds(at: date)
+        }
+        guard let startTime else { return 0 }
+        return max(0, Int(date.timeIntervalSince(startTime)))
     }
 }
 

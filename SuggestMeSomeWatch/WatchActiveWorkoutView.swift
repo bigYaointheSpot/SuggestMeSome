@@ -732,51 +732,55 @@ struct WatchRestTimerPanel: View {
     let onSkip: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Image(systemName: "timer")
-                    .font(.caption.weight(.semibold))
-                Text("Rest")
-                    .font(.caption2.weight(.semibold))
-                    .textCase(.uppercase)
-                    .tracking(0.4)
-                Spacer(minLength: 0)
-                Text("\(timer.totalSeconds)s set")
-                    .font(.caption2.monospacedDigit())
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let remainingSeconds = timer.remainingSeconds(at: context.date)
+            let countdownText = Self.countdownText(for: remainingSeconds)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Image(systemName: "timer")
+                        .font(.caption.weight(.semibold))
+                    Text("Rest")
+                        .font(.caption2.weight(.semibold))
+                        .textCase(.uppercase)
+                        .tracking(0.4)
+                    Spacer(minLength: 0)
+                    Text("\(timer.totalSeconds)s set")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(WatchPalette.positive)
+
+                Text(countdownText)
+                    .font(.system(size: 48, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.primary)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                ProgressView(value: timer.progress(at: context.date), total: 1)
+                    .progressViewStyle(.linear)
+                    .tint(WatchPalette.positive)
+
+                Text(nextSetHint)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                Button {
+                    onSkip()
+                } label: {
+                    Label("Skip Rest", systemImage: "forward.end.fill")
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
-            .foregroundStyle(WatchPalette.positive)
-
-            Text(countdownText)
-                .font(.system(size: 48, weight: .bold, design: .rounded).monospacedDigit())
-                .foregroundStyle(.primary)
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            ProgressView(value: timer.progress, total: 1)
-                .progressViewStyle(.linear)
-                .tint(WatchPalette.positive)
-
-            Text(nextSetHint)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-
-            Button {
-                onSkip()
-            } label: {
-                Label("Skip Rest", systemImage: "forward.end.fill")
-                    .font(.caption.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
         }
     }
 
-    private var countdownText: String {
-        let seconds = max(0, timer.remainingSeconds)
+    private static func countdownText(for seconds: Int) -> String {
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }

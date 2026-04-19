@@ -58,12 +58,12 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     @Published private(set) var completion: WatchSessionCompletionPayload?
     @Published private(set) var latestWatchMetrics: WatchWorkoutMetricsPayload?
     @Published private(set) var sessionStatus = WatchCompanionSessionStatus.unsupported()
-    @Published private(set) var queuedUserInfoEventCount = 0
 
     let workoutSessionController = WatchWorkoutSessionController()
 
     private var cancellables: Set<AnyCancellable> = []
     private var session: WCSession?
+    private let widgetRefreshCoordinator: WatchWidgetRefreshCoordinator
     private var queuedUserInfoEvents: [WatchBridgeMessage] = []
     private var latestAppliedSentAtByKind: [WatchPayloadKind: Date] = [:]
     private var latestAppliedFingerprintByKind: [WatchPayloadKind: WatchPayloadFingerprint] = [:]
@@ -72,6 +72,19 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     private var terminalWorkoutID: UUID?
 
     override init() {
+#if canImport(WidgetKit)
+        self.widgetRefreshCoordinator = WatchWidgetRefreshCoordinator(
+            initialSnapshot: WatchWidgetSnapshotStore.load(),
+            saveSnapshot: { WatchWidgetSnapshotStore.save($0) },
+            reloadTimelines: { WidgetCenter.shared.reloadAllTimelines() }
+        )
+#else
+        self.widgetRefreshCoordinator = WatchWidgetRefreshCoordinator(
+            initialSnapshot: WatchWidgetSnapshotStore.load(),
+            saveSnapshot: { WatchWidgetSnapshotStore.save($0) },
+            reloadTimelines: {}
+        )
+#endif
         super.init()
         bindWorkoutSessionController()
 
@@ -139,14 +152,12 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     private func enqueueUserInfo(_ userInfo: [String: Any]) {
         guard let message = decodeSupportedMessage(from: userInfo) else { return }
         queuedUserInfoEvents.append(message)
-        queuedUserInfoEventCount = queuedUserInfoEvents.count
         drainQueuedUserInfoEvents()
     }
 
     private func drainQueuedUserInfoEvents() {
         while !queuedUserInfoEvents.isEmpty {
             let event = queuedUserInfoEvents.removeFirst()
-            queuedUserInfoEventCount = queuedUserInfoEvents.count
             apply(event)
         }
     }
@@ -163,8 +174,8 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         switch message.kind {
         case .todayPlanSnapshot:
             applyDecoded(WatchTodayPlanSnapshot.self, from: message) { todayPlan in
-                self.todayPlan = todayPlan
-                self.updateWidgetSnapshot { existing in
+                self.assignIfChanged(\.todayPlan, todayPlan)
+                self.updateWidgetSnapshot(urgency: .deferred) { existing in
                     WatchWidgetSnapshot.mergingTodayPlan(todayPlan, into: existing)
                 }
                 return true
@@ -177,9 +188,9 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                     sessionVersionStableID: launch.sessionVersionStableID
                 )
                 self.terminalWorkoutID = nil
-                self.workoutLaunch = launch
-                self.completion = nil
-                self.latestWatchMetrics = nil
+                self.assignIfChanged(\.workoutLaunch, launch)
+                self.assignIfChanged(\.completion, nil)
+                self.assignIfChanged(\.latestWatchMetrics, nil)
                 self.applyLinkedWorkoutLaunch(launch)
                 return true
             }
@@ -189,8 +200,8 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                     workoutID: progress.workoutID,
                     sessionVersionStableID: nil
                 ) else { return false }
-                self.progressSnapshot = progress
-                self.completion = nil
+                self.assignIfChanged(\.progressSnapshot, progress)
+                self.assignIfChanged(\.completion, nil)
                 return true
             }
         case .liveWorkoutSnapshot:
@@ -199,14 +210,14 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                     workoutID: liveWorkout.workoutID,
                     sessionVersionStableID: liveWorkout.sessionVersionStableID
                 ) else { return false }
-                self.liveWorkout = liveWorkout
-                self.completion = nil
+                self.assignIfChanged(\.liveWorkout, liveWorkout)
+                self.assignIfChanged(\.completion, nil)
                 self.applyLinkedWorkoutLifecycle(
                     workoutID: liveWorkout.workoutID,
                     lifecycleState: liveWorkout.lifecycleState,
                     usesLinkedWatchHealthSession: liveWorkout.usesLinkedWatchHealthSession
                 )
-                self.updateWidgetSnapshot { existing in
+                self.updateWidgetSnapshot(urgency: .deferred) { existing in
                     WatchWidgetSnapshot.mergingLiveWorkout(
                         liveWorkout,
                         currentContext: self.currentContext,
@@ -221,14 +232,14 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                     workoutID: context.workoutID,
                     sessionVersionStableID: context.sessionVersionStableID
                 ) else { return false }
-                self.currentContext = context
-                self.completion = nil
+                self.assignIfChanged(\.currentContext, context)
+                self.assignIfChanged(\.completion, nil)
                 self.applyLinkedWorkoutLifecycle(
                     workoutID: context.workoutID,
                     lifecycleState: context.lifecycleState,
                     usesLinkedWatchHealthSession: context.usesLinkedWatchHealthSession
                 )
-                self.updateWidgetSnapshot { existing in
+                self.updateWidgetSnapshot(urgency: .deferred) { existing in
                     existing.updatingCurrentContext(context)
                 }
                 return true
@@ -236,14 +247,14 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         case .sessionCompletion:
             applyDecoded(WatchSessionCompletionPayload.self, from: message) { completion in
                 self.terminalWorkoutID = completion.workoutID
-                self.completion = completion
-                self.workoutLaunch = nil
-                self.progressSnapshot = nil
-                self.liveWorkout = nil
-                self.currentContext = nil
-                self.latestWatchMetrics = nil
+                self.assignIfChanged(\.completion, completion)
+                self.assignIfChanged(\.workoutLaunch, nil)
+                self.assignIfChanged(\.progressSnapshot, nil)
+                self.assignIfChanged(\.liveWorkout, nil)
+                self.assignIfChanged(\.currentContext, nil)
+                self.assignIfChanged(\.latestWatchMetrics, nil)
                 self.workoutSessionController.stop()
-                self.updateWidgetSnapshot { existing in
+                self.updateWidgetSnapshot(urgency: .immediate) { existing in
                     existing.clearingActiveWorkout()
                 }
                 return true
@@ -338,10 +349,10 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
             return existingVersion != sessionVersionStableID
         }()
         guard activeWorkoutID != workoutID || versionChanged else { return }
-        progressSnapshot = nil
-        liveWorkout = nil
-        currentContext = nil
-        latestWatchMetrics = nil
+        assignIfChanged(\.progressSnapshot, nil)
+        assignIfChanged(\.liveWorkout, nil)
+        assignIfChanged(\.currentContext, nil)
+        assignIfChanged(\.latestWatchMetrics, nil)
     }
 
     private var activeWorkoutID: UUID? {
@@ -353,21 +364,18 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     }
 
     private func updateWidgetSnapshot(
+        urgency: WatchWidgetRefreshUrgency,
         _ transform: (WatchWidgetSnapshot) -> WatchWidgetSnapshot
     ) {
-        let existing = WatchWidgetSnapshotStore.load()
-        WatchWidgetSnapshotStore.save(transform(existing))
-#if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-#endif
+        widgetRefreshCoordinator.apply(transform, urgency: urgency)
     }
 
     private func refreshSessionStatus(message: String? = nil) {
         guard let session else {
-            sessionStatus = .unsupported()
+            assignIfChanged(\.sessionStatus, .unsupported())
             return
         }
-        sessionStatus = Self.makeStatus(from: session, message: message)
+        assignIfChanged(\.sessionStatus, Self.makeStatus(from: session, message: message))
     }
 
     func sendExecutionAction(_ action: WatchWorkoutExecutionActionDTO) {
@@ -404,7 +412,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
             .sink { [weak self] payload in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.latestWatchMetrics = payload
+                    self.assignIfChanged(\.latestWatchMetrics, payload)
                     self.sendMetricsUpdate(payload)
                 }
             }
@@ -500,6 +508,16 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         }
 
         refreshSessionStatus(message: "Workout summary queued for iPhone.")
+    }
+
+    private func assignIfChanged<Value: Equatable>(
+        _ keyPath: ReferenceWritableKeyPath<WatchCompanionSessionStore, Value>,
+        _ value: Value
+    ) {
+        guard self[keyPath: keyPath] != value else {
+            return
+        }
+        self[keyPath: keyPath] = value
     }
 }
 
