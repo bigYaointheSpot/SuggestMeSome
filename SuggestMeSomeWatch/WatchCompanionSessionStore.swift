@@ -13,52 +13,13 @@ import WatchConnectivity
 import WidgetKit
 #endif
 
-enum WatchCompanionRootMode: Equatable {
-    case activeWorkout
-    case sessionCompletion
-    case todayPlan
-}
-
-enum WatchCompanionSessionActivationState: String, Equatable {
-    case notActivated
-    case inactive
-    case activated
-    case unknown
-}
-
-struct WatchCompanionSessionStatus: Equatable {
-    let isSupported: Bool
-    let activationState: WatchCompanionSessionActivationState
-    let isCompanionAppInstalled: Bool
-    let isReachable: Bool
-    let hasContentPending: Bool
-    let message: String
-    let checkedAt: Date
-
-    static func unsupported(checkedAt: Date = Date()) -> WatchCompanionSessionStatus {
-        WatchCompanionSessionStatus(
-            isSupported: false,
-            activationState: .unknown,
-            isCompanionAppInstalled: false,
-            isReachable: false,
-            hasContentPending: false,
-            message: "Apple Watch sync is unavailable.",
-            checkedAt: checkedAt
-        )
-    }
-}
-
 @MainActor
-final class WatchCompanionSessionStore: NSObject, ObservableObject {
-    @Published private(set) var todayPlan: WatchTodayPlanSnapshot?
-    @Published private(set) var workoutLaunch: WatchWorkoutLaunchPayload?
-    @Published private(set) var progressSnapshot: WatchWorkoutProgressSnapshot?
-    @Published private(set) var liveWorkout: WatchLiveWorkoutSnapshot?
-    @Published private(set) var currentContext: WatchCurrentSessionContext?
-    @Published private(set) var completion: WatchSessionCompletionPayload?
-    @Published private(set) var latestWatchMetrics: WatchWorkoutMetricsPayload?
-    @Published private(set) var sessionStatus = WatchCompanionSessionStatus.unsupported()
-
+final class WatchCompanionSessionStore: NSObject {
+    let liveWorkoutState = WatchLiveWorkoutState()
+    let passiveContextState = WatchPassiveContextState()
+    let connectionState = WatchConnectionState()
+    let presentationState = WatchRootPresentationState()
+    let widgetState: WatchWidgetState
     let workoutSessionController = WatchWorkoutSessionController()
 
     private var cancellables: Set<AnyCancellable> = []
@@ -73,14 +34,18 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
 
     override init() {
 #if canImport(WidgetKit)
+        let initialSnapshot = WatchWidgetSnapshotStore.load()
+        self.widgetState = WatchWidgetState(snapshot: initialSnapshot)
         self.widgetRefreshCoordinator = WatchWidgetRefreshCoordinator(
-            initialSnapshot: WatchWidgetSnapshotStore.load(),
+            initialSnapshot: initialSnapshot,
             saveSnapshot: { WatchWidgetSnapshotStore.save($0) },
             reloadTimelines: { WidgetCenter.shared.reloadAllTimelines() }
         )
 #else
+        let initialSnapshot = WatchWidgetSnapshotStore.load()
+        self.widgetState = WatchWidgetState(snapshot: initialSnapshot)
         self.widgetRefreshCoordinator = WatchWidgetRefreshCoordinator(
-            initialSnapshot: WatchWidgetSnapshotStore.load(),
+            initialSnapshot: initialSnapshot,
             saveSnapshot: { WatchWidgetSnapshotStore.save($0) },
             reloadTimelines: {}
         )
@@ -89,30 +54,31 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         bindWorkoutSessionController()
 
         guard WCSession.isSupported() else {
-            sessionStatus = .unsupported()
+            connectionState.setSessionStatus(.unsupported())
             return
         }
 
         let session = WCSession.default
         self.session = session
         session.delegate = self
-        sessionStatus = Self.makeStatus(from: session, message: "Connecting to iPhone.")
+        connectionState.setSessionStatus(
+            Self.makeStatus(from: session, message: "Connecting to iPhone.")
+        )
         session.activate()
         applyApplicationContext(session.applicationContext)
     }
 
     var rootMode: WatchCompanionRootMode {
-        if hasActiveWorkout { return .activeWorkout }
-        if completion != nil { return .sessionCompletion }
-        return .todayPlan
+        presentationState.rootMode
     }
 
     var hasActiveWorkout: Bool {
-        workoutLaunch != nil || liveWorkout != nil || currentContext != nil || progressSnapshot != nil
+        liveWorkoutState.hasActiveWorkout
     }
 
     func dismissCompletion() {
-        completion = nil
+        passiveContextState.setCompletion(nil)
+        refreshPresentationState()
     }
 
     func sendPresenceHeartbeat() {
@@ -141,7 +107,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
     }
 
     var connectionMessage: String {
-        sessionStatus.message
+        connectionState.sessionStatus.message
     }
 
     private func applyApplicationContext(_ applicationContext: [String: Any]) {
@@ -174,7 +140,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         switch message.kind {
         case .todayPlanSnapshot:
             applyDecoded(WatchTodayPlanSnapshot.self, from: message) { todayPlan in
-                self.assignIfChanged(\.todayPlan, todayPlan)
+                self.passiveContextState.setTodayPlan(todayPlan)
                 self.updateWidgetSnapshot(urgency: .deferred) { existing in
                     WatchWidgetSnapshot.mergingTodayPlan(todayPlan, into: existing)
                 }
@@ -188,10 +154,11 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                     sessionVersionStableID: launch.sessionVersionStableID
                 )
                 self.terminalWorkoutID = nil
-                self.assignIfChanged(\.workoutLaunch, launch)
-                self.assignIfChanged(\.completion, nil)
-                self.assignIfChanged(\.latestWatchMetrics, nil)
+                self.liveWorkoutState.setWorkoutLaunch(launch)
+                self.passiveContextState.setCompletion(nil)
+                self.liveWorkoutState.setLatestWatchMetrics(nil)
                 self.applyLinkedWorkoutLaunch(launch)
+                self.refreshPresentationState()
                 return true
             }
         case .workoutProgress:
@@ -200,8 +167,9 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                     workoutID: progress.workoutID,
                     sessionVersionStableID: nil
                 ) else { return false }
-                self.assignIfChanged(\.progressSnapshot, progress)
-                self.assignIfChanged(\.completion, nil)
+                self.liveWorkoutState.setProgressSnapshot(progress)
+                self.passiveContextState.setCompletion(nil)
+                self.refreshPresentationState()
                 return true
             }
         case .liveWorkoutSnapshot:
@@ -210,8 +178,8 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                     workoutID: liveWorkout.workoutID,
                     sessionVersionStableID: liveWorkout.sessionVersionStableID
                 ) else { return false }
-                self.assignIfChanged(\.liveWorkout, liveWorkout)
-                self.assignIfChanged(\.completion, nil)
+                self.liveWorkoutState.setLiveWorkout(liveWorkout)
+                self.passiveContextState.setCompletion(nil)
                 self.applyLinkedWorkoutLifecycle(
                     workoutID: liveWorkout.workoutID,
                     lifecycleState: liveWorkout.lifecycleState,
@@ -220,10 +188,11 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 self.updateWidgetSnapshot(urgency: .deferred) { existing in
                     WatchWidgetSnapshot.mergingLiveWorkout(
                         liveWorkout,
-                        currentContext: self.currentContext,
+                        currentContext: self.liveWorkoutState.currentContext,
                         into: existing
                     )
                 }
+                self.refreshPresentationState()
                 return true
             }
         case .currentSessionContext:
@@ -232,8 +201,8 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                     workoutID: context.workoutID,
                     sessionVersionStableID: context.sessionVersionStableID
                 ) else { return false }
-                self.assignIfChanged(\.currentContext, context)
-                self.assignIfChanged(\.completion, nil)
+                self.liveWorkoutState.setCurrentContext(context)
+                self.passiveContextState.setCompletion(nil)
                 self.applyLinkedWorkoutLifecycle(
                     workoutID: context.workoutID,
                     lifecycleState: context.lifecycleState,
@@ -242,21 +211,19 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
                 self.updateWidgetSnapshot(urgency: .deferred) { existing in
                     existing.updatingCurrentContext(context)
                 }
+                self.refreshPresentationState()
                 return true
             }
         case .sessionCompletion:
             applyDecoded(WatchSessionCompletionPayload.self, from: message) { completion in
                 self.terminalWorkoutID = completion.workoutID
-                self.assignIfChanged(\.completion, completion)
-                self.assignIfChanged(\.workoutLaunch, nil)
-                self.assignIfChanged(\.progressSnapshot, nil)
-                self.assignIfChanged(\.liveWorkout, nil)
-                self.assignIfChanged(\.currentContext, nil)
-                self.assignIfChanged(\.latestWatchMetrics, nil)
+                self.passiveContextState.setCompletion(completion)
+                self.liveWorkoutState.clearForCompletion()
                 self.workoutSessionController.stop()
                 self.updateWidgetSnapshot(urgency: .immediate) { existing in
                     existing.clearingActiveWorkout()
                 }
+                self.refreshPresentationState()
                 return true
             }
         case .watchPresenceHeartbeat:
@@ -349,33 +316,36 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
             return existingVersion != sessionVersionStableID
         }()
         guard activeWorkoutID != workoutID || versionChanged else { return }
-        assignIfChanged(\.progressSnapshot, nil)
-        assignIfChanged(\.liveWorkout, nil)
-        assignIfChanged(\.currentContext, nil)
-        assignIfChanged(\.latestWatchMetrics, nil)
+        liveWorkoutState.resetActivePayloads()
     }
 
     private var activeWorkoutID: UUID? {
-        workoutLaunch?.workoutID ?? liveWorkout?.workoutID ?? currentContext?.workoutID ?? progressSnapshot?.workoutID
+        liveWorkoutState.activeWorkoutID
     }
 
     private var activeSessionVersionStableID: String? {
-        workoutLaunch?.sessionVersionStableID ?? liveWorkout?.sessionVersionStableID ?? currentContext?.sessionVersionStableID
+        liveWorkoutState.activeSessionVersionStableID
     }
 
     private func updateWidgetSnapshot(
         urgency: WatchWidgetRefreshUrgency,
         _ transform: (WatchWidgetSnapshot) -> WatchWidgetSnapshot
     ) {
-        widgetRefreshCoordinator.apply(transform, urgency: urgency)
+        let updatedSnapshot = transform(widgetState.snapshot)
+        guard !updatedSnapshot.matchesWidgetContent(of: widgetState.snapshot) else {
+            return
+        }
+
+        widgetState.setSnapshot(updatedSnapshot)
+        widgetRefreshCoordinator.apply({ _ in updatedSnapshot }, urgency: urgency)
     }
 
     private func refreshSessionStatus(message: String? = nil) {
         guard let session else {
-            assignIfChanged(\.sessionStatus, .unsupported())
+            connectionState.setSessionStatus(.unsupported())
             return
         }
-        assignIfChanged(\.sessionStatus, Self.makeStatus(from: session, message: message))
+        connectionState.setSessionStatus(Self.makeStatus(from: session, message: message))
     }
 
     func sendExecutionAction(_ action: WatchWorkoutExecutionActionDTO) {
@@ -412,7 +382,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
             .sink { [weak self] payload in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.assignIfChanged(\.latestWatchMetrics, payload)
+                    self.liveWorkoutState.setLatestWatchMetrics(payload)
                     self.sendMetricsUpdate(payload)
                 }
             }
@@ -444,7 +414,7 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         guard usesLinkedWatchHealthSession == true else {
             return
         }
-        guard let workoutLaunch, workoutLaunch.workoutID == workoutID else {
+        guard let workoutLaunch = liveWorkoutState.workoutLaunch, workoutLaunch.workoutID == workoutID else {
             return
         }
         if workoutSessionController.latestMetricsPayload?.workoutID != workoutID {
@@ -510,14 +480,11 @@ final class WatchCompanionSessionStore: NSObject, ObservableObject {
         refreshSessionStatus(message: "Workout summary queued for iPhone.")
     }
 
-    private func assignIfChanged<Value: Equatable>(
-        _ keyPath: ReferenceWritableKeyPath<WatchCompanionSessionStore, Value>,
-        _ value: Value
-    ) {
-        guard self[keyPath: keyPath] != value else {
-            return
-        }
-        self[keyPath: keyPath] = value
+    private func refreshPresentationState() {
+        presentationState.refresh(
+            liveWorkoutState: liveWorkoutState,
+            passiveContextState: passiveContextState
+        )
     }
 }
 

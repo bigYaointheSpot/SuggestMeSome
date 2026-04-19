@@ -13,48 +13,93 @@
 import SwiftUI
 
 struct WatchRootView: View {
-    @ObservedObject var store: WatchCompanionSessionStore
+    @ObservedObject var presentationState: WatchRootPresentationState
+    let liveWorkoutState: WatchLiveWorkoutState
+    let passiveContextState: WatchPassiveContextState
+    let connectionState: WatchConnectionState
+    let onExecutionAction: (WatchWorkoutExecutionActionDTO) -> Void
+    let onDismissCompletion: () -> Void
 
     var body: some View {
         NavigationStack {
             Group {
-                switch store.rootMode {
+                switch presentationState.rootMode {
                 case .activeWorkout:
-                    WatchActiveWorkoutView(
-                        liveWorkout: store.liveWorkout,
-                        progressSnapshot: store.progressSnapshot,
-                        currentContext: store.currentContext,
-                        watchMetrics: store.latestWatchMetrics,
-                        isLinkedHealthSessionActive: store.latestWatchMetrics?.isLinkedHealthSessionActive == true,
-                        sessionStatus: store.sessionStatus,
-                        onExecutionAction: store.sendExecutionAction
+                    WatchActiveWorkoutRoot(
+                        liveWorkoutState: liveWorkoutState,
+                        connectionState: connectionState,
+                        onExecutionAction: onExecutionAction
                     )
                 case .sessionCompletion:
-                    if let completion = store.completion {
-                        WatchSessionCompletionView(
-                            completion: completion,
-                            sessionStatus: store.sessionStatus,
-                            onDismiss: store.dismissCompletion
-                        )
-                    } else {
-                        WatchTodayPlanView(
-                            todayPlan: store.todayPlan,
-                            liveWorkout: store.liveWorkout,
-                            completion: nil,
-                            sessionStatus: store.sessionStatus
-                        )
-                    }
+                    WatchSessionCompletionRoot(
+                        passiveContextState: passiveContextState,
+                        connectionState: connectionState,
+                        onDismiss: onDismissCompletion
+                    )
                 case .todayPlan:
-                    WatchTodayPlanView(
-                        todayPlan: store.todayPlan,
-                        liveWorkout: store.liveWorkout,
-                        completion: store.completion,
-                        sessionStatus: store.sessionStatus
+                    WatchTodayPlanRoot(
+                        passiveContextState: passiveContextState,
+                        connectionState: connectionState
                     )
                 }
             }
             .navigationTitle("SuggestMeSome")
         }
         .tint(WatchPalette.primary)
+    }
+}
+
+private struct WatchActiveWorkoutRoot: View {
+    @ObservedObject var liveWorkoutState: WatchLiveWorkoutState
+    @ObservedObject var connectionState: WatchConnectionState
+    let onExecutionAction: (WatchWorkoutExecutionActionDTO) -> Void
+
+    var body: some View {
+        WatchActiveWorkoutView(
+            liveWorkout: liveWorkoutState.liveWorkout,
+            progressSnapshot: liveWorkoutState.progressSnapshot,
+            currentContext: liveWorkoutState.currentContext,
+            watchMetrics: liveWorkoutState.latestWatchMetrics,
+            isLinkedHealthSessionActive: liveWorkoutState.latestWatchMetrics?.isLinkedHealthSessionActive == true,
+            sessionStatus: connectionState.sessionStatus,
+            onExecutionAction: onExecutionAction
+        )
+    }
+}
+
+private struct WatchSessionCompletionRoot: View {
+    @ObservedObject var passiveContextState: WatchPassiveContextState
+    @ObservedObject var connectionState: WatchConnectionState
+    let onDismiss: () -> Void
+
+    var body: some View {
+        if let completion = passiveContextState.completion {
+            WatchSessionCompletionView(
+                completion: completion,
+                sessionStatus: connectionState.sessionStatus,
+                onDismiss: onDismiss
+            )
+        } else {
+            WatchTodayPlanView(
+                todayPlan: passiveContextState.todayPlan,
+                liveWorkout: nil,
+                completion: nil,
+                sessionStatus: connectionState.sessionStatus
+            )
+        }
+    }
+}
+
+private struct WatchTodayPlanRoot: View {
+    @ObservedObject var passiveContextState: WatchPassiveContextState
+    @ObservedObject var connectionState: WatchConnectionState
+
+    var body: some View {
+        WatchTodayPlanView(
+            todayPlan: passiveContextState.todayPlan,
+            liveWorkout: nil,
+            completion: passiveContextState.completion,
+            sessionStatus: connectionState.sessionStatus
+        )
     }
 }

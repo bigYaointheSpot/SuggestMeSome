@@ -14,7 +14,14 @@ struct SuggestMeSomeWatchApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WatchRootView(store: container.sessionStore)
+            WatchRootView(
+                presentationState: container.sessionStore.presentationState,
+                liveWorkoutState: container.sessionStore.liveWorkoutState,
+                passiveContextState: container.sessionStore.passiveContextState,
+                connectionState: container.sessionStore.connectionState,
+                onExecutionAction: container.sessionStore.sendExecutionAction,
+                onDismissCompletion: container.sessionStore.dismissCompletion
+            )
                 .onAppear {
                     container.sessionStore.sendPresenceHeartbeat()
                 }

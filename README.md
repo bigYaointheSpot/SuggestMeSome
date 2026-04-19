@@ -3648,6 +3648,27 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ---
 
+#### Prompt 16 [Watch stage-2 state partitioning] — 2026-04-18
+
+- Split the watch companion store into narrower observable state buckets so passive updates no longer invalidate the live workout presentation path:
+  - added internal `WatchLiveWorkoutState`, `WatchPassiveContextState`, `WatchConnectionState`, `WatchWidgetState`, and `WatchRootPresentationState` seams for the watch companion flow
+  - `WatchCompanionSessionStore` now routes incoming bridge payloads into those buckets instead of publishing one broad store-wide state surface
+  - root-mode selection is now refreshed from the partitioned state, keeping active workout, completion, and Today Plan precedence unchanged
+- Narrowed the watch root render tree to observe only the state each surface actually needs:
+  - `WatchRootView` now switches on `WatchRootPresentationState` and hands off to dedicated host views for active workout, session completion, and Today Plan
+  - `SuggestMeSomeWatchApp` now injects the partitioned state objects directly into the watch root
+  - passive today-plan or completion updates no longer force the same observation path as live workout metrics and execution payloads
+- Added focused Prompt 16 coverage in `Feature16Prompt16WatchStatePartitionTests.swift`:
+  - passive today-plan refreshes do not displace active workout presentation
+  - completion-mode transitions remain independent from the live workout bucket
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' -only-testing:SuggestMeSomeTests/Feature16Prompt16WatchStatePartitionTests`
+
+**Commit:** `refactor: partition watch presentation state`
+
+---
+
 ## Project Setup
 
 - **Language:** Swift
