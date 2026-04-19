@@ -23,7 +23,6 @@ struct OnboardingFlowView: View {
     @AppStorage("healthkit.permissionsRequested") private var healthKitPermissionsRequested = false
 
     @State private var currentPage: Int = 0
-    @State private var isRequestingHealthKit = false
 
     private let healthKitService = HealthKitAuthorizationService()
 
@@ -103,26 +102,17 @@ struct OnboardingFlowView: View {
     private var controls: some View {
         if currentPage == pages.count - 1 {
             VStack(spacing: DSSpacing.s) {
-                Button {
-                    Task { await requestHealthKit() }
+                AsyncActionButton {
+                    await requestHealthKit()
                 } label: {
-                    HStack(spacing: DSSpacing.s) {
-                        if isRequestingHealthKit {
-                            ProgressView().tint(.white)
-                        } else {
-                            Image(systemName: "heart.text.square.fill")
-                        }
-                        Text(isRequestingHealthKit ? "Connecting…" : "Connect Apple Health")
-                    }
+                    Label("Connect Apple Health", systemImage: "heart.text.square.fill")
                 }
                 .buttonStyle(DSPrimaryButtonStyle())
-                .disabled(isRequestingHealthKit)
 
                 Button("Maybe later") {
                     finishOnboarding()
                 }
                 .buttonStyle(DSSecondaryButtonStyle())
-                .disabled(isRequestingHealthKit)
             }
         } else {
             Button("Continue") {
@@ -137,10 +127,8 @@ struct OnboardingFlowView: View {
     }
 
     private func requestHealthKit() async {
-        isRequestingHealthKit = true
         healthKitPermissionsRequested = true
         _ = await healthKitService.requestAuthorization(hasRequestedAuthorization: true)
-        isRequestingHealthKit = false
         finishOnboarding()
     }
 }

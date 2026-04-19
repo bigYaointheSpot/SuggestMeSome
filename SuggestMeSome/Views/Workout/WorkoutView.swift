@@ -790,6 +790,7 @@ private struct WorkoutElapsedTimerText: View {
                 .fontWeight(.thin)
                 .animation(.snappy(duration: 0.25), value: presentation.formattedElapsed(at: context.date))
                 .frame(maxWidth: .infinity, alignment: .center)
+                .accessibilityLabel("Elapsed time \(presentation.formattedElapsed(at: context.date))")
         }
     }
 }
@@ -839,6 +840,7 @@ struct ExerciseEntryCard: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(isExpanded ? "Collapse \(entry.exerciseName)" : "Expand \(entry.exerciseName)")
                 Spacer()
                 if !entry.isCardio {
                     Picker("Unit", selection: $entry.unit) {
@@ -848,11 +850,13 @@ struct ExerciseEntryCard: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(width: 90)
+                    .accessibilityLabel("Weight unit")
                 }
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .foregroundStyle(DSColor.signalCritical)
                 }
+                .accessibilityLabel("Remove \(entry.exerciseName)")
             }
             .padding(.horizontal, DSSpacing.m)
             .padding(.vertical, DSSpacing.s + 2)
@@ -1100,10 +1104,12 @@ private struct RPEStepperField: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Decrease RPE")
 
             Text(rpe.map { String(format: $0.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f", $0) } ?? "—")
                 .font(.subheadline.weight(.semibold))
                 .frame(width: 36, alignment: .center)
+                .accessibilityLabel(rpe.map { "RPE \(String(format: "%.1f", $0))" } ?? "RPE not set")
 
             Button {
                 let current = rpe ?? 6.5
@@ -1116,6 +1122,7 @@ private struct RPEStepperField: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Increase RPE")
         }
     }
 }
