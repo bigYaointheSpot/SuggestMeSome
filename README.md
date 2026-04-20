@@ -4142,6 +4142,24 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests`
 
+#### Prompt 5 [Live Activity for active workout — attributes, lifecycle bridge, widget extension scaffold] — 2026-04-19
+
+- `WorkoutLiveActivityAttributes` in `Services/LiveActivity/` — `ActivityKit.ActivityAttributes` contract shared between the main app target (which starts/updates/ends the activity) and a future Widget Extension target (which renders the presentations). Content kept deliberately small: sessionID + static title in the attributes bundle; startDate + paused state + current exercise + completed/total set counts + next-set target in `ContentState`. Lock-screen timer is derived on the widget side via `Text(startDate, style: .timer)` so iOS ticks the label without per-second `Activity.update()` calls. Includes a `fromSession(...)` factory that uses `WatchPayloadMapper` completion predicates for consistency with the Watch companion's progress reporting
+- `WorkoutLiveActivityController` — `@MainActor` wrapper around `Activity.request` / `update` / `end`. All ActivityKit calls gated behind `#if canImport(ActivityKit) && !os(macOS)` + iOS 16.1 availability checks so the file compiles on every target without Live Activity requirements. Exposes `start(for:)` / `update(for:)` / `endAll()` / `end(sessionID:)` plus an `isAvailable` read that reflects the user's Live Activities setting. Singleton is acceptable here because only one active-workout activity can exist per process
+- Wired into `ActiveWorkoutSessionStore.session.didSet` through a new `WorkoutLiveActivityBridging` protocol so the activity lifecycle follows the in-app session lifecycle automatically: first non-nil session → `start`, mutation with stable identity → `update`, transition to nil → `end`, identity swap → `end` old + `start` new. Tests substitute a counting mock via the protocol without pulling in ActivityKit
+- Widget Extension scaffold in `SuggestMeSomeLiveActivity/` at the repo root — ActivityConfiguration with lock-screen layout (session title, system-ticked elapsed timer, current exercise, 44×44 progress ring, next-set strip) and full Dynamic Island configuration (expanded regions, compact leading/trailing, minimal). Files are staged outside any Xcode target today because adding a new Widget Extension requires manual Xcode setup; `docs/LIVE_ACTIVITY_SETUP.md` walks through the steps (create Widget Extension target, drag `SuggestMeSomeLiveActivity/*.swift` in, add `WorkoutLiveActivityAttributes.swift` to the widget target's membership, set `NSSupportsLiveActivities` in Info.plist, build on device)
+- `Feature20LiveActivityTests` covers:
+  - `ContentState.fromSession(...)` derives current exercise + completed / total set counts under strength, bodyweight, and fully-logged sessions
+  - Paused sessions report `pausedElapsedSeconds` as a frozen number instead of driving the timer style
+  - `initialGlyph` strips diacritics ("Élan" → "E") and rejects empty / whitespace-only input
+  - Next-set target formatting includes weight for loaded sets, drops weight for bodyweight entries, skips cardio (no per-set progression), returns nil when the session is fully logged
+  - `ContentState` round-trips through JSON unchanged
+  - `ActiveWorkoutSessionStore` lifecycle bridge: start-on-first-session, update-on-mutation, end-on-discard, swap-on-identity-change
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature20LiveActivityTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests`
+- Out of scope for this prompt (staged for a follow-up after the Widget Extension target lands in Xcode): lock-screen / Dynamic Island visual QA on device, `.widgetURL` deep-link resolution into a specific sub-surface of `WorkoutView`
+
 ### Feature 21 — Cloud, collaboration, and consumer-health disclosure hardening
 
 **Status:** Complete
