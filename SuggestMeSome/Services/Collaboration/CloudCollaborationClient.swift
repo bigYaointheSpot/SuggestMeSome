@@ -42,13 +42,19 @@ struct HTTPCloudCollaborationClient: CloudCollaborationClient {
     let session: URLSession
     let encoder: JSONEncoder
     let decoder: JSONDecoder
+    /// Coalesces concurrent identical GETs and caches their responses for
+    /// a short TTL. POST/PUT calls invalidate the cache so mutations never
+    /// return stale reads.
+    private let getCache: CollaborationGETRequestCache
 
     init(
         baseURL: URL? = ComplianceConfiguration.accountBackendBaseURL,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        getCache: CollaborationGETRequestCache = CollaborationGETRequestCache()
     ) {
         self.baseURL = baseURL
         self.session = session
+        self.getCache = getCache
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -183,14 +189,52 @@ struct HTTPCloudCollaborationClient: CloudCollaborationClient {
             request.httpBody = try encoder.encode(body)
         }
 
-        let isRetryable = method.uppercased() == "GET"
-        return try await performRequest(request, retryable: isRetryable)
+        let isGET = method.uppercased() == "GET"
+        if isGET {
+            return try await cachedGET(request: request, accessToken: accessToken)
+        }
+
+        let data = try await fetchResponseData(request, retryable: false)
+        // Any successful non-GET can invalidate list reads — coarse but
+        // correct. Avoids stale lists after invite/assignment/note mutations.
+        await getCache.invalidateAll()
+        return try decodeResponse(data)
+    }
+
+    private func cachedGET<Response: Decodable>(
+        request: URLRequest,
+        accessToken: String
+    ) async throws -> Response {
+        let key = CollaborationGETRequestCache.Key(
+            urlString: request.url?.absoluteString ?? "",
+            authHash: accessToken.hashValue
+        )
+        let data = try await getCache.coalesce(key: key) {
+            try await fetchResponseData(request, retryable: true)
+        }
+        return try decodeResponse(data)
+    }
+
+    private func decodeResponse<Response: Decodable>(_ data: Data) throws -> Response {
+        do {
+            return try decoder.decode(Response.self, from: data)
+        } catch {
+            throw CloudBackendClientError.decodingFailure
+        }
     }
 
     private func performRequest<Response: Decodable>(
         _ request: URLRequest,
         retryable: Bool
     ) async throws -> Response {
+        let data = try await fetchResponseData(request, retryable: retryable)
+        return try decodeResponse(data)
+    }
+
+    private func fetchResponseData(
+        _ request: URLRequest,
+        retryable: Bool
+    ) async throws -> Data {
         // Exponential backoff delays for GET retries: 250ms, 750ms, 2s (each
         // ±20% jitter applied at send-time to avoid synchronized retries).
         let retryBaseDelaysNanos: [UInt64] = retryable
@@ -224,11 +268,7 @@ struct HTTPCloudCollaborationClient: CloudCollaborationClient {
                 guard (200..<300).contains(httpResponse.statusCode) else {
                     throw CloudBackendClientError.httpStatus(httpResponse.statusCode)
                 }
-                do {
-                    return try decoder.decode(Response.self, from: data)
-                } catch {
-                    throw CloudBackendClientError.decodingFailure
-                }
+                return data
             } catch let error as CloudBackendClientError {
                 throw error
             } catch let urlError as URLError where attempt < retryBaseDelaysNanos.count && shouldRetry(urlError) {
