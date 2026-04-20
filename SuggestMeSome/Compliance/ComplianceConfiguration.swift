@@ -118,6 +118,7 @@ enum ComplianceConfiguration {
             "Complete the App Store Connect privacy questionnaire and product-page copy using the real production data flows for Premium Unlock, Sign in with Apple, cloud collaboration, private sharing, push registration, and Apple Health.",
             "Sign the Paid Apps Agreement and finish the premium_unlock in-app purchase metadata and review notes.",
             "Validate the production backend's Sign in with Apple, sync, export, deletion, and token-revocation flows against the shipped app before App Store submission.",
+            "Document the built-in Preview Cloud Features mode in App Review notes so reviewers can inspect premium and collaboration surfaces without a second live account.",
             "Finalize a custom U.S. Terms/EULA in App Store Connect and review the hosted legal text with counsel before release.",
             "Complete retention, breach-response, and vendor-contract work before any off-device account or consumer health sync goes live."
         ]

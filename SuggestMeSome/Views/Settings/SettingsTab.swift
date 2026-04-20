@@ -460,6 +460,12 @@ struct SettingsTab: View {
             }
 
             NavigationLink {
+                PrivacyChoicesView()
+            } label: {
+                Label("Privacy Choices", systemImage: "slider.horizontal.3")
+            }
+
+            NavigationLink {
                 LegalDocumentView(kind: .automationDisclosure)
             } label: {
                 Label("Smart Guidance Disclosure", systemImage: "wand.and.stars")

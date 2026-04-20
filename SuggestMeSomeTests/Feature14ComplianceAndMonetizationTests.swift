@@ -189,22 +189,44 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(ComplianceConfiguration.supportEmail == "support@suggestmesome.app")
         #expect(ComplianceConfiguration.privacyEmail == "privacy@suggestmesome.app")
         #expect(ComplianceConfiguration.websiteURL.absoluteString == "https://www.suggestmesome.app")
+        #expect(ComplianceConfiguration.privacyChoicesURL.absoluteString == "https://www.suggestmesome.app/privacy-choices")
         #expect(privacyPolicy.bodyMarkdown.contains("published by **\(ComplianceConfiguration.sellerName)**"))
         #expect(privacyPolicy.bodyMarkdown.contains("invitee email addresses"))
         #expect(privacyPolicy.bodyMarkdown.contains("APNs device-token registrations"))
         #expect(privacyPolicy.bodyMarkdown.contains("private progress shares"))
+        #expect(privacyPolicy.bodyMarkdown.contains("Privacy Choices"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("does not use Apple Health data for advertising"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("Washington residents"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("visibility settings"))
+        #expect(consumerHealthNotice.bodyMarkdown.contains("Privacy Choices URL"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("Revoking collaboration access stops future sharing"))
         #expect(termsDocument.bodyMarkdown.contains("Premium Unlock is a one-time in-app purchase"))
         #expect(termsDocument.bodyMarkdown.contains("Santa Clara County, California"))
-        #expect(supportDocument.bodyMarkdown.contains("optional production-backend account sync"))
+        #expect(supportDocument.summary.contains("privacy choices"))
+        #expect(supportDocument.bodyMarkdown.contains("Privacy Choices"))
+        #expect(supportDocument.bodyMarkdown.contains("Restore Purchases"))
+        #expect(!supportDocument.bodyMarkdown.contains("U.S. Launch Checklist"))
         #expect(
             ComplianceConfiguration.releaseGateChecklist.contains(where: { $0.contains("Sign in with Apple") && $0.contains("push registration") })
         )
         #expect(
+            ComplianceConfiguration.releaseGateChecklist.contains(where: { $0.contains("Preview Cloud Features") })
+        )
+        #expect(
             ComplianceConfiguration.legalDocuments.allSatisfy { !$0.containsPlaceholders }
+        )
+    }
+
+    @Test func cloudFeaturePreviewSnapshotUsesReadOnlyReviewerSafeSampleData() {
+        let snapshot = CloudFeaturePreviewSnapshot.sample
+
+        #expect(snapshot.accountDisplayName == "Preview Athlete")
+        #expect(snapshot.relationshipSummaries.count >= 2)
+        #expect(snapshot.assignmentSummaries.contains(where: { $0.contains("Week 3") }))
+        #expect(snapshot.programShareSummaries.contains(where: { $0.contains("read-only") }))
+        #expect(snapshot.notificationSummaries.contains(where: { $0.contains("Coach invites") }))
+        #expect(
+            ComplianceConfiguration.cloudFeaturePreviewDisclosure.contains("does not create an account")
         )
     }
 

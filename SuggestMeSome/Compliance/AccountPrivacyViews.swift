@@ -113,6 +113,12 @@ struct AccountSettingsView: View {
                 }
                 .signInWithAppleButtonStyle(.black)
                 .frame(height: 48)
+
+                NavigationLink {
+                    CloudFeaturePreviewView()
+                } label: {
+                    Label("Preview Cloud Features", systemImage: "sparkles.rectangle.stack")
+                }
             } else {
                 Text("Create a local contract-validation account to exercise privacy-rights and deletion flows before your production backend is live.")
                     .font(.footnote)
@@ -156,10 +162,10 @@ struct AccountSettingsView: View {
                 .padding(.top, 4)
             }
         } header: {
-            Text(accountManager.launchMode == .productionBackend ? "Connect Account" : "Create or Sign In")
+            Text(accountManager.launchMode == .productionBackend ? "Connect Account or Preview" : "Create or Sign In")
         } footer: {
             Text(accountManager.launchMode == .productionBackend
-                 ? "Sign in is optional. The app remains fully usable while signed out, and Apple Health-derived recovery data still stays local in this release."
+                 ? "Sign in is optional. The app remains fully usable while signed out, and Preview Cloud Features shows sample collaboration surfaces without creating an account or contacting the backend."
                  : "This build does not transmit account data off device. Replace the local contract service with your production backend before public cloud launch.")
         }
     }
