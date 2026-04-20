@@ -74,10 +74,15 @@ struct DSSectionHeader: View {
                 .frame(width: 22, height: 22)
                 .background(iconColor.opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: DSRadius.s, style: .continuous))
+                .accessibilityHidden(true)
             Text(title)
                 .font(.headline.weight(.bold))
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
             Spacer()
             if let trailing { trailing }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 }

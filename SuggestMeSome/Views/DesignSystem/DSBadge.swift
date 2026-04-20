@@ -71,9 +71,12 @@ struct DSBadge: View {
             if let systemImage {
                 Image(systemName: systemImage)
                     .font(.caption2.weight(.semibold))
+                    .accessibilityHidden(true)
             }
             Text(text)
                 .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
         .padding(.horizontal, DSSpacing.s)
         .padding(.vertical, 4)

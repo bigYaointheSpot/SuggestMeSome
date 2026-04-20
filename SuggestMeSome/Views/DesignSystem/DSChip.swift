@@ -34,14 +34,19 @@ struct DSChip: View {
                 Image(systemName: systemImage)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(tint)
+                    .accessibilityHidden(true)
             }
             Text(value)
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             if let label {
                 Text(label)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
         }
         .padding(.horizontal, DSSpacing.s)
