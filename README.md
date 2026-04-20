@@ -4064,6 +4064,10 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests`
 
+### Feature 21 — Cloud, collaboration, and consumer-health disclosure hardening
+
+**Status:** Complete
+
 #### Prompt 1 [Feature 21 cloud, collaboration, and consumer-health disclosure hardening] — 2026-04-19
 
 - Updated the app's paid-product disclosure posture so cloud sync, coach collaboration, private sharing, and push notifications are described truthfully everywhere users encounter them:
