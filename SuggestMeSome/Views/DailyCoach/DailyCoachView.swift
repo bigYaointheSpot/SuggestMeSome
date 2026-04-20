@@ -20,49 +20,28 @@ struct DailyCoachCompletedBlockInsights {
         longHorizonSummary: nil
     )
 
+    /// O(1) replacement for the previous per-row `Hasher` — samples only
+    /// `count` + `first?.(syncLastModifiedAt|syncVersion)` per array so
+    /// token computation doesn't re-iterate every row on every SwiftUI
+    /// body invocation. See `DashboardView.DashboardRefreshToken` for the
+    /// same pattern and the documented tradeoff on missed in-place edits
+    /// to old rows.
     static func refreshToken(
         recentWorkouts: [Workout],
         completedRuns: [ProgramRun],
         personalRecords: [PersonalRecord]
     ) -> Int {
         var hasher = Hasher()
-        combine(completedRuns, into: &hasher) { run, hasher in
-            hasher.combine(run.id)
-            hasher.combine(run.syncVersion)
-            hasher.combine(run.syncLastModifiedAt)
-            hasher.combine(run.isCompleted)
-            hasher.combine(run.endDate)
-        }
-        combine(recentWorkouts, into: &hasher) { workout, hasher in
-            hasher.combine(workout.id)
-            hasher.combine(workout.syncVersion)
-            hasher.combine(workout.syncLastModifiedAt)
-            hasher.combine(workout.date)
-            hasher.combine(workout.programRun?.id)
-            hasher.combine(workout.programWeekNumber)
-            hasher.combine(workout.programSessionNumber)
-        }
-        combine(personalRecords, into: &hasher) { record, hasher in
-            hasher.combine(record.id)
-            hasher.combine(record.syncVersion)
-            hasher.combine(record.syncLastModifiedAt)
-            hasher.combine(record.dateAchieved)
-            hasher.combine(record.exerciseName)
-            hasher.combine(record.repCount)
-            hasher.combine(record.weight)
-        }
+        hasher.combine(completedRuns.count)
+        hasher.combine(completedRuns.first?.syncLastModifiedAt)
+        hasher.combine(completedRuns.first?.syncVersion)
+        hasher.combine(recentWorkouts.count)
+        hasher.combine(recentWorkouts.first?.syncLastModifiedAt)
+        hasher.combine(recentWorkouts.first?.syncVersion)
+        hasher.combine(personalRecords.count)
+        hasher.combine(personalRecords.first?.syncLastModifiedAt)
+        hasher.combine(personalRecords.first?.syncVersion)
         return hasher.finalize()
-    }
-
-    private static func combine<Row>(
-        _ rows: [Row],
-        into hasher: inout Hasher,
-        rowHasher: (Row, inout Hasher) -> Void
-    ) {
-        hasher.combine(rows.count)
-        for row in rows {
-            rowHasher(row, &hasher)
-        }
     }
 }
 
@@ -194,6 +173,12 @@ struct DailyCoachDerivedState {
         )
     }
 
+    /// O(1) replacement for the previous per-row `Hasher`. Samples only
+    /// `count` + `first?.(syncLastModifiedAt|syncVersion)` per array, then
+    /// mixes in the scalar config flags (HealthKit enabled, coach toggle,
+    /// sync timestamp) and the current day-start so the token rolls over at
+    /// local midnight. See `DashboardView.DashboardRefreshToken` for the
+    /// same pattern.
     static func refreshToken(
         activeRuns: [ProgramRun],
         recentWorkouts: [Workout],
@@ -213,73 +198,30 @@ struct DailyCoachDerivedState {
         hasher.combine(healthKitEnabled)
         hasher.combine(useHealthKitInDailyCoach)
         hasher.combine(recoveryLastSyncTimestamp)
-        combine(activeRuns, into: &hasher) { run, hasher in
-            hasher.combine(run.id)
-            hasher.combine(run.syncVersion)
-            hasher.combine(run.syncLastModifiedAt)
-            hasher.combine(run.isCompleted)
-            hasher.combine(run.startDate)
-        }
-        combine(recentWorkouts, into: &hasher) { workout, hasher in
-            hasher.combine(workout.id)
-            hasher.combine(workout.syncVersion)
-            hasher.combine(workout.syncLastModifiedAt)
-            hasher.combine(workout.date)
-            hasher.combine(workout.programWeekNumber)
-            hasher.combine(workout.programSessionNumber)
-        }
-        combine(weeklyAnalyses, into: &hasher) { analysis, hasher in
-            hasher.combine(analysis.id)
-            hasher.combine(analysis.createdAt)
-            hasher.combine(analysis.weekStartDate)
-            hasher.combine(analysis.finalizedAt)
-            hasher.combine(analysis.fatigueStatus.rawValue)
-            hasher.combine(analysis.isFinalized)
-            hasher.combine(analysis.programRun?.id)
-        }
-        combine(allProposals, into: &hasher) { proposal, hasher in
-            hasher.combine(proposal.id)
-            hasher.combine(proposal.syncVersion)
-            hasher.combine(proposal.syncLastModifiedAt)
-            hasher.combine(proposal.priority)
-            hasher.combine(proposal.proposalStatus.rawValue)
-            hasher.combine(proposal.programRun?.id)
-        }
-        combine(allOverlays, into: &hasher) { overlay, hasher in
-            hasher.combine(overlay.id)
-            hasher.combine(overlay.syncVersion)
-            hasher.combine(overlay.syncLastModifiedAt)
-            hasher.combine(overlay.overlayStatus.rawValue)
-            hasher.combine(overlay.programRun?.id)
-            hasher.combine(overlay.appliedAt)
-        }
-        combine(checkIns, into: &hasher) { checkIn, hasher in
-            hasher.combine(checkIn.id)
-            hasher.combine(checkIn.syncVersion)
-            hasher.combine(checkIn.syncLastModifiedAt)
-            hasher.combine(checkIn.date)
-            hasher.combine(checkIn.sleepQuality)
-            hasher.combine(checkIn.soreness)
-            hasher.combine(checkIn.energy)
-            hasher.combine(checkIn.stress)
-            hasher.combine(checkIn.availableTimeMinutes)
-            hasher.combine(checkIn.hasPainOrDiscomfort)
-        }
-        combine(weeklyReviews, into: &hasher) { review, hasher in
-            hasher.combine(review.id)
-            hasher.combine(review.syncVersion)
-            hasher.combine(review.syncLastModifiedAt)
-            hasher.combine(review.weekStart)
-            hasher.combine(review.hasBeenSeen)
-        }
-        combine(healthKitDailySummaries, into: &hasher) { summary, hasher in
-            hasher.combine(summary.id)
-            hasher.combine(summary.syncVersion)
-            hasher.combine(summary.syncLastModifiedAt)
-            hasher.combine(summary.dayStart)
-            hasher.combine(summary.sourceUpdatedAt)
-            hasher.combine(summary.updatedAt)
-        }
+        hasher.combine(activeRuns.count)
+        hasher.combine(activeRuns.first?.syncLastModifiedAt)
+        hasher.combine(activeRuns.first?.syncVersion)
+        hasher.combine(recentWorkouts.count)
+        hasher.combine(recentWorkouts.first?.syncLastModifiedAt)
+        hasher.combine(recentWorkouts.first?.syncVersion)
+        hasher.combine(weeklyAnalyses.count)
+        hasher.combine(weeklyAnalyses.first?.syncLastModifiedAt)
+        hasher.combine(weeklyAnalyses.first?.syncVersion)
+        hasher.combine(allProposals.count)
+        hasher.combine(allProposals.first?.syncLastModifiedAt)
+        hasher.combine(allProposals.first?.syncVersion)
+        hasher.combine(allOverlays.count)
+        hasher.combine(allOverlays.first?.syncLastModifiedAt)
+        hasher.combine(allOverlays.first?.syncVersion)
+        hasher.combine(checkIns.count)
+        hasher.combine(checkIns.first?.syncLastModifiedAt)
+        hasher.combine(checkIns.first?.syncVersion)
+        hasher.combine(weeklyReviews.count)
+        hasher.combine(weeklyReviews.first?.syncLastModifiedAt)
+        hasher.combine(weeklyReviews.first?.syncVersion)
+        hasher.combine(healthKitDailySummaries.count)
+        hasher.combine(healthKitDailySummaries.first?.syncLastModifiedAt)
+        hasher.combine(healthKitDailySummaries.first?.syncVersion)
         return hasher.finalize()
     }
 
@@ -300,17 +242,6 @@ struct DailyCoachDerivedState {
             latestCompletedReviewSnapshot: insights.latestCompletedReviewSnapshot,
             longHorizonSummary: insights.longHorizonSummary
         )
-    }
-
-    private static func combine<Row>(
-        _ rows: [Row],
-        into hasher: inout Hasher,
-        rowHasher: (Row, inout Hasher) -> Void
-    ) {
-        hasher.combine(rows.count)
-        for row in rows {
-            rowHasher(row, &hasher)
-        }
     }
 }
 
