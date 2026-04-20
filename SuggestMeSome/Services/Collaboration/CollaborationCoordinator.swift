@@ -111,11 +111,19 @@ final class CollaborationCoordinator {
         currentAccountEmailProvider: { [weak self] in self?.currentAccountEmail }
     )
 
+    /// Owns ProgramAssignment state and the trainee-facing inbox filter.
+    @ObservationIgnored private lazy var assignmentsStore = CollaborationAssignmentsStore(
+        currentAccountIDProvider: { [weak self] in self?.currentAccountID }
+    )
+
+    /// Owns CoachNote state and the unread-note filter.
+    @ObservationIgnored private let notesStore = CollaborationNotesStore()
+
     private(set) var phase: CollaborationSyncPhase = .signedOut
     var relationships: [CoachRelationship] { relationshipsStore.relationships }
     var invites: [CoachInvite] { relationshipsStore.invites }
-    private(set) var assignments: [ProgramAssignment] = []
-    private(set) var notes: [CoachNote] = []
+    var assignments: [ProgramAssignment] { assignmentsStore.assignments }
+    var notes: [CoachNote] { notesStore.notes }
     private(set) var notificationPreference: NotificationPreference?
     private(set) var deviceRegistration: DevicePushRegistration?
     private(set) var insightSnapshots: [InsightSnapshot] = []
@@ -219,11 +227,7 @@ final class CollaborationCoordinator {
     var incomingPendingInvites: [CoachInvite] { relationshipsStore.incomingPendingInvites }
     var outgoingPendingInvites: [CoachInvite] { relationshipsStore.outgoingPendingInvites }
 
-    var inboxAssignments: [ProgramAssignment] {
-        assignments.filter { assignment in
-            canActOnAssignment(assignment)
-        }
-    }
+    var inboxAssignments: [ProgramAssignment] { assignmentsStore.inboxAssignments }
 
     var coachRosterSnapshots: [InsightSnapshot] {
         coachRosterSnapshotsCache.get {
@@ -241,9 +245,7 @@ final class CollaborationCoordinator {
         insightSnapshots.filter { $0.accountID == currentAccountID }
     }
 
-    var unreadCoachNotes: [CoachNote] {
-        notes.filter(\.isUnread)
-    }
+    var unreadCoachNotes: [CoachNote] { notesStore.unreadCoachNotes }
 
     var unreadDigests: [WeeklyDigest] {
         weeklyDigests.filter(\.isUnread)
@@ -425,7 +427,7 @@ final class CollaborationCoordinator {
     }
 
     func canActOnAssignment(_ assignment: ProgramAssignment) -> Bool {
-        assignment.athleteAccountID == currentAccountID && assignment.status == .pending
+        assignmentsStore.canActOnAssignment(assignment)
     }
 
     func invitePresentationMode(for invite: CoachInvite) -> InvitePresentationMode {
@@ -921,8 +923,8 @@ final class CollaborationCoordinator {
             relationships: snapshot.relationships,
             invites: snapshot.invites
         )
-        assignments = snapshot.assignments
-        notes = snapshot.notes
+        assignmentsStore.apply(assignments: snapshot.assignments)
+        notesStore.apply(notes: snapshot.notes)
         notificationPreference = snapshot.notificationPreference
         deviceRegistration = snapshot.deviceRegistration
         insightSnapshots = snapshot.insightSnapshots
@@ -935,8 +937,8 @@ final class CollaborationCoordinator {
 
     private func clearInMemoryState() {
         relationshipsStore.clear()
-        assignments = []
-        notes = []
+        assignmentsStore.clear()
+        notesStore.clear()
         notificationPreference = nil
         deviceRegistration = nil
         insightSnapshots = []
