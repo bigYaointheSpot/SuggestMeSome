@@ -87,16 +87,14 @@ final class CollaborationCoordinator {
 
     // MARK: - Derived-view caches
     //
-    // Memoize the remaining coordinator-owned filters so they don't rerun
-    // on every SwiftUI body call. Relationships/invites derived views
-    // moved into CollaborationRelationshipsStore. Each holder invalidates
-    // in `loadCache()` and `clearInMemoryState()` alongside the store.
+    // Only `hasAnyCollaboration` remains coordinator-owned — it aggregates
+    // across every sub-store so there's no natural home for it below.
+    // Invalidation hooks alongside the stores in `loadCache()` and
+    // `clearInMemoryState()`.
 
-    @ObservationIgnored private let coachRosterSnapshotsCache = CachedDerivation<[InsightSnapshot]>()
     @ObservationIgnored private let hasAnyCollaborationCache = CachedDerivation<Bool>()
 
     private func invalidateDerivedCaches() {
-        coachRosterSnapshotsCache.invalidate()
         hasAnyCollaborationCache.invalidate()
     }
 
@@ -119,6 +117,24 @@ final class CollaborationCoordinator {
     /// Owns CoachNote state and the unread-note filter.
     @ObservationIgnored private let notesStore = CollaborationNotesStore()
 
+    /// Owns InsightSnapshot + WeeklyDigest state and the heavy roster filter.
+    /// The coach-relationship provider closure pulls from the relationships
+    /// store so both sub-stores stay decoupled while the derived view still
+    /// sees fresh data after any relationship refresh.
+    @ObservationIgnored private lazy var insightsStore = CollaborationInsightsStore(
+        currentAccountIDProvider: { [weak self] in self?.currentAccountID },
+        coachRelationshipIDsProvider: { [weak self] in
+            guard let self else { return [] }
+            return Set(self.relationshipsStore.coachRelationships.map(\.stableID))
+        }
+    )
+
+    /// Owns SavedProgramBlueprint state.
+    @ObservationIgnored private let blueprintsStore = CollaborationBlueprintsStore()
+
+    /// Owns ProgramShareGrant + ProgressShareCard state.
+    @ObservationIgnored private let sharesStore = CollaborationSharesStore()
+
     private(set) var phase: CollaborationSyncPhase = .signedOut
     var relationships: [CoachRelationship] { relationshipsStore.relationships }
     var invites: [CoachInvite] { relationshipsStore.invites }
@@ -126,11 +142,11 @@ final class CollaborationCoordinator {
     var notes: [CoachNote] { notesStore.notes }
     private(set) var notificationPreference: NotificationPreference?
     private(set) var deviceRegistration: DevicePushRegistration?
-    private(set) var insightSnapshots: [InsightSnapshot] = []
-    private(set) var weeklyDigests: [WeeklyDigest] = []
-    private(set) var blueprints: [SavedProgramBlueprint] = []
-    private(set) var programShares: [ProgramShareGrant] = []
-    private(set) var progressShares: [ProgressShareCard] = []
+    var insightSnapshots: [InsightSnapshot] { insightsStore.insightSnapshots }
+    var weeklyDigests: [WeeklyDigest] { insightsStore.weeklyDigests }
+    var blueprints: [SavedProgramBlueprint] { blueprintsStore.blueprints }
+    var programShares: [ProgramShareGrant] { sharesStore.programShares }
+    var progressShares: [ProgressShareCard] { sharesStore.progressShares }
     private(set) var pushAuthorizationState: CollaborationPushAuthorizationState = .notDetermined
     private(set) var statusMessage: String?
 
@@ -229,27 +245,12 @@ final class CollaborationCoordinator {
 
     var inboxAssignments: [ProgramAssignment] { assignmentsStore.inboxAssignments }
 
-    var coachRosterSnapshots: [InsightSnapshot] {
-        coachRosterSnapshotsCache.get {
-            let coachRelationshipIDs = Set(coachRelationships.map(\.stableID))
-            return insightSnapshots.filter { snapshot in
-                if let relationshipStableID = snapshot.relationshipStableID {
-                    return coachRelationshipIDs.contains(relationshipStableID)
-                }
-                return false
-            }
-        }
-    }
-
-    var athleteFacingSnapshots: [InsightSnapshot] {
-        insightSnapshots.filter { $0.accountID == currentAccountID }
-    }
+    var coachRosterSnapshots: [InsightSnapshot] { insightsStore.coachRosterSnapshots }
+    var athleteFacingSnapshots: [InsightSnapshot] { insightsStore.athleteFacingSnapshots }
 
     var unreadCoachNotes: [CoachNote] { notesStore.unreadCoachNotes }
 
-    var unreadDigests: [WeeklyDigest] {
-        weeklyDigests.filter(\.isUnread)
-    }
+    var unreadDigests: [WeeklyDigest] { insightsStore.unreadDigests }
 
     var shouldShowMyCoachEmptyState: Bool {
         athleteRelationships.isEmpty && incomingPendingInvites.isEmpty
@@ -927,11 +928,15 @@ final class CollaborationCoordinator {
         notesStore.apply(notes: snapshot.notes)
         notificationPreference = snapshot.notificationPreference
         deviceRegistration = snapshot.deviceRegistration
-        insightSnapshots = snapshot.insightSnapshots
-        weeklyDigests = snapshot.weeklyDigests
-        blueprints = snapshot.blueprints
-        programShares = snapshot.programShares
-        progressShares = snapshot.progressShares
+        insightsStore.apply(
+            insightSnapshots: snapshot.insightSnapshots,
+            weeklyDigests: snapshot.weeklyDigests
+        )
+        blueprintsStore.apply(blueprints: snapshot.blueprints)
+        sharesStore.apply(
+            programShares: snapshot.programShares,
+            progressShares: snapshot.progressShares
+        )
         invalidateDerivedCaches()
     }
 
@@ -941,11 +946,9 @@ final class CollaborationCoordinator {
         notesStore.clear()
         notificationPreference = nil
         deviceRegistration = nil
-        insightSnapshots = []
-        weeklyDigests = []
-        blueprints = []
-        programShares = []
-        progressShares = []
+        insightsStore.clear()
+        blueprintsStore.clear()
+        sharesStore.clear()
         invalidateDerivedCaches()
     }
 
