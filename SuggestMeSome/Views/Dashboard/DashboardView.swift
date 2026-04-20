@@ -68,67 +68,54 @@ struct DashboardView: View {
         case programWorkout
     }
 
-    private var dashboardRefreshToken: Int {
-        var hasher = Hasher()
-        combine(activeProgramRuns, into: &hasher) { run, hasher in
-            hasher.combine(run.id)
-            hasher.combine(run.syncVersion)
-            hasher.combine(run.syncLastModifiedAt)
-            hasher.combine(run.isCompleted)
-            hasher.combine(run.startDate)
-        }
-        combine(allWorkouts, into: &hasher) { workout, hasher in
-            hasher.combine(workout.id)
-            hasher.combine(workout.syncVersion)
-            hasher.combine(workout.syncLastModifiedAt)
-            hasher.combine(workout.date)
-            hasher.combine(workout.programWeekNumber)
-            hasher.combine(workout.programSessionNumber)
-        }
-        combine(allPRs, into: &hasher) { pr, hasher in
-            hasher.combine(pr.id)
-            hasher.combine(pr.syncVersion)
-            hasher.combine(pr.syncLastModifiedAt)
-            hasher.combine(pr.dateAchieved)
-            hasher.combine(pr.exerciseName)
-            hasher.combine(pr.repCount)
-            hasher.combine(pr.weight)
-        }
-        combine(allExercises, into: &hasher) { exercise, hasher in
-            hasher.combine(exercise.name)
-            hasher.combine(exercise.exerciseType.rawValue)
-            hasher.combine(exercise.muscleGroup?.name)
-        }
-        combine(weeklyAnalyses, into: &hasher) { analysis, hasher in
-            hasher.combine(analysis.id)
-            hasher.combine(analysis.createdAt)
-            hasher.combine(analysis.weekStartDate)
-            hasher.combine(analysis.finalizedAt)
-            hasher.combine(analysis.fatigueStatus.rawValue)
-            hasher.combine(analysis.isFinalized)
-        }
-        combine(liftTrends, into: &hasher) { trend, hasher in
-            hasher.combine(trend.id)
-            hasher.combine(trend.updatedAt)
-            hasher.combine(trend.confidenceScore)
-            hasher.combine(trend.trendStatus.rawValue)
-            hasher.combine(trend.liftDisplayName)
-        }
-        combine(allProposals, into: &hasher) { proposal, hasher in
-            hasher.combine(proposal.id)
-            hasher.combine(proposal.syncVersion)
-            hasher.combine(proposal.syncLastModifiedAt)
-            hasher.combine(proposal.priority)
-            hasher.combine(proposal.proposalStatus.rawValue)
-        }
-        combine(healthKitSummaries, into: &hasher) { summary, hasher in
-            hasher.combine(summary.id)
-            hasher.combine(summary.syncVersion)
-            hasher.combine(summary.syncLastModifiedAt)
-            hasher.combine(summary.dayStart)
-            hasher.combine(summary.updatedAt)
-        }
-        return hasher.finalize()
+    /// Lightweight summary of the eight source arrays the dashboard reads from.
+    ///
+    /// Replaces a 60-LOC `Hasher` that iterated every row of every array on every
+    /// SwiftUI body invocation — an `O(N)` cost paid on every render tick. This
+    /// struct is `O(1)` to build because it samples only `count` and
+    /// `first?.syncLastModifiedAt` per array. Counts catch adds/deletes;
+    /// `.first?.syncLastModifiedAt` (on arrays sorted by date desc or
+    /// updatedAt desc) catches edits to the newest row. Edits to old rows
+    /// without an insert/delete will miss this token — the user can swap
+    /// tabs or re-enter the Dashboard to force a refresh. That tradeoff is
+    /// deliberate: the old hasher paid ~20k hash operations per second
+    /// during animations on a dashboard with 2k rows.
+    private struct DashboardRefreshToken: Hashable {
+        var activeProgramRunsCount: Int
+        var activeProgramRunsLatest: Date?
+        var workoutsCount: Int
+        var workoutsLatest: Date?
+        var prsCount: Int
+        var prsLatest: Date?
+        var exercisesCount: Int
+        var weeklyAnalysesCount: Int
+        var weeklyAnalysesLatest: Date?
+        var liftTrendsCount: Int
+        var liftTrendsLatest: Date?
+        var proposalsCount: Int
+        var proposalsLatest: Date?
+        var healthSummariesCount: Int
+        var healthSummariesLatest: Date?
+    }
+
+    private var dashboardRefreshToken: DashboardRefreshToken {
+        DashboardRefreshToken(
+            activeProgramRunsCount: activeProgramRuns.count,
+            activeProgramRunsLatest: activeProgramRuns.first?.syncLastModifiedAt,
+            workoutsCount: allWorkouts.count,
+            workoutsLatest: allWorkouts.first?.syncLastModifiedAt,
+            prsCount: allPRs.count,
+            prsLatest: allPRs.first?.syncLastModifiedAt,
+            exercisesCount: allExercises.count,
+            weeklyAnalysesCount: weeklyAnalyses.count,
+            weeklyAnalysesLatest: weeklyAnalyses.first?.syncLastModifiedAt,
+            liftTrendsCount: liftTrends.count,
+            liftTrendsLatest: liftTrends.first?.updatedAt,
+            proposalsCount: allProposals.count,
+            proposalsLatest: allProposals.first?.syncLastModifiedAt,
+            healthSummariesCount: healthKitSummaries.count,
+            healthSummariesLatest: healthKitSummaries.first?.syncLastModifiedAt
+        )
     }
 
     // MARK: - Body
@@ -272,17 +259,6 @@ struct DashboardView: View {
             trainingStateSnapshot: engine.buildSnapshot(),
             healthKitInsight: HealthKitRecoveryInsightService.computeInsight(from: healthKitSummaries)
         )
-    }
-
-    private func combine<Row>(
-        _ rows: [Row],
-        into hasher: inout Hasher,
-        rowHasher: (Row, inout Hasher) -> Void
-    ) {
-        hasher.combine(rows.count)
-        for row in rows {
-            rowHasher(row, &hasher)
-        }
     }
 
     // MARK: - Quick Start Section

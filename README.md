@@ -3763,7 +3763,7 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 
 ### Feature 17 — Reorderable exercises and in-workout UI polish
 
-**Status:** In Progress
+**Status:** Complete
 
 #### Prompt 1 [Drag-to-reorder exercises with watch roster sync and design-token polish] — 2026-04-19
 
