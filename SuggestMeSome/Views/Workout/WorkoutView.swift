@@ -808,6 +808,7 @@ struct ExerciseEntryCard: View {
     @Binding var entry: DraftExerciseEntry
     let onDelete: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isExpanded: Bool = true
     @State private var showRPEField: Bool = false
     @FocusState private var focusedField: WorkoutSetField?
@@ -1015,7 +1016,7 @@ struct ExerciseEntryCard: View {
                 Capsule()
                     .fill(DSColor.signalPositive)
                     .frame(width: max(0, geo.size.width * progressFraction))
-                    .animation(.easeOut(duration: 0.25), value: progressFraction)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: progressFraction)
             }
         }
         .frame(height: 2)
@@ -1157,6 +1158,7 @@ struct SetEntryRow: View {
     let onDelete: () -> Void
     let onToggleWarmup: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var starScale: CGFloat = 1.0
     @State private var starGlowRadius: CGFloat = 0
 
@@ -1224,6 +1226,9 @@ struct SetEntryRow: View {
                 .shadow(color: Color.yellow.opacity(starGlowRadius > 0 ? 0.8 : 0), radius: starGlowRadius)
                 .onChange(of: set.isPR) { _, newValue in
                     guard newValue else { return }
+                    // Honor Reduce Motion — skip the scale-up/scale-down
+                    // bounce entirely and keep the star visually stable.
+                    guard !reduceMotion else { return }
                     withAnimation(.easeOut(duration: 0.5)) {
                         starScale = 1.6
                         starGlowRadius = 12
