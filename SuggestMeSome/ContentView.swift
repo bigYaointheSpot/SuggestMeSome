@@ -146,6 +146,7 @@ struct ActiveWorkoutBanner: View {
             HStack(spacing: 10) {
                 Image(systemName: "timer")
                     .font(.headline)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Workout in Progress")
                         .font(.subheadline.weight(.semibold))
@@ -156,6 +157,7 @@ struct ActiveWorkoutBanner: View {
                     .font(.subheadline.weight(.semibold))
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
@@ -163,6 +165,8 @@ struct ActiveWorkoutBanner: View {
             .background(Color.indigo)
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Double tap to resume your active workout.")
     }
 }
 

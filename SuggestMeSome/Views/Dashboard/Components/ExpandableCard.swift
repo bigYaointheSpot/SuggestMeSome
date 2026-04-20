@@ -13,6 +13,7 @@ struct ExpandableCard<Collapsed: View, Expanded: View>: View {
     var tint: Color? = nil
     var showsChevron: Bool = true
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isExpanded: Bool = false
 
     init(
@@ -30,8 +31,12 @@ struct ExpandableCard<Collapsed: View, Expanded: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DSSpacing.m) {
             Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                if reduceMotion {
                     isExpanded.toggle()
+                } else {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        isExpanded.toggle()
+                    }
                 }
             } label: {
                 HStack(alignment: .top, spacing: DSSpacing.s) {
@@ -43,10 +48,12 @@ struct ExpandableCard<Collapsed: View, Expanded: View>: View {
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(isExpanded ? 180 : 0))
                             .padding(.top, 2)
+                            .accessibilityHidden(true)
                     }
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityHint(isExpanded ? "Double tap to collapse details." : "Double tap to expand for more detail.")
 
             if isExpanded {
                 Divider()
