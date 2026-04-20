@@ -1127,8 +1127,8 @@ struct Feature19CollaborationFoundationTests {
 
         // Gate rejects the call: no network fire, error surfaces, banner set.
         #expect(collaborationClient.invites.isEmpty)
-        #expect(coordinator.endpointError(.invites) == "Coach collaboration requires a premium subscription.")
-        #expect(coordinator.lastErrorMessage == "Coach collaboration requires a premium subscription.")
+        #expect(coordinator.endpointError(.invites) == "Coach collaboration requires Premium Unlock.")
+        #expect(coordinator.lastErrorMessage == "Coach collaboration requires Premium Unlock.")
     }
 
     @Test func refreshCoalescerSharesInFlightTask() async {

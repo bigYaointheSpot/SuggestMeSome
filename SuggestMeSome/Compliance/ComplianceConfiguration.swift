@@ -106,7 +106,7 @@ enum ComplianceConfiguration {
         "Private sharing records",
         "Account support records"
     ]
-    static let consumerHealthConsentPurpose = "Future account sync and privacy-rights fulfillment for workouts, readiness, recovery, and coaching outputs."
+    static let consumerHealthConsentPurpose = "Account sync, collaboration sharing, and privacy-rights fulfillment for workouts, readiness, recovery, and coaching outputs."
 
     static var releaseGateChecklist: [String] {
         [

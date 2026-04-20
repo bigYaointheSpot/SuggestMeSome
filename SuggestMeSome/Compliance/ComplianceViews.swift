@@ -131,6 +131,141 @@ struct AboutThisGuidanceView: View {
     }
 }
 
+private struct ComplianceDisclosureCard: View {
+    let title: String
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: systemImage)
+                .font(.headline)
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+struct AccountSignInNoticeView: View {
+    var body: some View {
+        ComplianceDisclosureCard(
+            title: "Sign in with Apple disclosure",
+            systemImage: "person.badge.key.fill",
+            text: ComplianceConfiguration.accountSignInDisclosure
+        )
+    }
+}
+
+struct PushNotificationNoticeView: View {
+    var body: some View {
+        ComplianceDisclosureCard(
+            title: "Push notification disclosure",
+            systemImage: "bell.badge.fill",
+            text: ComplianceConfiguration.pushNotificationDisclosure
+        )
+    }
+}
+
+enum CollaborationSharingNoticeContext {
+    case coachInvite
+    case visibilityScopes
+    case programShare
+    case progressShare
+
+    var title: String {
+        switch self {
+        case .coachInvite:
+            return "Before you send this invite"
+        case .visibilityScopes:
+            return "Before you save these visibility settings"
+        case .programShare:
+            return "Before you share this program"
+        case .progressShare:
+            return "Before you share this progress card"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .coachInvite:
+            return "The invite sends the email address you enter, your role, the selected visibility preset, and any personal note through the collaboration backend so the recipient can review and accept the connection."
+        case .visibilityScopes:
+            return "Saving a visibility preset updates which collaboration records this connected coach can review, including programs and runs, workouts and adherence, daily coach records, insight snapshots, and coach notes."
+        case .programShare:
+            return "Sharing a program sends the selected saved blueprint or editable program, your optional message, and the recipient account relationship through the collaboration backend for read-only or editable access, depending on the share type."
+        case .progressShare:
+            return "Sharing progress sends the selected insight snapshot headline, summary, and card metadata to the connected recipient you choose so they can view that progress card privately."
+        }
+    }
+
+    var acknowledgementText: String {
+        switch self {
+        case .coachInvite:
+            return "I understand this invite shares the selected coach-relationship details with the email address I entered."
+        case .visibilityScopes:
+            return "I understand these visibility settings control which collaboration records this coach can see."
+        case .programShare:
+            return "I understand this share grants the chosen recipient access to the selected program."
+        case .progressShare:
+            return "I understand this share grants the chosen recipient access to the selected progress card."
+        }
+    }
+}
+
+struct CollaborationSharingConsentView: View {
+    let context: CollaborationSharingNoticeContext
+    let requiresAcknowledgement: Bool
+    @Binding private var isAcknowledged: Bool
+
+    init(
+        context: CollaborationSharingNoticeContext,
+        requiresAcknowledgement: Bool = false,
+        isAcknowledged: Binding<Bool> = .constant(true)
+    ) {
+        self.context = context
+        self.requiresAcknowledgement = requiresAcknowledgement
+        _isAcknowledged = isAcknowledged
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ComplianceDisclosureCard(
+                title: context.title,
+                systemImage: "person.2.badge.gearshape",
+                text: "\(context.detail)\n\n\(ComplianceConfiguration.collaborationSharingDisclosure)\n\n\(ComplianceConfiguration.collaborationRevocationDisclosure)"
+            )
+
+            if requiresAcknowledgement {
+                Toggle(context.acknowledgementText, isOn: $isAcknowledged)
+                    .font(.footnote)
+                    .toggleStyle(.switch)
+            }
+        }
+    }
+}
+
+struct PrivacyRevocationExplainerView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ComplianceDisclosureCard(
+                title: "Privacy-rights workflow",
+                systemImage: "lock.doc.fill",
+                text: "\(ComplianceConfiguration.privacyRightsDisclosure)\n\n\(ComplianceConfiguration.privacyAppealDisclosure)"
+            )
+            ComplianceDisclosureCard(
+                title: "Revoking collaboration access",
+                systemImage: "xmark.shield.fill",
+                text: ComplianceConfiguration.collaborationRevocationDisclosure
+            )
+        }
+    }
+}
+
 struct LocalDataInfoView: View {
     var body: some View {
         List {
@@ -612,8 +747,13 @@ struct ComplianceOnboardingFlow: View {
                 Label("Manual workout logging stays free", systemImage: "checkmark.circle.fill")
                 Label("Premium Unlock is a one-time purchase", systemImage: "star.circle.fill")
                 Label("Apple Health and Apple Watch support are optional premium features", systemImage: "heart.text.square.fill")
+                Label("Optional cloud account sync and private coach collaboration", systemImage: "person.2.fill")
             }
             .foregroundStyle(.secondary)
+
+            Text(ComplianceConfiguration.onboardingPrivacyDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 

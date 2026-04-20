@@ -45,8 +45,8 @@ struct OnboardingFlowView: View {
             id: 2,
             systemImage: "lock.shield.fill",
             tint: .green,
-            title: "Private by default",
-            body: "Your workouts stay on your device. Connect Apple Health to layer in recovery signals, or keep things local — your call."
+            title: "Private on your terms",
+            body: ComplianceConfiguration.onboardingPrivacyDisclosure
         )
     ]
 

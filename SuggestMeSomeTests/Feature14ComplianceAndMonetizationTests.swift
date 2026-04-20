@@ -163,9 +163,25 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(
             ComplianceConfiguration.cloudSyncStorageDisclosure.contains("dedicated backend")
         )
+        #expect(
+            ComplianceConfiguration.onboardingPrivacyDisclosure.contains("Sign in with Apple")
+        )
+        #expect(
+            ComplianceConfiguration.onboardingPrivacyDisclosure.contains("collaborate privately")
+        )
+        #expect(
+            ComplianceConfiguration.accountSignInDisclosure.contains("Apple account identifier")
+        )
+        #expect(
+            ComplianceConfiguration.pushNotificationDisclosure.contains("APNs token")
+        )
+        #expect(
+            ComplianceConfiguration.privacyAppealDisclosure.contains(ComplianceConfiguration.privacyEmail)
+        )
 
         let privacyPolicy = ComplianceConfiguration.document(for: .privacyPolicy)
         let consumerHealthNotice = ComplianceConfiguration.document(for: .consumerHealthNotice)
+        let termsDocument = ComplianceConfiguration.document(for: .termsOfUse)
         let supportDocument = ComplianceConfiguration.document(for: .support)
 
         #expect(!privacyPolicy.containsPlaceholders)
@@ -174,11 +190,18 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(ComplianceConfiguration.privacyEmail == "privacy@suggestmesome.app")
         #expect(ComplianceConfiguration.websiteURL.absoluteString == "https://www.suggestmesome.app")
         #expect(privacyPolicy.bodyMarkdown.contains("published by **\(ComplianceConfiguration.sellerName)**"))
+        #expect(privacyPolicy.bodyMarkdown.contains("invitee email addresses"))
+        #expect(privacyPolicy.bodyMarkdown.contains("APNs device-token registrations"))
+        #expect(privacyPolicy.bodyMarkdown.contains("private progress shares"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("does not use Apple Health data for advertising"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("Washington residents"))
+        #expect(consumerHealthNotice.bodyMarkdown.contains("visibility settings"))
+        #expect(consumerHealthNotice.bodyMarkdown.contains("Revoking collaboration access stops future sharing"))
+        #expect(termsDocument.bodyMarkdown.contains("Premium Unlock is a one-time in-app purchase"))
+        #expect(termsDocument.bodyMarkdown.contains("Santa Clara County, California"))
         #expect(supportDocument.bodyMarkdown.contains("optional production-backend account sync"))
         #expect(
-            ComplianceConfiguration.releaseGateChecklist.contains(where: { $0.contains("Sign in with Apple") })
+            ComplianceConfiguration.releaseGateChecklist.contains(where: { $0.contains("Sign in with Apple") && $0.contains("push registration") })
         )
         #expect(
             ComplianceConfiguration.legalDocuments.allSatisfy { !$0.containsPlaceholders }

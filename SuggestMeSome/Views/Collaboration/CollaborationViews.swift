@@ -219,6 +219,10 @@ struct NotificationPreferencesView: View {
             if accountManager.currentUser == nil {
                 CollaborationSignedOutSection()
             } else {
+                Section("Before You Enable Notifications") {
+                    PushNotificationNoticeView()
+                }
+
                 Section {
                     LabeledContent("Status", value: pushNotificationManager.authorizationState.title)
                     if let deviceToken = pushNotificationManager.deviceTokenHex {
@@ -237,7 +241,7 @@ struct NotificationPreferencesView: View {
                 } header: {
                     Text("Notifications")
                 } footer: {
-                    Text("We only use push notifications — no email or SMS. Tapping a notification opens the relevant tab in this app.")
+                    Text("We only use push notifications — no email or SMS. Tapping a notification opens the relevant tab in this app, and you can change notification permissions later in iOS Settings.")
                 }
 
                 Section("What you'll be notified about") {
@@ -253,7 +257,9 @@ struct NotificationPreferencesView: View {
                 Section {
                     AsyncActionButton(title: "Save Preferences") {
                         await collaborationCoordinator.updateNotificationPreferences(draft.asRequest())
-                        didSaveTrigger &+= 1
+                        if collaborationCoordinator.lastErrorMessage == nil {
+                            didSaveTrigger &+= 1
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -732,10 +738,13 @@ struct RelationshipDetailView: View {
 
     let relationship: CoachRelationship
 
+    @AppStorage("collaboration.disclosure.visibilityScopes.v1") private var hasAcceptedVisibilityDisclosure = false
+
     @State private var scopeSelection: Set<CollaborationVisibilityScope> = []
     @State private var showingNoteComposer = false
     @State private var showingScopeDetails = false
     @State private var didSaveScopesTrigger = 0
+    @State private var acknowledgedVisibilityDisclosure = false
 
     var body: some View {
         List {
@@ -748,6 +757,12 @@ struct RelationshipDetailView: View {
             }
 
             Section {
+                CollaborationSharingConsentView(
+                    context: .visibilityScopes,
+                    requiresAcknowledgement: !hasAcceptedVisibilityDisclosure,
+                    isAcknowledged: $acknowledgedVisibilityDisclosure
+                )
+
                 ForEach(VisibilityPreset.allCases) { preset in
                     Button {
                         scopeSelection = Set(preset.scopes)
@@ -790,8 +805,12 @@ struct RelationshipDetailView: View {
                         relationship,
                         scopes: Array(scopeSelection).sorted { $0.rawValue < $1.rawValue }
                     )
-                    didSaveScopesTrigger &+= 1
+                    if collaborationCoordinator.lastErrorMessage == nil {
+                        hasAcceptedVisibilityDisclosure = true
+                        didSaveScopesTrigger &+= 1
+                    }
                 }
+                .disabled(!hasAcceptedVisibilityDisclosure && !acknowledgedVisibilityDisclosure)
                 .buttonStyle(.borderedProminent)
             }
 
@@ -811,6 +830,7 @@ struct RelationshipDetailView: View {
         .sensoryFeedback(.success, trigger: didSaveScopesTrigger)
         .onAppear {
             scopeSelection = Set(relationship.visibilityScopes)
+            acknowledgedVisibilityDisclosure = hasAcceptedVisibilityDisclosure
         }
         .sheet(isPresented: $showingNoteComposer) {
             NavigationStack {
@@ -926,6 +946,10 @@ struct PrivateSharingCenterView: View {
                             )
                         }
                     }
+                }
+
+                Section("Revocation") {
+                    PrivacyRevocationExplainerView()
                 }
             }
         }
@@ -1254,7 +1278,9 @@ private struct CollaborationSummarySection: View {
 private struct CollaborationSignedOutSection: View {
     var body: some View {
         Section {
-            Text("Sign in with Apple to invite a coach, swap programs privately, and see smart coaching.")
+            AccountSignInNoticeView()
+            Text("Sign in to invite a coach, swap programs privately, and sync the collaboration tools tied to your account.")
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             NavigationLink {
                 AccountSettingsView()
@@ -1321,16 +1347,20 @@ private struct InviteRow: View {
 private struct CreateCoachInviteView: View {
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
 
+    @AppStorage("collaboration.disclosure.invite.v1") private var hasAcceptedInviteDisclosure = false
+
     @State private var inviteeEmail = ""
     @State private var noteText = ""
     @State private var inviterRole: CollaborationRole = .coach
     @State private var preset: VisibilityPreset = .full
+    @State private var acknowledgedInviteDisclosure = false
 
     var body: some View {
         FormComposerScaffold(
             title: "Send Invite",
             sendLabel: "Send",
-            isSendDisabled: inviteeEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            isSendDisabled: inviteeEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || (!hasAcceptedInviteDisclosure && !acknowledgedInviteDisclosure),
             send: {
                 await collaborationCoordinator.createCoachInvite(
                     inviteeEmail: inviteeEmail,
@@ -1338,8 +1368,19 @@ private struct CreateCoachInviteView: View {
                     inviterRole: inviterRole,
                     scopes: preset.scopes.sorted { $0.rawValue < $1.rawValue }
                 )
+                if collaborationCoordinator.lastErrorMessage == nil {
+                    hasAcceptedInviteDisclosure = true
+                }
             }
         ) {
+            Section("Sharing disclosure") {
+                CollaborationSharingConsentView(
+                    context: .coachInvite,
+                    requiresAcknowledgement: !hasAcceptedInviteDisclosure,
+                    isAcknowledged: $acknowledgedInviteDisclosure
+                )
+            }
+
             Section("Who") {
                 TextField("Email", text: $inviteeEmail)
                     .textInputAutocapitalization(.never)
@@ -1370,6 +1411,9 @@ private struct CreateCoachInviteView: View {
             Section("Personal note") {
                 TextField("Optional", text: $noteText, axis: .vertical)
             }
+        }
+        .onAppear {
+            acknowledgedInviteDisclosure = hasAcceptedInviteDisclosure
         }
     }
 }
@@ -1512,12 +1556,15 @@ private struct ProgramShareComposerView: View {
 
     let blueprint: SavedProgramBlueprint
 
+    @AppStorage("collaboration.disclosure.privateShare.v1") private var hasAcceptedPrivateShareDisclosure = false
+
     @State private var selectedRelationshipID = ""
     @State private var messageText = ""
     @State private var shareKind: ProgramShareKind = .blueprint
     @State private var showingConfirm = false
     @State private var isSending = false
     @State private var errorMessage: String?
+    @State private var acknowledgedPrivateShareDisclosure = false
 
     private var relationships: [CoachRelationship] {
         collaborationCoordinator.relationships.filter { $0.status == .active }
@@ -1546,6 +1593,13 @@ private struct ProgramShareComposerView: View {
                     }
                 }
             }
+            Section("Sharing disclosure") {
+                CollaborationSharingConsentView(
+                    context: .programShare,
+                    requiresAcknowledgement: !hasAcceptedPrivateShareDisclosure,
+                    isAcknowledged: $acknowledgedPrivateShareDisclosure
+                )
+            }
             Section("Message") {
                 TextField("Optional", text: $messageText, axis: .vertical)
             }
@@ -1554,6 +1608,7 @@ private struct ProgramShareComposerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             selectedRelationshipID = relationships.first?.stableID ?? ""
+            acknowledgedPrivateShareDisclosure = hasAcceptedPrivateShareDisclosure
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -1564,7 +1619,7 @@ private struct ProgramShareComposerView: View {
                     ProgressView()
                 } else {
                     Button("Share") { showingConfirm = true }
-                        .disabled(selectedRelationshipID.isEmpty)
+                        .disabled(selectedRelationshipID.isEmpty || (!hasAcceptedPrivateShareDisclosure && !acknowledgedPrivateShareDisclosure))
                 }
             }
         }
@@ -1598,6 +1653,7 @@ private struct ProgramShareComposerView: View {
         if let pending = collaborationCoordinator.lastErrorMessage {
             errorMessage = pending
         } else {
+            hasAcceptedPrivateShareDisclosure = true
             dismiss()
         }
     }
@@ -1609,11 +1665,14 @@ private struct ProgressShareComposerView: View {
 
     let snapshot: InsightSnapshot
 
+    @AppStorage("collaboration.disclosure.privateShare.v1") private var hasAcceptedPrivateShareDisclosure = false
+
     @State private var selectedRelationshipID = ""
     @State private var kind: ProgressShareKind = .completedBlockSummary
     @State private var showingConfirm = false
     @State private var isSending = false
     @State private var errorMessage: String?
+    @State private var acknowledgedPrivateShareDisclosure = false
 
     private var relationships: [CoachRelationship] {
         collaborationCoordinator.relationships.filter { $0.status == .active }
@@ -1648,11 +1707,19 @@ private struct ProgressShareComposerView: View {
                     }
                 }
             }
+            Section("Sharing disclosure") {
+                CollaborationSharingConsentView(
+                    context: .progressShare,
+                    requiresAcknowledgement: !hasAcceptedPrivateShareDisclosure,
+                    isAcknowledged: $acknowledgedPrivateShareDisclosure
+                )
+            }
         }
         .navigationTitle("Share Progress")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             selectedRelationshipID = relationships.first?.stableID ?? ""
+            acknowledgedPrivateShareDisclosure = hasAcceptedPrivateShareDisclosure
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -1663,7 +1730,7 @@ private struct ProgressShareComposerView: View {
                     ProgressView()
                 } else {
                     Button("Share") { showingConfirm = true }
-                        .disabled(selectedRelationshipID.isEmpty)
+                        .disabled(selectedRelationshipID.isEmpty || (!hasAcceptedPrivateShareDisclosure && !acknowledgedPrivateShareDisclosure))
                 }
             }
         }
@@ -1703,6 +1770,7 @@ private struct ProgressShareComposerView: View {
         if let pending = collaborationCoordinator.lastErrorMessage {
             errorMessage = pending
         } else {
+            hasAcceptedPrivateShareDisclosure = true
             dismiss()
         }
     }

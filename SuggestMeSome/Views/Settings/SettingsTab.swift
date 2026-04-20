@@ -257,7 +257,7 @@ struct SettingsTab: View {
         } header: {
             Text("Cloud Sync")
         } footer: {
-            Text("Cloud sync keeps workouts, programs, daily coaching, adaptive history, and key training preferences aligned across signed-in devices. Apple Health-derived recovery data stays on this device in Feature 18.")
+            Text("\(ComplianceConfiguration.cloudSyncStorageDisclosure) \(ComplianceConfiguration.collaborationDataDisclosure)")
         }
     }
 
@@ -315,19 +315,19 @@ struct SettingsTab: View {
                     Label("What's included", systemImage: "sparkles")
                         .font(.headline)
                     VStack(alignment: .leading, spacing: 10) {
-                        infoBullet("Invite coaches by email — no accounts needed on their side until they accept.")
-                        infoBullet("Share programs or progress read-only, and pull it back whenever you want.")
+                        infoBullet(ComplianceConfiguration.accountSignInDisclosure)
+                        infoBullet("Invite coaches by email, share programs or progress privately, and update visibility scopes whenever you need to.")
                         infoBullet("Get weekly summaries and smart nudges based on what you actually trained.")
-                        infoBullet("We only use push notifications — no email or SMS.")
+                        infoBullet(ComplianceConfiguration.pushNotificationDisclosure)
                     }
 
                     Label("Your privacy", systemImage: "lock.shield")
                         .font(.headline)
                         .padding(.top, 8)
                     VStack(alignment: .leading, spacing: 10) {
-                        infoBullet("Every share is explicit — we don't broadcast anything without your tap.")
-                        infoBullet("Coaches see only what you choose: programs, runs, notes, or summaries.")
-                        infoBullet("Apple Health recovery data stays on your device and is never shared.")
+                        infoBullet(ComplianceConfiguration.collaborationSharingDisclosure)
+                        infoBullet("Coaches see only what you choose: programs, runs, notes, summaries, and any scopes you explicitly enable.")
+                        infoBullet(ComplianceConfiguration.collaborationRevocationDisclosure)
                     }
                 }
                 .padding()

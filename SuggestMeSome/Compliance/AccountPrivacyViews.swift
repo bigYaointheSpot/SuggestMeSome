@@ -104,9 +104,7 @@ struct AccountSettingsView: View {
     private var signedOutSection: some View {
         Section {
             if accountManager.launchMode == .productionBackend {
-                Text("Connect your account with Sign in with Apple to sync workouts, programs, daily coaching, adaptive history, privacy requests, and key training preferences across devices.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                AccountSignInNoticeView()
 
                 SignInWithAppleButton(.signIn) { request in
                     request.requestedScopes = [.fullName, .email]
@@ -265,7 +263,10 @@ struct DataExportRequestView: View {
     var body: some View {
         List {
             Section("Cloud Rights Requests") {
-                Text("Use these controls to submit access and export requests for backend-held account and training data. Apple Health-derived recovery data is not sent off device in this release.")
+                Text("Use these controls to submit access and export requests for backend-held account, collaboration, notification-preference, and synced training data. Apple Health-derived recovery data is not sent off device in this release.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(ComplianceConfiguration.privacyRightsDisclosure)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -310,7 +311,7 @@ struct DataExportRequestView: View {
             } header: {
                 Text("Cloud Export")
             } footer: {
-                Text("This export comes from the account backend and contains synced account, privacy, and training records available to your connected account.")
+                Text("This export comes from the account backend and contains synced account, collaboration, privacy, notification-preference, and training records available to your connected account. Where required by law, export responses may identify categories of recipients or processors.")
             }
 
             if accountManager.currentAccountPrivacyRequests.isEmpty == false {
@@ -329,6 +330,10 @@ struct DataExportRequestView: View {
                         .padding(.vertical, 4)
                     }
                 }
+            }
+
+            Section("Appeals & Revocation") {
+                PrivacyRevocationExplainerView()
             }
         }
         .navigationTitle("Access & Export")
@@ -359,14 +364,24 @@ struct PrivacyChoicesView: View {
 
     var body: some View {
         List {
-            Section("Consumer Health Sync Consent") {
+            Section("Account and Sync") {
+                AccountSignInNoticeView()
+                Text(ComplianceConfiguration.cloudSyncStorageDisclosure)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(ComplianceConfiguration.collaborationDataDisclosure)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Consumer Health Sync and Sharing") {
                 Label("Apple Health-derived recovery data stays on this device", systemImage: "iphone")
                     .foregroundStyle(.secondary)
 
                 Text(ComplianceConfiguration.consumerHealthDataDisclosure)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Text(ComplianceConfiguration.cloudSyncStorageDisclosure)
+                Text(ComplianceConfiguration.collaborationSharingDisclosure)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Text(ComplianceConfiguration.doctorCheckDisclosure)
@@ -381,7 +396,11 @@ struct PrivacyChoicesView: View {
             } header: {
                 Text("Categories Covered")
             } footer: {
-                Text("These categories describe sensitive training and wellness context. In Feature 18, synced cloud data covers training and coaching records only; Apple Health-derived recovery inputs do not leave the device.")
+                Text("These categories describe sensitive training and wellness context. Synced cloud data covers account, collaboration, notification-preference, and training records, while Apple Health-derived recovery inputs do not leave the device in this release.")
+            }
+
+            Section("Revocation, Deletion, and Appeals") {
+                PrivacyRevocationExplainerView()
             }
         }
         .navigationTitle("Privacy Choices")
@@ -413,7 +432,7 @@ struct DeleteAccountView: View {
             } header: {
                 Text("Delete Requests")
             } footer: {
-                Text("Delete-data and delete-account requests are sent to the account backend for synced training and privacy records. Apple Health-derived recovery data stays on device in this release.")
+                Text("Delete-data and delete-account requests are sent to the account backend for synced training, collaboration, privacy, and notification-preference records. Apple Health-derived recovery data stays on device in this release.")
             }
 
             Section("Delete This Cloud Account") {
@@ -425,6 +444,16 @@ struct DeleteAccountView: View {
                 Text("Deleting the cloud account removes backend-held account and synced training data, then signs this device out. Local training history on this device is not deleted automatically.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                Text(ComplianceConfiguration.privacyRightsDisclosure)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(ComplianceConfiguration.privacyAppealDisclosure)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Revocation and Separate Data Stores") {
+                PrivacyRevocationExplainerView()
             }
         }
         .navigationTitle("Delete Account")
@@ -480,7 +509,7 @@ struct CloudSyncSettingsView: View {
                 }
                 .disabled(accountManager.currentUser == nil)
             } footer: {
-                Text("Cloud sync covers workouts, programs, program runs, daily coaching records, adaptive history, privacy requests, and key training preferences. Apple Health-derived recovery data stays on device in this release.")
+                Text("Cloud sync covers workouts, programs, program runs, daily coaching records, adaptive history, collaboration records, privacy requests, and key training preferences. Apple Health-derived recovery data stays on device in this release.")
             }
 
             Section("Recent Activity") {

@@ -182,7 +182,7 @@ final class CollaborationCoordinator {
         case .premiumRequired:
             errorTracker.recordErrorMessage(
                 endpoint,
-                message: "Coach collaboration requires a premium subscription."
+                message: "Coach collaboration requires Premium Unlock."
             )
             return false
         }
