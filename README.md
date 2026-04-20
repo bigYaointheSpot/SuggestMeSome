@@ -4104,6 +4104,26 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests -only-testing:SuggestMeSomeTests/Feature20CloudClientCacheTests`
 
+#### Prompt 3 [Broader DS adoption — shared badge/chip/toast, zoom transitions, material overlays] — 2026-04-19
+
+- Added three shared DS building blocks in `Views/DesignSystem/` so the rest of the app can stop re-implementing them inline:
+  - `DSBadge` — pill-shaped status label with a semantic tone (accent/positive/caution/critical/neutral) and optional leading SF Symbol. Supports an explicit `tint:` override for dynamic semantic colors (e.g., ObjectiveRecoveryStatus.dsAccentColor) that can't be expressed as a static tone case
+  - `DSChip` — metric chip (icon + value + optional label) using `.monospacedDigit()` on the value so rows like "🔥 78 RPE 8" align correctly under different numeric widths
+  - `DSToast` — transient confirmation with an `.ultraThinMaterial`-backed capsule, auto-dismiss via `task(id:)` after 2.2s, spring animation, combined move+opacity transition. Targets future "saved" / "copied" / "shared" micro-confirmations via `.overlay(alignment: .top) { DSToast(isPresented: $x, text: ...) }`
+- Folded bespoke Capsule constructions onto the shared components:
+  - `CollaborationViews.swift` — the three StatusBadge(text:) callsites on assignment status, invite status, and the "New" freshness marker now use `DSBadge(text)` with the default indigo accent tone; dropped the file-private `StatusBadge` struct entirely
+  - `RecoveryPressureCard.swift` — the three sleep/HRV/RHR metric chips driven by `ObjectiveRecoveryInsight.status.dsAccentColor` now use `DSBadge` with the new `tint:` override so dynamic semantic colors keep working; dropped the file-private `metricChip` helper
+- Added iOS 18 `.navigationTransition(.zoom(sourceID:in:))` + `.matchedTransitionSource(id:in:)` pairs on two high-value card → detail pushes:
+  - `WorkoutsTab` → `WorkoutDetailView` — workout history rows zoom into the detail view on tap; swipe-to-delete still works because the transition source is attached outside the NavigationLink label
+  - `CoachRosterView` → `InsightSnapshotDetailView` — coach-facing roster rows zoom into the snapshot detail
+  - Original plan listed "program card → detail" and "PR badge → PR detail" — those two don't map to the current navigation shapes (programs expand inline, PR rows don't push) so the workout history and roster pushes are the equivalent surfaces
+- Upgraded the centered `CheckInFormView` success splash from `.regularMaterial` to `.ultraThinMaterial` with a faint indigo stroke border so it reads as a layered glass surface over the check-in form, matching Apple Fitness/Health splash treatment. Active-workout banner keeps its solid indigo background (brand color, full-opacity), and the weekly-digest card's `.thinMaterial` stays — both are standalone surfaces rather than overlays on top of other content
+- Confirmed the charting surfaces are already on Swift Charts — `Sparkline.swift` uses `LineMark + AreaMark`, the strength-over-time lift chart uses `LineMark + PointMark`, and the weekly-frequency bar chart plus volume-by-muscle bar chart use `BarMark + RuleMark` annotations. The original plan called for migrating the PR chart (doesn't exist as a chart; the PR feed is a list of rows) and `BodyHeatmapView` (a 2-column legend grid that would be a visual redesign to flatten into BarMark). Both deferred to a future pass as redesigns, not behavior-preserving migrations
+- Skipped the ring-progress rest timer bullet — there's no iPhone rest-timer UI to ring-ify (rest timer lives on the Watch target via `WatchRestTimerController.swift`, which is out of Feature 20 scope)
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests`
+
 ### Feature 21 — Cloud, collaboration, and consumer-health disclosure hardening
 
 **Status:** Complete
