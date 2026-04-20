@@ -137,6 +137,7 @@ struct ActiveWorkoutSession: Identifiable, Codable, Equatable {
 @Observable
 final class ActiveWorkoutSessionStore {
     private let persistenceStore: ActiveWorkoutSessionPersistenceStore
+    private let liveActivityBridge: (any WorkoutLiveActivityBridging)?
     private var appliedWatchActionIDs: Set<UUID> = []
 
     var latestWatchMetrics: WatchWorkoutMetricsPayload?
@@ -145,6 +146,7 @@ final class ActiveWorkoutSessionStore {
     var session: ActiveWorkoutSession? {
         didSet {
             persistSession()
+            syncLiveActivity(oldValue: oldValue, newValue: session)
         }
     }
 
@@ -154,12 +156,14 @@ final class ActiveWorkoutSessionStore {
 
     init(
         userDefaults: UserDefaults = .standard,
-        persistenceKey: String = "activeWorkoutSession.v1"
+        persistenceKey: String = "activeWorkoutSession.v1",
+        liveActivityBridge: (any WorkoutLiveActivityBridging)? = WorkoutLiveActivityController.shared
     ) {
         self.persistenceStore = ActiveWorkoutSessionPersistenceStore(
             userDefaults: userDefaults,
             persistenceKey: persistenceKey
         )
+        self.liveActivityBridge = liveActivityBridge
         self.session = persistenceStore.load()
     }
 
@@ -324,6 +328,30 @@ final class ActiveWorkoutSessionStore {
 
     private func persistSession() {
         _ = persistenceStore.save(session)
+    }
+
+    /// Bridge the session-lifecycle `didSet` transitions into
+    /// Live Activity start / update / end calls. Handles all four
+    /// transitions (nil→nil no-op, nil→value start, value→nil end,
+    /// value→value update-or-swap). Tests inject a mock bridge.
+    private func syncLiveActivity(
+        oldValue: ActiveWorkoutSession?,
+        newValue: ActiveWorkoutSession?
+    ) {
+        guard let liveActivityBridge else { return }
+        switch (oldValue, newValue) {
+        case (nil, nil):
+            return
+        case (nil, .some(let new)):
+            liveActivityBridge.startLiveActivity(for: new)
+        case (.some(let old), nil):
+            liveActivityBridge.endLiveActivity(sessionID: old.id)
+        case (.some(let old), .some(let new)) where old.id == new.id:
+            liveActivityBridge.updateLiveActivity(for: new)
+        case (.some(let old), .some(let new)):
+            liveActivityBridge.endLiveActivity(sessionID: old.id)
+            liveActivityBridge.startLiveActivity(for: new)
+        }
     }
 
     private func setSessionIfChanged(_ newSession: ActiveWorkoutSession?) {

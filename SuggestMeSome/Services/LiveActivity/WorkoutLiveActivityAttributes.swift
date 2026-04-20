@@ -134,15 +134,13 @@ extension WorkoutLiveActivityAttributes.ContentState {
         ).uppercased()
     }
 
-    /// Compact human-readable target for the next pending set —
-    /// "3 × 8 @ 185 lbs", "2 × 12" for bodyweight, nil when the session
-    /// is fully logged.
+    /// Compact human-readable target for the next pending strength set —
+    /// "Set 3/8 · 8 × 185 lbs", "Set 1/1 · 10 reps" for bodyweight, nil
+    /// when the session is fully logged or only cardio remains (cardio
+    /// has no per-set progression, so we fall back to the title line).
     static func nextSetTarget(in session: ActiveWorkoutSession) -> String? {
         for entry in session.exerciseEntries {
-            if entry.isCardio {
-                if WatchPayloadMapper.isExerciseComplete(entry) { continue }
-                return "\(entry.cardioMinutesText.isEmpty ? "0" : entry.cardioMinutesText) min"
-            }
+            if entry.isCardio { continue }
             if let pendingIndex = entry.sets.firstIndex(where: { !WatchPayloadMapper.isSetLogged($0) }) {
                 let set = entry.sets[pendingIndex]
                 let reps = set.repsText.isEmpty ? "–" : set.repsText

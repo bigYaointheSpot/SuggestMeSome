@@ -23,8 +23,30 @@ import Foundation
 import ActivityKit
 #endif
 
+/// Protocol-based seam so tests can substitute a counting mock without
+/// pulling in ActivityKit. Covers the three session-lifecycle events
+/// ActiveWorkoutSessionStore's `session.didSet` needs to fan out to.
 @MainActor
-final class WorkoutLiveActivityController {
+protocol WorkoutLiveActivityBridging: AnyObject {
+    func startLiveActivity(for session: ActiveWorkoutSession)
+    func updateLiveActivity(for session: ActiveWorkoutSession)
+    func endLiveActivity(sessionID: UUID)
+}
+
+@MainActor
+final class WorkoutLiveActivityController: WorkoutLiveActivityBridging {
+    func startLiveActivity(for session: ActiveWorkoutSession) {
+        start(for: session)
+    }
+
+    func updateLiveActivity(for session: ActiveWorkoutSession) {
+        update(for: session)
+    }
+
+    func endLiveActivity(sessionID: UUID) {
+        end(sessionID: sessionID)
+    }
+
     /// Shared instance wired into `ActiveWorkoutSessionStore.session.didSet`
     /// via `SuggestMeSomeApp.onAppear`. Singleton is acceptable here
     /// because Live Activities are a process-wide resource — only one
