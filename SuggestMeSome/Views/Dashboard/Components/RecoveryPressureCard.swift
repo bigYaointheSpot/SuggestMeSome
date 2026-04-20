@@ -36,9 +36,9 @@ struct RecoveryPressureCard: View {
 
                 if let insight = healthKitInsight {
                     HStack(spacing: DSSpacing.s) {
-                        metricChip(icon: "bed.double.fill", label: "Sleep", tint: insight.status.dsAccentColor)
-                        metricChip(icon: "waveform.path.ecg", label: "HRV",  tint: insight.status.dsAccentColor)
-                        metricChip(icon: "heart.fill",        label: "RHR",  tint: insight.status.dsAccentColor)
+                        DSBadge("Sleep", tint: insight.status.dsAccentColor, systemImage: "bed.double.fill")
+                        DSBadge("HRV",   tint: insight.status.dsAccentColor, systemImage: "waveform.path.ecg")
+                        DSBadge("RHR",   tint: insight.status.dsAccentColor, systemImage: "heart.fill")
                     }
                 }
             }
@@ -110,20 +110,6 @@ struct RecoveryPressureCard: View {
         case .elevated:
             return "Why: recovery signals and adherence are strong. There's room to push."
         }
-    }
-
-    private func metricChip(icon: String, label: String, tint: Color) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.caption2.weight(.semibold))
-            Text(label)
-                .font(.caption2.weight(.semibold))
-        }
-        .padding(.horizontal, DSSpacing.s)
-        .padding(.vertical, 4)
-        .foregroundStyle(tint)
-        .background(tint.opacity(0.12))
-        .clipShape(Capsule())
     }
 
     private func rowLine(label: String, value: String, tint: Color) -> some View {

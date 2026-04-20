@@ -608,7 +608,7 @@ private struct AssignmentCard: View {
                 Text(counterpartName)
                     .font(.headline)
                 Spacer()
-                StatusBadge(text: assignment.status.title)
+                DSBadge(assignment.status.title)
             }
 
             if let notesText = assignment.notesText, !notesText.isEmpty {
@@ -710,7 +710,7 @@ private struct CoachNoteRow: View {
                     .font(.headline)
                 Spacer()
                 if note.isUnread {
-                    StatusBadge(text: "New")
+                    DSBadge("New")
                 }
             }
             Text(note.bodyText)
@@ -1309,7 +1309,7 @@ private struct InviteRow: View {
                 Text(invite.inviterDisplayName)
                     .font(.headline)
                 Spacer()
-                StatusBadge(text: invite.status.title)
+                DSBadge(invite.status.title)
             }
             Text(invite.inviteeEmail)
                 .font(.footnote)
@@ -1358,23 +1358,9 @@ private struct InviteRow: View {
 
 // FormComposerScaffold, ProgressSharePayload, and the nilIfEmpty helpers
 // moved to CollaborationComposers.swift alongside the composers that are
-// their only callers. StatusBadge and NotificationPreferenceDraft stay
-// here since they're consumed only within this file.
-
-private struct StatusBadge: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.indigo.opacity(0.12))
-            .foregroundStyle(.indigo)
-            .clipShape(Capsule())
-            .accessibilityLabel("Status: \(text)")
-    }
-}
+// their only callers. NotificationPreferenceDraft stays here because it
+// only renders inside NotificationPreferencesView; the earlier private
+// StatusBadge has been folded into the shared DSBadge.
 
 // MARK: - Models / Helpers
 

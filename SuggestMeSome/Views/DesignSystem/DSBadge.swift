@@ -42,12 +42,28 @@ struct DSBadge: View {
 
     let text: String
     var tone: Tone = .accent
+    /// When set, overrides the tone enum with this color (used for
+    /// dynamic semantic colors like ObjectiveRecoveryStatus.dsAccentColor
+    /// that can't be expressed as a static tone case).
+    var tintOverride: Color? = nil
     var systemImage: String? = nil
 
-    init(_ text: String, tone: Tone = .accent, systemImage: String? = nil) {
+    init(
+        _ text: String,
+        tone: Tone = .accent,
+        tint: Color? = nil,
+        systemImage: String? = nil
+    ) {
         self.text = text
         self.tone = tone
+        self.tintOverride = tint
         self.systemImage = systemImage
+    }
+
+    private var foreground: Color { tintOverride ?? tone.foreground }
+    private var background: Color {
+        if let tintOverride { return tintOverride.opacity(0.12) }
+        return tone.background
     }
 
     var body: some View {
@@ -61,8 +77,8 @@ struct DSBadge: View {
         }
         .padding(.horizontal, DSSpacing.s)
         .padding(.vertical, 4)
-        .background(tone.background)
-        .foregroundStyle(tone.foreground)
+        .background(background)
+        .foregroundStyle(foreground)
         .clipShape(Capsule())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Status: \(text)")
