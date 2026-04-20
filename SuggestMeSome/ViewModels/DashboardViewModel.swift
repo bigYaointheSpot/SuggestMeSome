@@ -77,6 +77,13 @@ struct DashboardRefreshInputs {
     var recentAnalysis: WeeklyTrainingAnalysis? = nil
     var pendingProposals: [AdaptationProposal] = []
     var significantLiftTrends: [LiftPerformanceTrend] = []
+    /// Active program runs pre-sorted by start date desc so the view doesn't
+    /// re-sort on every body invocation.
+    var sortedActiveProgramRuns: [ProgramRun] = []
+    /// Per-PR weight delta against the previous best, precomputed once per
+    /// refresh so the PR feed doesn't call StrengthAnalytics.previousBest on
+    /// every render. Keyed by PR.id; absent when no prior record existed.
+    var recentPRDeltas: [UUID: Double] = [:]
 
     var workoutFrequencyBuckets: [WeekBucket] = []
     var frequencyTarget: Double = 3
@@ -201,6 +208,12 @@ struct DashboardRefreshInputs {
                     points: strengthChartData.filter { $0.exerciseName == lift.name }
                 )
             }
+        let sortedActiveProgramRuns = refreshInputs.activeProgramRuns
+            .sorted { $0.startDate > $1.startDate }
+        let recentPRDeltas = buildRecentPRDeltas(
+            prs: Array(refreshInputs.allPRs.prefix(5)),
+            workouts: refreshInputs.workouts
+        )
 
         self.filteredWorkouts = filteredWorkouts
         self.workoutCount = filteredWorkouts.count
@@ -227,6 +240,8 @@ struct DashboardRefreshInputs {
         self.streakSparkline = workoutFrequencyBuckets.map { $0.count > 0 ? 1 : 0 }
         self.activeLiftData = activeLiftData
         self.activeProgramProgressSnapshots = activeProgramProgressSnapshots
+        self.sortedActiveProgramRuns = sortedActiveProgramRuns
+        self.recentPRDeltas = recentPRDeltas
         self.perMuscleSaturation = latestTrainingStateSnapshot?.perMuscleStressSaturation ?? [:]
         self.recoveryPressure = latestTrainingStateSnapshot?.recoveryPressure ?? .neutral
         self.snapshotFatigueStatus = latestTrainingStateSnapshot?.fatigueStatus ?? recentAnalysis?.fatigueStatus
@@ -234,6 +249,27 @@ struct DashboardRefreshInputs {
     }
 
     // MARK: - Analytics builders
+
+    /// Precompute each top-5 PR's weight delta vs. the previous best so the
+    /// view never calls StrengthAnalytics.previousBest(...) inside a ForEach.
+    private func buildRecentPRDeltas(
+        prs: [PersonalRecord],
+        workouts: [Workout]
+    ) -> [UUID: Double] {
+        var deltas: [UUID: Double] = [:]
+        for pr in prs {
+            if let previous = StrengthAnalytics.previousBest(
+                exerciseName: pr.exerciseName,
+                repCount: pr.repCount,
+                unit: pr.unit,
+                before: pr.dateAchieved,
+                workouts: workouts
+            ) {
+                deltas[pr.id] = pr.weight - previous
+            }
+        }
+        return deltas
+    }
 
     private func buildFilteredWorkouts(from workouts: [Workout]) -> [Workout] {
         guard let cutoff = timeWindow.startDate else { return workouts }

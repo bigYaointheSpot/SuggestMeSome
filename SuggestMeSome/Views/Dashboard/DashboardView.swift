@@ -158,7 +158,7 @@ struct DashboardView: View {
                 }
             }
             .navigationDestination(isPresented: $viewModel.showingProposalReview) {
-                if let run = viewModel.activeProgramRuns.sorted(by: { $0.startDate > $1.startDate }).first {
+                if let run = viewModel.sortedActiveProgramRuns.first {
                     AdaptationProposalReviewView(run: run)
                 }
             }
@@ -792,14 +792,7 @@ struct DashboardView: View {
                 } else {
                     VStack(spacing: DSSpacing.s) {
                         ForEach(viewModel.allPRs.prefix(5)) { pr in
-                            let delta = StrengthAnalytics.previousBest(
-                                exerciseName: pr.exerciseName,
-                                repCount: pr.repCount,
-                                unit: pr.unit,
-                                before: pr.dateAchieved,
-                                workouts: viewModel.workouts
-                            ).map { pr.weight - $0 }
-                            PRFeedRow(pr: pr, delta: delta)
+                            PRFeedRow(pr: pr, delta: viewModel.recentPRDeltas[pr.id])
                         }
                     }
                 }
@@ -815,12 +808,10 @@ struct DashboardView: View {
     // MARK: - Active Program Section
 
     private var activeProgramSection: some View {
-        let sortedRuns = viewModel.activeProgramRuns.sorted { $0.startDate > $1.startDate }
-
-        return VStack(alignment: .leading, spacing: DSSpacing.m) {
+        VStack(alignment: .leading, spacing: DSSpacing.m) {
             DSSectionHeader(icon: "list.clipboard", title: "Active Program")
 
-            if let run = sortedRuns.first, let program = run.program {
+            if let run = viewModel.sortedActiveProgramRuns.first, let program = run.program {
                 let latestAnalysis = viewModel.weeklyAnalyses.first {
                     $0.programRun?.id == run.id && $0.isFinalized
                 }
