@@ -87,32 +87,33 @@ final class CollaborationCoordinator {
 
     // MARK: - Derived-view caches
     //
-    // These @ObservationIgnored holders memoize the filter work used by
-    // coachRelationships, athleteRelationships, incomingPendingInvites,
-    // outgoingPendingInvites, coachRosterSnapshots, and hasAnyCollaboration
-    // so filters don't rerun on every SwiftUI body call. Each holder is
-    // invalidated inside `loadCache()` and `clearInMemoryState()` — the
-    // only places where the source arrays mutate.
+    // Memoize the remaining coordinator-owned filters so they don't rerun
+    // on every SwiftUI body call. Relationships/invites derived views
+    // moved into CollaborationRelationshipsStore. Each holder invalidates
+    // in `loadCache()` and `clearInMemoryState()` alongside the store.
 
-    @ObservationIgnored private let coachRelationshipsCache = CachedDerivation<[CoachRelationship]>()
-    @ObservationIgnored private let athleteRelationshipsCache = CachedDerivation<[CoachRelationship]>()
-    @ObservationIgnored private let incomingPendingInvitesCache = CachedDerivation<[CoachInvite]>()
-    @ObservationIgnored private let outgoingPendingInvitesCache = CachedDerivation<[CoachInvite]>()
     @ObservationIgnored private let coachRosterSnapshotsCache = CachedDerivation<[InsightSnapshot]>()
     @ObservationIgnored private let hasAnyCollaborationCache = CachedDerivation<Bool>()
 
     private func invalidateDerivedCaches() {
-        coachRelationshipsCache.invalidate()
-        athleteRelationshipsCache.invalidate()
-        incomingPendingInvitesCache.invalidate()
-        outgoingPendingInvitesCache.invalidate()
         coachRosterSnapshotsCache.invalidate()
         hasAnyCollaborationCache.invalidate()
     }
 
+    // MARK: - Sub-stores
+
+    /// Owns CoachRelationship + CoachInvite state, the role-partitioned
+    /// and invite-direction derived views, and the invite-presentation
+    /// helpers. The coordinator's `relationships` / `invites` / derived
+    /// view properties forward to it so existing call sites read through.
+    @ObservationIgnored private lazy var relationshipsStore = CollaborationRelationshipsStore(
+        currentAccountIDProvider: { [weak self] in self?.currentAccountID },
+        currentAccountEmailProvider: { [weak self] in self?.currentAccountEmail }
+    )
+
     private(set) var phase: CollaborationSyncPhase = .signedOut
-    private(set) var relationships: [CoachRelationship] = []
-    private(set) var invites: [CoachInvite] = []
+    var relationships: [CoachRelationship] { relationshipsStore.relationships }
+    var invites: [CoachInvite] { relationshipsStore.invites }
     private(set) var assignments: [ProgramAssignment] = []
     private(set) var notes: [CoachNote] = []
     private(set) var notificationPreference: NotificationPreference?
@@ -212,33 +213,11 @@ final class CollaborationCoordinator {
         }
     }
 
-    var coachRelationships: [CoachRelationship] {
-        coachRelationshipsCache.get {
-            relationships.filter { $0.currentRole(for: currentAccountID) == .coach }
-        }
-    }
-
-    var athleteRelationships: [CoachRelationship] {
-        athleteRelationshipsCache.get {
-            relationships.filter { $0.currentRole(for: currentAccountID) == .athlete }
-        }
-    }
-
-    var pendingInvites: [CoachInvite] {
-        invites.filter { $0.status == .pending }
-    }
-
-    var incomingPendingInvites: [CoachInvite] {
-        incomingPendingInvitesCache.get {
-            invites.filter { invitePresentationMode(for: $0) == .incomingPending }
-        }
-    }
-
-    var outgoingPendingInvites: [CoachInvite] {
-        outgoingPendingInvitesCache.get {
-            invites.filter { invitePresentationMode(for: $0) == .outgoingPending }
-        }
-    }
+    var coachRelationships: [CoachRelationship] { relationshipsStore.coachRelationships }
+    var athleteRelationships: [CoachRelationship] { relationshipsStore.athleteRelationships }
+    var pendingInvites: [CoachInvite] { relationshipsStore.pendingInvites }
+    var incomingPendingInvites: [CoachInvite] { relationshipsStore.incomingPendingInvites }
+    var outgoingPendingInvites: [CoachInvite] { relationshipsStore.outgoingPendingInvites }
 
     var inboxAssignments: [ProgramAssignment] {
         assignments.filter { assignment in
@@ -442,7 +421,7 @@ final class CollaborationCoordinator {
     }
 
     func canWriteCoachNote(for relationship: CoachRelationship) -> Bool {
-        relationship.currentRole(for: currentAccountID) == .coach
+        relationshipsStore.canWriteCoachNote(for: relationship)
     }
 
     func canActOnAssignment(_ assignment: ProgramAssignment) -> Bool {
@@ -450,14 +429,7 @@ final class CollaborationCoordinator {
     }
 
     func invitePresentationMode(for invite: CoachInvite) -> InvitePresentationMode {
-        guard invite.status == .pending else { return .readOnly }
-        if isIncomingInvite(invite) {
-            return .incomingPending
-        }
-        if invite.inviterAccountID == currentAccountID {
-            return .outgoingPending
-        }
-        return .readOnly
+        relationshipsStore.invitePresentationMode(for: invite)
     }
 
     private func syncPushRegistrationIfNeeded(deviceToken: String?) async {
@@ -945,8 +917,10 @@ final class CollaborationCoordinator {
             return
         }
 
-        relationships = snapshot.relationships
-        invites = snapshot.invites
+        relationshipsStore.apply(
+            relationships: snapshot.relationships,
+            invites: snapshot.invites
+        )
         assignments = snapshot.assignments
         notes = snapshot.notes
         notificationPreference = snapshot.notificationPreference
@@ -960,8 +934,7 @@ final class CollaborationCoordinator {
     }
 
     private func clearInMemoryState() {
-        relationships = []
-        invites = []
+        relationshipsStore.clear()
         assignments = []
         notes = []
         notificationPreference = nil
@@ -1004,21 +977,11 @@ final class CollaborationCoordinator {
     }
 
     private func isIncomingInvite(_ invite: CoachInvite) -> Bool {
-        if invite.inviteeAccountID == currentAccountID {
-            return true
-        }
-
-        guard invite.inviteeAccountID == nil else {
-            return false
-        }
-
-        return normalizedEmail(invite.inviteeEmail) == currentAccountEmail
+        relationshipsStore.isIncomingInvite(invite)
     }
 
     private func normalizedEmail(_ email: String?) -> String? {
-        email?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
+        CollaborationRelationshipsStore.normalizedEmail(email)
     }
 
     private func validAccessToken() async throws -> String {
