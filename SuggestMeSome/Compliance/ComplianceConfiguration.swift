@@ -67,6 +67,7 @@ enum ComplianceConfiguration {
     static let privacyPolicyURL = URL(string: "https://www.suggestmesome.app/privacy")!
     static let termsURL = URL(string: "https://www.suggestmesome.app/terms")!
     static let consumerHealthNoticeURL = URL(string: "https://www.suggestmesome.app/consumer-health")!
+    static let privacyChoicesURL = URL(string: "https://www.suggestmesome.app/privacy-choices")!
     static let requiresOrganizationAccountBeforeRelease = false
     static let accountBackendLaunchMode: AccountBackendLaunchMode = .productionBackend
     static let accountBackendBaseURL = URL(string: "https://api.suggestmesome.app/v1")!
@@ -93,9 +94,11 @@ enum ComplianceConfiguration {
     static let dailyCoachGuidanceDisclosure = "Recovery and readiness outputs are estimates based on your logged workouts, check-ins, and optional Apple Health data. They are not diagnostic measurements or medical advice."
     static let deleteLocalDataDisclosure = "Delete Local Data removes SuggestMeSome data from this device. It does not delete records stored in Apple Health."
     static let accountLaunchModeDisclosure = "Account, privacy requests, and cloud sync in this build use the production backend path. Local workout logging still works while signed out, and Apple Health-derived recovery data remains on device."
-    static let dataRetentionDisclosure = "Local workout and coaching data remain on this device until you delete them. Backend-held account, training, and privacy request data should be retained only as long as needed to provide the service, comply with law, resolve disputes, or enforce terms."
-    static let securityDisclosure = "Any production backend for SuggestMeSome should use encryption in transit and at rest, role-limited access, auditable deletion, secrets management, and a documented incident-response plan before public release."
-    static let noAdvertisingDisclosure = "SuggestMeSome does not use Apple Health data for advertising, and the current product plan does not include ads or third-party analytics in the public launch baseline."
+    static let dataRetentionDisclosure = "Local workout and coaching data remain on this device until you delete them. Backend-held account, training, and privacy request data are retained only as long as needed to provide the service, comply with law, resolve disputes, or enforce terms."
+    static let securityDisclosure = "SuggestMeSome uses encrypted network transport for backend connections and is intended to protect backend-held account and training records with role-limited access, auditable deletion, secrets management, and a documented incident-response plan."
+    static let noAdvertisingDisclosure = "SuggestMeSome does not use Apple Health data for advertising and does not include ads or third-party analytics in this public launch baseline."
+    static let cloudFeaturePreviewDisclosure = "Preview Cloud Features shows sample account, collaboration, sharing, and notification surfaces using local read-only data. It does not create an account, send an invite, register for push notifications, or sync anything to the backend."
+    static let supportResponseDisclosure = "For support, privacy, or account questions, email us and include the device, iOS version, and app version when possible."
 
     static let consumerHealthConsentCategories = [
         "Workout history",
@@ -111,9 +114,10 @@ enum ComplianceConfiguration {
     static var releaseGateChecklist: [String] {
         [
             "Publish the configured support, privacy, terms, and consumer health pages at their hosted URLs before App Store submission.",
+            "Publish the privacy choices page so App Store Connect can link directly to in-app and hosted data-rights controls.",
             "Complete the App Store Connect privacy questionnaire and product-page copy using the real production data flows for Premium Unlock, Sign in with Apple, cloud collaboration, private sharing, push registration, and Apple Health.",
             "Sign the Paid Apps Agreement and finish the premium_unlock in-app purchase metadata and review notes.",
-            "Validate the production backend's Sign in with Apple, sync, export, and deletion flows against the shipped app before App Store submission.",
+            "Validate the production backend's Sign in with Apple, sync, export, deletion, and token-revocation flows against the shipped app before App Store submission.",
             "Finalize a custom U.S. Terms/EULA in App Store Connect and review the hosted legal text with counsel before release.",
             "Complete retention, breach-response, and vendor-contract work before any off-device account or consumer health sync goes live."
         ]
@@ -136,6 +140,7 @@ enum ComplianceConfiguration {
             - Privacy: \(privacyEmail)
             - Website: \(websiteURL.absoluteString)
             - Support Center: \(supportURL.absoluteString)
+            - Privacy Choices: \(privacyChoicesURL.absoluteString)
 
             ## Data categories
 
@@ -359,6 +364,7 @@ enum ComplianceConfiguration {
             - Privacy: \(privacyEmail)
             - Support: \(supportEmail)
             - Consumer Health Notice URL: \(consumerHealthNoticeURL.absoluteString)
+            - Privacy Choices URL: \(privacyChoicesURL.absoluteString)
 
             \(privacyAppealDisclosure)
 
@@ -410,7 +416,7 @@ enum ComplianceConfiguration {
             kind: .support,
             version: "2.1",
             title: "Support",
-            summary: "Support contacts and the remaining manual U.S. launch checklist for a public App Store release.",
+            summary: "Support contacts, privacy choices, and help topics for SuggestMeSome accounts, Premium Unlock, Apple Health, and cloud sync.",
             bodyMarkdown: """
             ## Support Contacts
 
@@ -419,17 +425,25 @@ enum ComplianceConfiguration {
             - Privacy: \(privacyEmail)
             - Website: \(websiteURL.absoluteString)
             - Support Center: \(supportURL.absoluteString)
+            - Privacy Choices: \(privacyChoicesURL.absoluteString)
 
-            ## U.S. Launch Checklist
+            ## Getting help
 
-            \(releaseGateChecklist.map { "- \($0)" }.joined(separator: "\n"))
+            - Premium Unlock: purchase and restore are handled through Apple. Use Restore Purchases in the app if your prior unlock is missing on a device.
+            - Account & Cloud: Sign in with Apple is optional. If you stay signed out, manual workout logging still works locally on this device.
+            - Apple Health: Apple Health access is optional and user-controlled. Deleting local app data does not delete Apple Health records.
+            - Privacy Rights: Use the in-app account and privacy request screens, or the privacy choices page, for access, export, delete-data, and delete-account requests.
 
-            ## Product posture
+            ## Privacy and data controls
 
-            - Paid model: one-time Premium Unlock
-            - Seller route: individual seller
-            - Apple Health posture: optional and user-controlled
-            - Cloud/account posture: optional production-backend account sync with Apple Health-derived recovery data staying on device
+            - Privacy Choices: \(privacyChoicesURL.absoluteString)
+            - Privacy Policy: \(privacyPolicyURL.absoluteString)
+            - Terms of Use: \(termsURL.absoluteString)
+            - Consumer Health Notice: \(consumerHealthNoticeURL.absoluteString)
+
+            ## Response expectations
+
+            \(supportResponseDisclosure)
         """,
             hostedURL: supportURL,
             requiresOnboardingAcceptance: false,

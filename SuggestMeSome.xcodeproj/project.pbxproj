@@ -326,6 +326,17 @@
 					};
 					F8FB3BBC2F82D7ED0002A1DF = {
 						CreatedOnToolsVersion = 26.4;
+						SystemCapabilities = {
+							com.apple.HealthKit = {
+								enabled = 1;
+							};
+							com.apple.Push = {
+								enabled = 1;
+							};
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
 					};
 					F8FB3BCB2F82D7EE0002A1DF = {
 						CreatedOnToolsVersion = 26.4;
@@ -743,6 +754,7 @@
 				DEVELOPMENT_TEAM = WFFG5RX39F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "SuggestMeSome reads your Health data to improve recovery insights and coaching recommendations.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SuggestMeSome writes simple workout summaries to Health for a complete training record.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -779,6 +791,7 @@
 				DEVELOPMENT_TEAM = WFFG5RX39F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "SuggestMeSome reads your Health data to improve recovery insights and coaching recommendations.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SuggestMeSome writes simple workout summaries to Health for a complete training record.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;

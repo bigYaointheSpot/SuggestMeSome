@@ -55,17 +55,15 @@ struct SupportInfoView: View {
                 Link(ComplianceConfiguration.supportEmail, destination: URL(string: "mailto:\(ComplianceConfiguration.supportEmail)")!)
                 Link(ComplianceConfiguration.privacyEmail, destination: URL(string: "mailto:\(ComplianceConfiguration.privacyEmail)")!)
                 Link("Support Center", destination: ComplianceConfiguration.supportURL)
+                Link("Privacy Choices", destination: ComplianceConfiguration.privacyChoicesURL)
                 Link(ComplianceConfiguration.websiteURL.absoluteString, destination: ComplianceConfiguration.websiteURL)
             }
 
-            Section {
-                ForEach(ComplianceConfiguration.releaseGateChecklist, id: \.self) { item in
-                    Text(item)
-                }
-            } header: {
-                Text("U.S. Launch Checklist")
-            } footer: {
-                Text("Hosted legal pages, App Store metadata, and end-to-end production backend validation still need to be finished before a public launch.")
+            Section("Help Topics") {
+                Text("Premium Unlock purchases and restores are handled through Apple. Use Restore Purchases in the app if your prior unlock does not appear on this device.")
+                Text("Sign in with Apple is optional. You can stay signed out and keep using the free local workout logger.")
+                Text("Apple Health is optional and user-controlled. Deleting local app data does not delete records already stored in Apple Health.")
+                Text(ComplianceConfiguration.supportResponseDisclosure)
             }
 
             Section("Document Preview") {
@@ -300,6 +298,18 @@ struct LegalPrivacyCenterView: View {
                     } label: {
                         Label(kind.title, systemImage: icon(for: kind))
                     }
+                }
+            }
+
+            Section("Privacy Controls") {
+                NavigationLink {
+                    PrivacyChoicesView()
+                } label: {
+                    Label("Privacy Choices", systemImage: "slider.horizontal.3")
+                }
+
+                Link(destination: ComplianceConfiguration.privacyChoicesURL) {
+                    Label("Hosted Privacy Choices", systemImage: "link")
                 }
             }
 
