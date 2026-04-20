@@ -4124,6 +4124,24 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests`
 
+#### Prompt 4 [Accessibility + Dynamic Type hardening on workout logging, banners, and DS primitives] — 2026-04-19
+
+- Workout set-row VoiceOver rewrite — `SetEntryRow` now reports a single coherent summary on first swipe ("Set 3, 8 reps at 185 pounds, personal record" or "Warm-up set 1, no reps at no weight"), then lets VoiceOver users drill into the individual reps / weight / star elements for editing via `.accessibilityElement(children: .contain)`. Added an `accessibilityHint` announcing the long-press contextMenu so users discover the warm-up / delete actions without tapping
+- Honored Reduce Motion across the workout logging surface:
+  - PR star's scale-and-glow bounce on achievement now gates on `@Environment(\.accessibilityReduceMotion)` — the star still flips its filled/outline state but skips the 1.0 → 1.6 scale-up, yellow-glow shadow pulse, and easeOut bounce when Reduce Motion is on
+  - `ExerciseEntryCard`'s progressRail width-transition animation becomes `nil` under Reduce Motion so the fill bar snaps between fractions instead of easing
+  - `ExpandableCard` drops the spring on tap-to-expand under Reduce Motion; the toggle still happens, just without the animation
+- Cleaner VoiceOver reads on cross-app banners + cards:
+  - `ActiveWorkoutBanner` combines its children so VoiceOver reads "Workout in Progress, [elapsed time] · [exercises], Resume" plus the new hint "Double tap to resume your active workout" as a single unit; the decorative timer and chevron-right icons are hidden from accessibility
+  - `ExpandableCard`'s chevron-down indicator is hidden from accessibility (the collapsed card content already conveys what the card is about); added an `accessibilityHint` announcing the expand/collapse affordance
+- Hardened the shared DS primitives for Dynamic Type + VoiceOver:
+  - `DSBadge` — capsule text now uses `lineLimit(1)` + `minimumScaleFactor(0.7)` so AX3-sized labels don't blow out the pill; icon hidden from accessibility because the combined "Status: …" label already carries the meaning
+  - `DSChip` — same lineLimit + minimumScaleFactor pattern on both the monospaced-digit value and optional trailing label; icon hidden from accessibility
+  - `DSSectionHeader` — added `accessibilityAddTraits(.isHeader)` with combined children so the VoiceOver rotor can navigate between cards by section header; icon badge hidden from accessibility; title gets `lineLimit(2)` + `minimumScaleFactor(0.8)` for AX3 safety
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests`
+
 ### Feature 21 — Cloud, collaboration, and consumer-health disclosure hardening
 
 **Status:** Complete
