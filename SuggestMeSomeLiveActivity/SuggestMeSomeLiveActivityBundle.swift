@@ -2,14 +2,11 @@
 //  SuggestMeSomeLiveActivityBundle.swift
 //  SuggestMeSomeLiveActivity
 //
-//  Widget bundle entry point. iOS discovers the widget configurations
-//  from this type's `body` — currently just the workout Live Activity.
-//  Future bundle entries (home-screen widgets, other live activities)
-//  would list alongside WorkoutLiveActivityWidget() inside `body`.
+//  Created by Alex Yao on 4/20/26.
 //
 
-import SwiftUI
 import WidgetKit
+import SwiftUI
 
 @main
 struct SuggestMeSomeLiveActivityBundle: WidgetBundle {

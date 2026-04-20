@@ -4,8 +4,14 @@
 //
 //  ActivityKit contract for the active-workout Live Activity. Shared
 //  between the iOS app target (which starts/updates/ends the activity
-//  via ActivityKit) and a future Widget Extension target (which renders
-//  the lock-screen and Dynamic Island presentations).
+//  via ActivityKit) and the Widget Extension target (which renders the
+//  lock-screen and Dynamic Island presentations).
+//
+//  Keep this file dependency-free beyond Foundation + ActivityKit so it
+//  can ship to the Widget Extension target by simply checking its target
+//  membership box. Helpers that touch app-target types
+//  (ActiveWorkoutSession, WatchPayloadMapper, DraftExerciseEntry) live
+//  in the +Session.swift sibling, which stays in the main app only.
 //
 //  Content-state fields are kept deliberately small — each update writes
 //  the whole ContentState to the system, and iOS rate-limits rapid
@@ -88,42 +94,12 @@ extension WorkoutLiveActivityAttributes: ActivityAttributes {}
 #endif
 
 extension WorkoutLiveActivityAttributes.ContentState {
-    /// Derive a ContentState from the live session snapshot. Centralized
-    /// here so the controller and any future callers compute the same
-    /// values — especially the `currentExerciseInitial` transformation
-    /// and the completed-set predicate (which must match
-    /// WatchPayloadMapper.isSetLogged for consistency with the Watch
-    /// companion's progress reporting).
-    static func fromSession(
-        _ session: ActiveWorkoutSession,
-        now: Date = .now
-    ) -> Self {
-        let currentEntry = session.exerciseEntries.first { entry in
-            !WatchPayloadMapper.isExerciseComplete(entry)
-        } ?? session.exerciseEntries.last
-
-        let completedSets = session.exerciseEntries.reduce(0) { running, entry in
-            running + entry.sets.filter { WatchPayloadMapper.isSetLogged($0) }.count
-        }
-        let totalSets = session.exerciseEntries.reduce(0) { running, entry in
-            running + entry.sets.count
-        }
-
-        return Self(
-            startDate: session.startTime,
-            isPaused: session.lifecycleState == .paused,
-            pausedElapsedSeconds: session.elapsedSeconds(at: now),
-            currentExerciseName: currentEntry?.exerciseName,
-            currentExerciseInitial: Self.initialGlyph(for: currentEntry?.exerciseName),
-            completedSetCount: completedSets,
-            totalSetCount: totalSets,
-            nextSetTarget: Self.nextSetTarget(in: session)
-        )
-    }
-
     /// First letter of the exercise name, uppercased, stripped of
     /// diacritics. Returns nil for empty / whitespace-only names so the
     /// compact Dynamic Island can fall back to a dumbbell glyph.
+    ///
+    /// Lives on the cross-target file because the widget preview data
+    /// generator calls it directly — no app-target types needed.
     static func initialGlyph(for exerciseName: String?) -> String? {
         guard let name = exerciseName else { return nil }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -132,27 +108,5 @@ extension WorkoutLiveActivityAttributes.ContentState {
             options: .diacriticInsensitive,
             locale: .current
         ).uppercased()
-    }
-
-    /// Compact human-readable target for the next pending strength set —
-    /// "Set 3/8 · 8 × 185 lbs", "Set 1/1 · 10 reps" for bodyweight, nil
-    /// when the session is fully logged or only cardio remains (cardio
-    /// has no per-set progression, so we fall back to the title line).
-    static func nextSetTarget(in session: ActiveWorkoutSession) -> String? {
-        for entry in session.exerciseEntries {
-            if entry.isCardio { continue }
-            if let pendingIndex = entry.sets.firstIndex(where: { !WatchPayloadMapper.isSetLogged($0) }) {
-                let set = entry.sets[pendingIndex]
-                let reps = set.repsText.isEmpty ? "–" : set.repsText
-                let weight = set.weightText.isEmpty ? nil : "\(set.weightText) \(entry.unit.rawValue)"
-                let setNumber = pendingIndex + 1
-                let totalSets = entry.sets.count
-                if let weight {
-                    return "Set \(setNumber)/\(totalSets) · \(reps) × \(weight)"
-                }
-                return "Set \(setNumber)/\(totalSets) · \(reps) reps"
-            }
-        }
-        return nil
     }
 }
