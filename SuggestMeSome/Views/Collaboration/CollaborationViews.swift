@@ -370,6 +370,10 @@ struct CoachRosterView: View {
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
     @Environment(PurchaseManager.self) private var purchaseManager
 
+    /// iOS 18 zoom-transition namespace tying each roster row to its
+    /// pushed InsightSnapshotDetailView.
+    @Namespace private var rosterTransitionNamespace
+
     var body: some View {
         Group {
             if !FeatureAccessPolicy.isAccessible(.coachCollaboration, entitlementState: purchaseManager.entitlementState) {
@@ -390,6 +394,7 @@ struct CoachRosterView: View {
                         ForEach(collaborationCoordinator.coachRosterSnapshots) { snapshot in
                             NavigationLink {
                                 InsightSnapshotDetailView(snapshot: snapshot)
+                                    .navigationTransition(.zoom(sourceID: snapshot.stableID, in: rosterTransitionNamespace))
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(snapshot.accountDisplayName)
@@ -402,6 +407,7 @@ struct CoachRosterView: View {
                                 }
                                 .accessibilityElement(children: .combine)
                             }
+                            .matchedTransitionSource(id: snapshot.stableID, in: rosterTransitionNamespace)
                         }
                     }
                 }

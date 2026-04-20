@@ -21,6 +21,11 @@ struct WorkoutsTab: View {
 
     @State private var workoutToDelete: Workout?
 
+    /// Ties each WorkoutRow to its pushed WorkoutDetailView for the iOS 18
+    /// zoom transition. See `.navigationTransition(.zoom(sourceID:in:))`
+    /// and `.matchedTransitionSource(id:in:)` below.
+    @Namespace private var workoutTransitionNamespace
+
     @State private var showingEmptyWorkout = false
     @State private var showingGeneratorSheet = false
     @State private var pendingGeneratedWorkout: GeneratedWorkout?
@@ -342,9 +347,11 @@ struct WorkoutsTab: View {
                 ForEach(derivedState.filteredWorkouts) { workout in
                     NavigationLink {
                         WorkoutDetailView(workout: workout)
+                            .navigationTransition(.zoom(sourceID: workout.id, in: workoutTransitionNamespace))
                     } label: {
                         WorkoutRow(workout: workout)
                     }
+                    .matchedTransitionSource(id: workout.id, in: workoutTransitionNamespace)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
                             workoutToDelete = workout
