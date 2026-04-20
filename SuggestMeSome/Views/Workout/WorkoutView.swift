@@ -1164,6 +1164,17 @@ struct SetEntryRow: View {
         !set.repsText.isEmpty && !set.weightText.isEmpty && !set.isWarmup
     }
 
+    /// Single-swipe VoiceOver summary for the whole row. Individual fields
+    /// stay focusable for editing (via `accessibilityElement(.contain)`);
+    /// this label lets users scan the set log quickly before drilling in.
+    private var rowAccessibilitySummary: String {
+        let kind = set.isWarmup ? "Warm-up set \(set.setNumber)" : "Set \(set.setNumber)"
+        let reps = set.repsText.isEmpty ? "no reps" : "\(set.repsText) reps"
+        let weight = set.weightText.isEmpty ? "no weight" : "\(set.weightText) pounds"
+        let prTag = set.isPR ? ", personal record" : ""
+        return "\(kind), \(reps) at \(weight)\(prTag)"
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Text(set.isWarmup ? "W\(set.setNumber)" : "\(set.setNumber)")
@@ -1241,6 +1252,9 @@ struct SetEntryRow: View {
                 Label("Delete set", systemImage: "trash")
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(rowAccessibilitySummary)
+        .accessibilityHint("Long-press for warm-up or delete actions.")
         .sensoryFeedback(.success, trigger: hasEntryData)
         .sensoryFeedback(.increase, trigger: set.isPR)
     }
