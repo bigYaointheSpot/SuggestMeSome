@@ -44,6 +44,7 @@ enum MainTab: Int, CaseIterable {
 
 struct ContentView: View {
     @Environment(AppRouteCoordinator.self) private var appRouteCoordinator
+    @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
     @State private var selectedTab: Int = MainTab.dailyCoach.rawValue
     @State private var showingActiveWorkout = false
     @AppStorage("appColorScheme") private var appColorScheme: String = "system"
@@ -109,6 +110,17 @@ struct ContentView: View {
         .onChange(of: appRouteCoordinator.activeRoute) { _, route in
             guard let route else { return }
             selectedTab = route.targetTab.rawValue
+            // Live Activity tap: only open the workout sheet if the tapped
+            // activity still corresponds to the live session. A stale tap
+            // (session ended, app relaunched from scratch) lands on the
+            // Workouts tab instead of popping an empty sheet.
+            if case .activeWorkout(let sessionID) = route {
+                if let session = activeWorkoutSessionStore.session,
+                   session.id.uuidString == sessionID {
+                    showingActiveWorkout = true
+                }
+                appRouteCoordinator.clearIfMatching(route)
+            }
         }
     }
 }

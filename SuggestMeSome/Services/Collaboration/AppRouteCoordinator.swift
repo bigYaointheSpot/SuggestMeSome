@@ -14,6 +14,13 @@ enum AppDeepLinkRoute: Codable, Equatable, Hashable, Identifiable {
     case progressShare(stableID: String)
     case coachRoster
     case notificationPreferences
+    /// Opened from a Live Activity tap on the iPhone lock screen / Dynamic
+    /// Island. The sessionID is the UUID string of the active workout; the
+    /// presenter (ContentView) matches it against
+    /// ActiveWorkoutSessionStore.session.id before opening the workout
+    /// sheet so a stale activity tap after the session has ended no-ops
+    /// instead of presenting an empty view.
+    case activeWorkout(sessionID: String)
 
     var id: String {
         switch self {
@@ -41,6 +48,8 @@ enum AppDeepLinkRoute: Codable, Equatable, Hashable, Identifiable {
             return "coachRoster"
         case .notificationPreferences:
             return "notificationPreferences"
+        case .activeWorkout(let sessionID):
+            return "activeWorkout::\(sessionID)"
         }
     }
 
@@ -54,6 +63,8 @@ enum AppDeepLinkRoute: Codable, Equatable, Hashable, Identifiable {
             return .programs
         case .notificationPreferences:
             return .settings
+        case .activeWorkout:
+            return .workouts
         }
     }
 
@@ -86,6 +97,12 @@ enum AppDeepLinkRoute: Codable, Equatable, Hashable, Identifiable {
             self = .coachRoster
         case "notification-preferences":
             self = .notificationPreferences
+        case "workout":
+            // Live Activity widgetURL: suggestmesome://workout/<uuid>.
+            // Reject empty or malformed path so bad taps fall through
+            // to no-op instead of presenting a mismatched session.
+            guard !stableID.isEmpty, stableID != "workout" else { return nil }
+            self = .activeWorkout(sessionID: stableID)
         default:
             return nil
         }

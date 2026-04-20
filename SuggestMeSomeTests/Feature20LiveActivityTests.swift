@@ -205,6 +205,24 @@ struct Feature20LiveActivityTests {
         #expect(bridge.ends == [first.id])
     }
 
+    // MARK: - Deep link
+
+    @Test func deepLinkParsesActiveWorkoutFromWidgetURL() {
+        let sessionID = UUID().uuidString
+        let url = URL(string: "suggestmesome://workout/\(sessionID)")!
+        let route = AppDeepLinkRoute(url: url)
+
+        #expect(route == .activeWorkout(sessionID: sessionID))
+        #expect(route?.targetTab == .workouts)
+        #expect(route?.id == "activeWorkout::\(sessionID)")
+    }
+
+    @Test func deepLinkRejectsWorkoutHostWithoutSessionID() {
+        // `suggestmesome://workout` (no path) should fall through to nil so
+        // a malformed widget URL doesn't open a mismatched sheet.
+        #expect(AppDeepLinkRoute(url: URL(string: "suggestmesome://workout")!) == nil)
+    }
+
     // MARK: - Helpers
 
     private final class SpyLiveActivityBridge: WorkoutLiveActivityBridging {

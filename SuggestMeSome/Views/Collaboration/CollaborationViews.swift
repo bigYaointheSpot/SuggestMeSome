@@ -1159,6 +1159,12 @@ struct CollaborationRouteSheetView: View {
             CoachRosterView()
         case .notificationPreferences:
             NotificationPreferencesView()
+        case .activeWorkout:
+            // Live Activity taps are handled by ContentView (it flips the
+            // Workouts tab and opens the active-workout sheet directly).
+            // This sheet — the collaboration route sheet — never presents
+            // an active workout, so fall through to an empty view.
+            EmptyView()
         }
     }
 
