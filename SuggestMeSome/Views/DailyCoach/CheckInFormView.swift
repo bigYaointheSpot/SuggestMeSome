@@ -92,8 +92,11 @@ struct CheckInFormView: View {
                 .foregroundStyle(.primary)
         }
         .padding(32)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(DSColor.primaryAction.opacity(0.18), lineWidth: 0.5)
+        )
         .shadow(color: .black.opacity(0.12), radius: 16)
         .transition(.scale(scale: 0.85).combined(with: .opacity))
     }
