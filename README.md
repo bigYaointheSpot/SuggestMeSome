@@ -4064,28 +4064,7 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests`
 
-### Feature 21 — Cloud, collaboration, and consumer-health disclosure hardening
-
-**Status:** Complete
-
-#### Prompt 1 [Feature 21 cloud, collaboration, and consumer-health disclosure hardening] — 2026-04-19
-
-- Updated the app's paid-product disclosure posture so cloud sync, coach collaboration, private sharing, and push notifications are described truthfully everywhere users encounter them:
-  - rewrote the bundled Privacy Policy, Terms of Use, and Consumer Health Data Notice to cover Sign in with Apple, backend session state, collaboration records, invitee emails, coach notes, assignments, private shares, notification preferences, APNs registration, appeal rights, revocation limits, and the production Premium Unlock posture
-  - replaced the legacy onboarding "Private by default" copy with account-sync-aware language and expanded the compliance onboarding welcome step to mention optional cloud accounts and private collaboration while keeping Apple Health-derived recovery data on device in this release
-  - refreshed Settings disclosure copy for Cloud Sync and Coach Collaboration so the info sheet, footers, and release checklist all align with the shipped cloud/collaboration behavior
-- Added reusable legal-disclosure surfaces and threaded them through the first relevant account and collaboration flows:
-  - introduced shared `AccountSignInNoticeView`, `PushNotificationNoticeView`, `CollaborationSharingConsentView`, and `PrivacyRevocationExplainerView` so Sign in with Apple, push permissions, sharing consent, appeal rights, and revocation language come from one source
-  - upgraded Account & Cloud, Access & Export, Privacy Choices, and Delete Account screens to distinguish local data vs backend data, explain export/delete propagation limits, surface appeal language, and keep revocation guidance reachable after setup
-  - inserted just-in-time disclosure sections before notification enablement, coach invites, visibility-scope saves, and private program/progress sharing; first-use acknowledgements now gate those sharing mutations before send/save
-- Tightened collaboration wording and regressions:
-  - coordinator-level premium gate messaging now correctly says `Premium Unlock` instead of `premium subscription`
-  - expanded compliance regression coverage to pin the new cloud/collaboration/push/legal language and updated collaboration tests for the corrected Premium Unlock wording
-- Verification:
-  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'`
-  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests`
-
-### Feature 22 — Performance Sprint + Collaboration architecture closeout
+### Feature 20 — Performance Sprint + Collaboration architecture closeout
 
 **Status:** In Progress
 
@@ -4124,6 +4103,27 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 - Verification:
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests -only-testing:SuggestMeSomeTests/Feature20CloudClientCacheTests`
+
+### Feature 21 — Cloud, collaboration, and consumer-health disclosure hardening
+
+**Status:** Complete
+
+#### Prompt 1 [Feature 21 cloud, collaboration, and consumer-health disclosure hardening] — 2026-04-19
+
+- Updated the app's paid-product disclosure posture so cloud sync, coach collaboration, private sharing, and push notifications are described truthfully everywhere users encounter them:
+  - rewrote the bundled Privacy Policy, Terms of Use, and Consumer Health Data Notice to cover Sign in with Apple, backend session state, collaboration records, invitee emails, coach notes, assignments, private shares, notification preferences, APNs registration, appeal rights, revocation limits, and the production Premium Unlock posture
+  - replaced the legacy onboarding "Private by default" copy with account-sync-aware language and expanded the compliance onboarding welcome step to mention optional cloud accounts and private collaboration while keeping Apple Health-derived recovery data on device in this release
+  - refreshed Settings disclosure copy for Cloud Sync and Coach Collaboration so the info sheet, footers, and release checklist all align with the shipped cloud/collaboration behavior
+- Added reusable legal-disclosure surfaces and threaded them through the first relevant account and collaboration flows:
+  - introduced shared `AccountSignInNoticeView`, `PushNotificationNoticeView`, `CollaborationSharingConsentView`, and `PrivacyRevocationExplainerView` so Sign in with Apple, push permissions, sharing consent, appeal rights, and revocation language come from one source
+  - upgraded Account & Cloud, Access & Export, Privacy Choices, and Delete Account screens to distinguish local data vs backend data, explain export/delete propagation limits, surface appeal language, and keep revocation guidance reachable after setup
+  - inserted just-in-time disclosure sections before notification enablement, coach invites, visibility-scope saves, and private program/progress sharing; first-use acknowledgements now gate those sharing mutations before send/save
+- Tightened collaboration wording and regressions:
+  - coordinator-level premium gate messaging now correctly says `Premium Unlock` instead of `premium subscription`
+  - expanded compliance regression coverage to pin the new cloud/collaboration/push/legal language and updated collaboration tests for the corrected Premium Unlock wording
+- Verification:
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests`
 
 ### Feature 23 — Free app + Premium Unlock launch readiness
 
