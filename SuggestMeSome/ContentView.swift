@@ -101,15 +101,15 @@ struct ContentView: View {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Done") {
                                 showingActiveWorkout = false
-                }
+                            }
+                        }
+                    }
             }
         }
         .onChange(of: appRouteCoordinator.activeRoute) { _, route in
             guard let route else { return }
             selectedTab = route.targetTab.rawValue
         }
-    }
-}
     }
 }
 

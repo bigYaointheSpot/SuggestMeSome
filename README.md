@@ -4125,6 +4125,31 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests -only-testing:SuggestMeSomeTests/Feature20CloudClientCacheTests`
 
+### Feature 23 — Free app + Premium Unlock launch readiness
+
+**Status:** Complete
+
+#### Prompt 1 [Free app + Premium Unlock launch readiness] — 2026-04-19
+
+- Finalized the launch-readiness shell for shipping `SuggestMeSome` as a free iOS app with a one-time `Premium Unlock` purchase:
+  - added production-facing support, privacy, retention, response-time, and privacy-rights language to the in-app compliance documents so they read like live launch copy instead of prelaunch placeholders
+  - added a hosted `Privacy Choices` destination and wired it into the in-app Legal & Privacy center, support surface, and bundled legal documents
+  - enabled iPhone launch capabilities for Push Notifications and Sign in with Apple in the app entitlements and project capabilities, and set `ITSAppUsesNonExemptEncryption = NO` for export-compliance metadata
+- Unified the launch experience and removed the legacy Apple Health bypass:
+  - removed the old `OnboardingFlowView` path so `ComplianceOnboardingFlow` is now the single first-launch story
+  - kept Apple Health authorization behind the existing premium gate and Health preflight path instead of allowing a first-launch direct authorization request
+  - repaired the broken `ContentView` active-workout sheet structure during closeout so the current tree compiles cleanly again
+- Added a public, reviewer-safe preview surface for cloud and collaboration features:
+  - introduced `CloudFeaturePreviewView` with local sample account, collaboration, private sharing, push, paywall, and privacy surfaces that do not create an account, mutate backend state, or register for notifications
+  - exposed `Preview Cloud Features` from the signed-out account screen so App Review and signed-out users can inspect premium cloud surfaces without needing a second live account
+- Added the non-code launch assets directly in the repo:
+  - created a static `website/` with `/support`, `/privacy`, `/terms`, `/consumer-health`, and `/privacy-choices` pages aligned to the URLs configured in the app
+  - added `docs/APP_STORE_FREE_PLUS_PREMIUM_UNLOCK_CHECKLIST.md` to track the remaining Apple Developer, backend, App Store Connect, and release-ops work outside the iOS binary
+- Verification:
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'`
+  - attempted: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests`
+    - local Xcode test runs currently hang after build while repeatedly polling a passcode-locked physical device via `com.apple.mobile.notification_proxy`; rerun this focused suite once the local CoreSimulator/device state is stable
+
 ---
 
 ## Project Setup
