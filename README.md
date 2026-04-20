@@ -4125,11 +4125,7 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests`
 
-### Feature 23 — Free app + Premium Unlock launch readiness
-
-**Status:** Complete
-
-#### Prompt 1 [Free app + Premium Unlock launch readiness] — 2026-04-19
+#### Prompt 2 [Free app + Premium Unlock launch readiness] — 2026-04-19
 
 - Finalized the launch-readiness shell for shipping `SuggestMeSome` as a free iOS app with a one-time `Premium Unlock` purchase:
   - added production-facing support, privacy, retention, response-time, and privacy-rights language to the in-app compliance documents so they read like live launch copy instead of prelaunch placeholders

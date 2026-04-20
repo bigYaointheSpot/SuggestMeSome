@@ -2,7 +2,7 @@
 //  CloudFeaturePreviewView.swift
 //  SuggestMeSome
 //
-//  Feature 23 - Public, read-only preview mode for cloud, collaboration,
+//  Feature 21 - Public, read-only preview mode for cloud, collaboration,
 //  and premium account surfaces used by signed-out users and App Review.
 //
 
