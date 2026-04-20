@@ -4085,6 +4085,46 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests`
 
+### Feature 22 — Performance Sprint + Collaboration architecture closeout
+
+**Status:** In Progress
+
+#### Prompt 1 [Dashboard + DailyCoach refresh-token rewrites, sort/map memoization, GET coalescing] — 2026-04-19
+
+- Replaced `DashboardView`'s `dashboardRefreshToken` — a 60-LOC `Hasher` that iterated every row of every `@Query` array on every SwiftUI body invocation — with an `O(1)` `DashboardRefreshToken` struct that samples only `count + first?.syncLastModifiedAt` per array. Counts catch inserts/deletes; first-item sync timestamps catch edits to the newest row (the common edit target). Edits to old rows without an insert/delete won't retrigger the token; users re-entering the Dashboard or swapping tabs force a refresh — deliberate tradeoff documented on the struct. Old path burned ~20k hash operations/sec on a 2k-row dashboard during animations.
+- Mirrored the same `O(1)` token pattern in `DailyCoachDerivedState.refreshToken(...)` and `DailyCoachCompletedBlockInsights.refreshToken(...)` (previously iterated eight and three arrays respectively per body tick); existing Feature 10 tests covering those tokens still pass because the sampling catches the scenarios they exercise
+- Moved two in-body computations into `DashboardViewModel.rebuildDerivedState` so they run once per refresh instead of on every SwiftUI body tick:
+  - `sortedActiveProgramRuns` — was re-sorting `viewModel.activeProgramRuns` by start date desc in both the proposal-review navigation destination and the active-program section
+  - `recentPRDeltas` — the PR feed's ForEach was calling `StrengthAnalytics.previousBest(...)` inside the body for each of the top 5 PRs; each call iterates every workout, so on a user with 2k workouts that's 10k comparisons per render. Precompute once keyed by `PR.id` and the ForEach reads from a dictionary
+- Added `CollaborationGETRequestCache` — an actor-isolated coalescer + TTL cache for collaboration GET requests. Concurrent callers racing the same GET share one in-flight Task; repeat GETs within the 300s TTL return cached Data without a network round-trip; any successful non-GET call invalidates the entire cache so list reads don't linger after a mutation. Refactored `HTTPCloudCollaborationClient.performRequest` into `fetchResponseData` + `decodeResponse` so both the cached-GET path and direct path share the retry-with-jitter logic landed in a6c137a
+- Verified startup maintenance was already properly phased — `runBlockingStartupMaintenance(...)` only runs seed + migrations synchronously, with the slow `SyncMetadataAuditService.auditAndRepair(...)` already on a `Task.detached(priority: .utility)`. No-op this prompt; audit finding was over-reactive
+- Added focused validation for: GET cache concurrent-callers-share-fetch, TTL-hit-returns-cached, TTL-expiry-refetches, invalidate-clears-subsequent, failed-fetches-don't-cache
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature20CloudClientCacheTests -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests`
+
+#### Prompt 2 [Collaboration coordinator sub-store extraction + composer view split] — 2026-04-19
+
+- Finished the Phase 3a coordinator split queued at the close of Feature 19. Six new `@Observable` sub-stores now own collaboration state + memoized derived views, sitting behind the permanent `CollaborationCoordinator` facade so every existing view callsite reads through unchanged:
+  - `CollaborationRelationshipsStore` — CoachRelationship + CoachInvite state, role-partitioned derived views (coachRelationships, athleteRelationships), invite-direction views (pendingInvites, incomingPendingInvites, outgoingPendingInvites) with `CachedDerivation` memoization, plus the invitePresentationMode / isIncomingInvite / canWriteCoachNote helpers and a shared `normalizedEmail` static
+  - `CollaborationAssignmentsStore` — ProgramAssignment state, memoized `inboxAssignments` filter, and the `canActOnAssignment` athlete-inbox predicate
+  - `CollaborationNotesStore` — CoachNote state + memoized `unreadCoachNotes` filter that drives the Daily Coach badge
+  - `CollaborationInsightsStore` — InsightSnapshot + WeeklyDigest state, the previously-heaviest `coachRosterSnapshots` derivation (Set-build + filter) memoized in the store, plus `athleteFacingSnapshots` and `unreadDigests`. A closure pulls coach-relationship IDs from the relationships store so both sub-stores stay decoupled while the roster filter still sees fresh data after a relationship refresh
+  - `CollaborationBlueprintsStore` — SavedProgramBlueprint state (no derived views yet; the Training Programs tab renders the plain list)
+  - `CollaborationSharesStore` — ProgramShareGrant + ProgressShareCard state, kept in one store because the coordinator's refresh / cache-load / clear paths treat them as one sharing domain
+- Coordinator state-ownership shrinks: removed stored `relationships`, `invites`, `assignments`, `notes`, `insightSnapshots`, `weeklyDigests`, `blueprints`, `programShares`, `progressShares` properties; removed the four relationships-specific `CachedDerivation` holders plus `coachRosterSnapshotsCache`; `loadCache()` hands each slice of the `CollaborationCacheSnapshot` to the right store's `apply(...)` method, and `clearInMemoryState()` walks them for teardown. Only `hasAnyCollaborationCache` remains coordinator-owned since it aggregates across every sub-store. Mutations stay on the coordinator because cross-store refresh orchestration (e.g., `createCoachInvite` refreshing both invites and relationships) belongs at the facade boundary
+- Split `CollaborationViews.swift` into `CollaborationViews.swift` + `CollaborationComposers.swift`. New file contains the six composers (invite, blueprint save, assignment, coach note, program share, progress share), the shared `FormComposerScaffold`, the composer-only `ProgressSharePayload` DTO, and the `nilIfEmpty` String helpers — everything that's only consumed by a composer lives with it. Composer structs + the `VisibilityPreset` enum promoted from `private` to internal so the existing `.sheet(...)` callsites still see them; `StatusBadge` and `NotificationPreferenceDraft` stay in `CollaborationViews` because their only callers do. CollaborationViews drops ~430 LOC (from 1,936 to ~1,510); new file ~540 LOC. No visual change
+- Added focused validation for:
+  - Relationships store partitions by `currentRole(for:)` into coach vs athlete relationships
+  - Invite classification: both `inviteeAccountID` match and `inviteeEmail` match (with whitespace + case normalization) route to incomingPendingInvites; `inviterAccountID == self` routes to outgoingPendingInvites; accepted invites drop out of the pending collections entirely
+  - Assignments inbox filter: only `status == .pending && athleteAccountID == self` rows survive; `canActOnAssignment` agrees with the filter
+  - Notes store unread filter; clear() resets
+  - Insights store roster filter matches the coach-relationship ID set and re-evaluates after a subsequent `apply(...)` when the injected ID set shrinks
+  - Blueprints and shares stores round-trip through `apply(...)` / `clear()`
+- Verification:
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests -only-testing:SuggestMeSomeTests/Feature20CloudClientCacheTests`
+
 ---
 
 ## Project Setup
