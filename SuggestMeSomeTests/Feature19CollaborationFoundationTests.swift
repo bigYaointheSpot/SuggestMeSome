@@ -1174,6 +1174,254 @@ struct Feature19CollaborationFoundationTests {
         #expect(coordinator.recentActivity.contains { $0.message == "APNs registration failed" && $0.level == .error })
     }
 
+    // MARK: - Feature 20 Phase 4g closeout tests
+
+    @Test func refreshErrorRecoversOnNextRefresh() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature20RefreshRecovery.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let client = MockCollaborationClient()
+        client.relationships = [
+            CoachRelationshipDTO(
+                stableID: "rel-recovery",
+                createdAt: day(1),
+                updatedAt: day(2),
+                statusRawValue: CoachRelationshipStatus.active.rawValue,
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(2),
+                athleteDisplayName: "Athlete Sam",
+                invitedByAccountID: uuid(1),
+                visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes),
+                unreadCoachNoteCount: 0,
+                pendingAssignmentCount: 0,
+                latestInsightSnapshotAt: day(2)
+            )
+        ]
+        client.throwOnNextFetchRelationships = true
+
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: client,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
+        )
+        coordinator.configure(modelContext: container.mainContext)
+
+        // Initial refresh: the relationships fetch throws once, which currently
+        // bubbles up through performRefresh's try-await chain and lands on the
+        // .refresh endpoint. The coordinator surfaces the error and leaves
+        // the cache empty.
+        await coordinator.handleAccountStateDidChange(feature19SignedInState())
+        #expect(coordinator.endpointError(.refresh) != nil)
+        #expect(coordinator.phase == .error)
+        #expect(coordinator.relationships.isEmpty)
+
+        // Second refresh: flag auto-resets on the first throw, so the retry
+        // succeeds end-to-end. The refresh error clears and the seeded
+        // relationship flows through to the observable state.
+        await coordinator.refreshAll(reason: "Retry after transient failure", force: true)
+        #expect(coordinator.endpointError(.refresh) == nil)
+        #expect(coordinator.relationships.count == 1)
+    }
+
+    @Test func accountSwitchClearsPriorAccountRelationships() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature20AccountSwitch.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let client = MockCollaborationClient()
+        client.relationships = [
+            CoachRelationshipDTO(
+                stableID: "rel-account-a",
+                createdAt: day(1),
+                updatedAt: day(2),
+                statusRawValue: CoachRelationshipStatus.active.rawValue,
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(2),
+                athleteDisplayName: "Athlete Sam",
+                invitedByAccountID: uuid(1),
+                visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes),
+                unreadCoachNoteCount: 0,
+                pendingAssignmentCount: 0,
+                latestInsightSnapshotAt: day(2)
+            )
+        ]
+
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: client,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
+        )
+        coordinator.configure(modelContext: container.mainContext)
+
+        // Account A (athlete uuid(2)) signs in and loads its relationship.
+        await coordinator.handleAccountStateDidChange(feature19SignedInState())
+        #expect(coordinator.relationships.map(\.stableID) == ["rel-account-a"])
+
+        // Account B (coach uuid(1)) signs in with a different relationship.
+        // The coordinator must wipe A's cache before loading B's data so
+        // no stale row leaks across the account boundary.
+        client.relationships = [
+            CoachRelationshipDTO(
+                stableID: "rel-account-b",
+                createdAt: day(5),
+                updatedAt: day(6),
+                statusRawValue: CoachRelationshipStatus.active.rawValue,
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(4),
+                athleteDisplayName: "Athlete Jamie",
+                invitedByAccountID: uuid(1),
+                visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes),
+                unreadCoachNoteCount: 0,
+                pendingAssignmentCount: 0,
+                latestInsightSnapshotAt: day(6)
+            )
+        ]
+        await coordinator.handleAccountStateDidChange(feature19CoachState())
+
+        #expect(coordinator.relationships.map(\.stableID) == ["rel-account-b"])
+        #expect(!coordinator.relationships.contains { $0.stableID == "rel-account-a" })
+    }
+
+    @Test func roleFlipRepartitionsRelationshipBuckets() async throws {
+        // Same relationship seed, two different current-account IDs. When the
+        // logged-in account is uuid(1) (the coach), the relationship sits in
+        // coachRelationships; when it flips to uuid(2) (the athlete on that
+        // same relationship), the bucket should swap.
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature20RoleFlip.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let client = MockCollaborationClient()
+        client.relationships = [
+            CoachRelationshipDTO(
+                stableID: "rel-shared",
+                createdAt: day(1),
+                updatedAt: day(2),
+                statusRawValue: CoachRelationshipStatus.active.rawValue,
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(2),
+                athleteDisplayName: "Athlete Sam",
+                invitedByAccountID: uuid(1),
+                visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes),
+                unreadCoachNoteCount: 0,
+                pendingAssignmentCount: 0,
+                latestInsightSnapshotAt: day(2)
+            )
+        ]
+
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: client,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
+        )
+        coordinator.configure(modelContext: container.mainContext)
+
+        // uuid(1) signs in — they're the coach on this relationship.
+        await coordinator.handleAccountStateDidChange(feature19CoachState())
+        #expect(coordinator.coachRelationships.count == 1)
+        #expect(coordinator.athleteRelationships.isEmpty)
+
+        // Flip to uuid(2) — same relationship, now viewed as the athlete.
+        // The derived buckets must repartition so the UI shows a coach,
+        // not an athlete, on the My Coach surface.
+        await coordinator.handleAccountStateDidChange(feature19SignedInState())
+        #expect(coordinator.coachRelationships.isEmpty)
+        #expect(coordinator.athleteRelationships.count == 1)
+    }
+
+    @Test func pushTokenChurnDoesNotDoubleRegisterIdenticalTokens() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature20PushChurn.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let client = MockCollaborationClient()
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: client,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
+        )
+        coordinator.configure(modelContext: container.mainContext)
+        coordinator.hydrateAccountState(feature19SignedInState())
+
+        // Same token delivered three times in quick succession — coordinator
+        // should dedupe and only hit the server once.
+        await coordinator.handlePushAuthorizationStateChange(.authorized, deviceToken: "token-A")
+        await coordinator.handlePushAuthorizationStateChange(.authorized, deviceToken: "token-A")
+        await coordinator.handlePushAuthorizationStateChange(.authorized, deviceToken: "token-A")
+        #expect(client.registerDeviceCallCount == 1)
+
+        // Token rotates — a second register call is required so the server
+        // has the fresh token for this device.
+        await coordinator.handlePushAuthorizationStateChange(.authorized, deviceToken: "token-B")
+        #expect(client.registerDeviceCallCount == 2)
+
+        // Duplicate of the rotated token — still de-duped.
+        await coordinator.handlePushAuthorizationStateChange(.authorized, deviceToken: "token-B")
+        #expect(client.registerDeviceCallCount == 2)
+    }
+
+    @Test func batchFiveHundredRelationshipColdLoadStaysUnderTwoSeconds() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature20BatchPerf.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let client = MockCollaborationClient()
+        // 500 relationships — worst-case roster size the coordinator should
+        // still load from cold without blowing the 2-second budget the
+        // cloud team committed to.
+        client.relationships = (0..<500).map { index in
+            CoachRelationshipDTO(
+                stableID: "rel-batch-\(index)",
+                createdAt: day(TimeInterval(index)),
+                updatedAt: day(TimeInterval(index + 1)),
+                statusRawValue: CoachRelationshipStatus.active.rawValue,
+                coachAccountID: uuid(1),
+                coachDisplayName: "Coach Alex",
+                athleteAccountID: uuid(2 + index),
+                athleteDisplayName: "Athlete #\(index)",
+                invitedByAccountID: uuid(1),
+                visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(for: CollaborationVisibilityScope.defaultInviteScopes),
+                unreadCoachNoteCount: 0,
+                pendingAssignmentCount: 0,
+                latestInsightSnapshotAt: day(TimeInterval(index + 1))
+            )
+        }
+
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: client,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked }
+        )
+        coordinator.configure(modelContext: container.mainContext)
+
+        let startedAt = Date()
+        await coordinator.handleAccountStateDidChange(feature19SignedInState())
+        let elapsed = Date().timeIntervalSince(startedAt)
+
+        #expect(coordinator.relationships.count == 500)
+        #expect(elapsed < 2.0, "Cold 500-relationship refresh took \(elapsed)s; budget is 2.0s")
+    }
+
     private actor ActorCounter {
         private(set) var value: Int = 0
         func increment() { value += 1 }
@@ -1251,6 +1499,11 @@ private final class MockCollaborationClient: CloudCollaborationClient {
     /// the flag auto-resets so the retry can succeed. Used to verify
     /// error-recovery behavior without having to fail every call.
     var throwOnNextUpdatePreferences = false
+    /// One-shot throw flag used by the Phase 4g refresh-recovery test to
+    /// fail a single endpoint (relationships) so the coordinator records
+    /// an endpoint error while the other endpoints succeed. Auto-resets
+    /// on throw so the follow-up refresh can verify recovery.
+    var throwOnNextFetchRelationships = false
 
     var totalRefreshFetchCount: Int {
         relationshipFetchCount +
@@ -1267,7 +1520,12 @@ private final class MockCollaborationClient: CloudCollaborationClient {
     }
 
     func fetchRelationships(accessToken: String) async throws -> [CoachRelationshipDTO] {
-        try await delayedFetch(&relationshipFetchCount, value: relationships)
+        if throwOnNextFetchRelationships {
+            throwOnNextFetchRelationships = false
+            relationshipFetchCount += 1
+            throw MockError.unused
+        }
+        return try await delayedFetch(&relationshipFetchCount, value: relationships)
     }
     func fetchInvites(accessToken: String) async throws -> [CoachInviteDTO] {
         try await delayedFetch(&inviteFetchCount, value: invites)
