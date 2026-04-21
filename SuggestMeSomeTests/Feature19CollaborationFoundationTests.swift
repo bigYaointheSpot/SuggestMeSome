@@ -1422,6 +1422,187 @@ struct Feature19CollaborationFoundationTests {
         #expect(elapsed < 2.0, "Cold 500-relationship refresh took \(elapsed)s; budget is 2.0s")
     }
 
+    @Test func hydrateAccountStateUsesFullSnapshotLoad() throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature20HydrateFullLoad.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.set(suiteName, forKey: "suiteName")
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        try LocalCollaborationCacheStore(modelContext: container.mainContext).replaceRelationships(
+            with: [feature20RelationshipDTO(stableID: "rel-hydrate")]
+        )
+        let cacheFactory = CountingCollaborationCacheStoreFactory()
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: MockCollaborationClient(),
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked },
+            cacheStoreFactory: cacheFactory.makeStore
+        )
+        coordinator.configure(modelContext: container.mainContext)
+
+        cacheFactory.reset()
+        coordinator.hydrateAccountState(feature19SignedInState())
+
+        #expect(cacheFactory.fullSnapshotLoadCount == 1)
+        #expect(cacheFactory.totalSliceLoadCount == 0)
+        #expect(coordinator.relationships.map(\.stableID) == ["rel-hydrate"])
+    }
+
+    @Test func accountRefreshAndSwitchUseFullSnapshotLoads() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature20FullRefreshLoads.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.set(suiteName, forKey: "suiteName")
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let client = MockCollaborationClient()
+        client.relationships = [feature20RelationshipDTO(stableID: "rel-account-a")]
+        let cacheFactory = CountingCollaborationCacheStoreFactory()
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: client,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked },
+            cacheStoreFactory: cacheFactory.makeStore
+        )
+        coordinator.configure(modelContext: container.mainContext)
+
+        cacheFactory.reset()
+        await coordinator.handleAccountStateDidChange(feature19SignedInState())
+
+        #expect(cacheFactory.fullSnapshotLoadCount == 2)
+        #expect(cacheFactory.relationshipsSliceLoadCount == 0)
+        #expect(cacheFactory.assignmentsSliceLoadCount == 0)
+        #expect(cacheFactory.notesSliceLoadCount == 0)
+        #expect(cacheFactory.blueprintsSliceLoadCount == 0)
+        #expect(cacheFactory.sharesSliceLoadCount == 0)
+        #expect(cacheFactory.notificationStateSliceLoadCount <= 1)
+        #expect(coordinator.relationships.map(\.stableID) == ["rel-account-a"])
+
+        cacheFactory.reset()
+        client.relationships = [feature20RelationshipDTO(
+            stableID: "rel-account-b",
+            athleteAccountID: uuid(4),
+            athleteDisplayName: "Athlete Jamie"
+        )]
+        await coordinator.handleAccountStateDidChange(feature19CoachState())
+
+        #expect(cacheFactory.fullSnapshotLoadCount == 2)
+        #expect(cacheFactory.relationshipsSliceLoadCount == 0)
+        #expect(cacheFactory.assignmentsSliceLoadCount == 0)
+        #expect(cacheFactory.notesSliceLoadCount == 0)
+        #expect(cacheFactory.blueprintsSliceLoadCount == 0)
+        #expect(cacheFactory.sharesSliceLoadCount == 0)
+        #expect(cacheFactory.notificationStateSliceLoadCount <= 1)
+        #expect(coordinator.relationships.map(\.stableID) == ["rel-account-b"])
+    }
+
+    @Test func narrowRefreshMutationsUseSliceLoadersWithoutFullSnapshotReloads() async throws {
+        let container = try makeInMemoryContainer()
+        let suiteName = "Feature20SliceReloads.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.set(suiteName, forKey: "suiteName")
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let client = MockCollaborationClient()
+        client.relationships = [feature20RelationshipDTO(stableID: "rel-slice")]
+        client.blueprints = [feature20BlueprintDTO(stableID: "blueprint-seeded")]
+        client.programShares = [feature20ProgramShareDTO(stableID: "program-share-seeded")]
+        client.progressShares = [feature20ProgressShareDTO(stableID: "progress-share-seeded")]
+
+        let cacheFactory = CountingCollaborationCacheStoreFactory()
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: client,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: InMemoryCloudSessionTokenStore(tokens: feature19Tokens()),
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults),
+            entitlementStateProvider: { .premiumUnlocked },
+            cacheStoreFactory: cacheFactory.makeStore
+        )
+        coordinator.configure(modelContext: container.mainContext)
+        await coordinator.handleAccountStateDidChange(feature19SignedInState())
+
+        let relationship = try #require(coordinator.relationships.first)
+        let seededBlueprint = try #require(coordinator.blueprints.first)
+        let initialBlueprintIDs = coordinator.blueprints.map(\.stableID)
+        let initialProgramShareIDs = coordinator.programShares.map(\.stableID)
+
+        let program = feature20BlueprintSourceProgram()
+        container.mainContext.insert(program)
+        try container.mainContext.save()
+
+        cacheFactory.reset()
+
+        await coordinator.updateNotificationPreferences(
+            NotificationPreferenceUpdateRequest(
+                coachInvitesEnabled: true,
+                assignmentUpdatesEnabled: true,
+                coachNotesEnabled: true,
+                missedSessionNudgesEnabled: false,
+                checkInRemindersEnabled: true,
+                pendingProposalRemindersEnabled: true,
+                weeklyDigestsEnabled: true
+            )
+        )
+        await coordinator.handlePushAuthorizationStateChange(.authorized, deviceToken: "slice-token")
+        await coordinator.createCoachInvite(
+            inviteeEmail: "slice-athlete@example.com",
+            noteText: nil,
+            inviterRole: .coach,
+            scopes: CollaborationVisibilityScope.defaultInviteScopes
+        )
+        await coordinator.createAssignment(
+            relationship: relationship,
+            blueprint: seededBlueprint,
+            notesText: "Start next Monday",
+            startGuidance: "Ramp week one"
+        )
+        await coordinator.createCoachNote(
+            relationship: relationship,
+            bodyText: "Keep bar speed high.",
+            anchorKind: .general
+        )
+
+        #expect(coordinator.blueprints.map(\.stableID) == initialBlueprintIDs)
+        #expect(coordinator.programShares.map(\.stableID) == initialProgramShareIDs)
+
+        await coordinator.createProgramShare(
+            relationshipStableID: relationship.stableID,
+            shareKind: .blueprint,
+            blueprintStableID: seededBlueprint.stableID,
+            sourceProgramStableID: nil,
+            grantedToAccountID: uuid(3),
+            messageText: "Take a look at this block."
+        )
+        await coordinator.createProgressShare(
+            relationshipStableID: relationship.stableID,
+            shareKind: .prHighlight,
+            grantedToAccountID: uuid(3),
+            titleText: "Bench PR",
+            subtitleText: nil,
+            summaryText: "New 5RM",
+            payloadJSON: "{\"pr\":true}"
+        )
+        await coordinator.saveBlueprint(
+            from: program,
+            focusText: "Strength",
+            notesText: "Wave load the compounds.",
+            tags: ["strength", "feature20"]
+        )
+
+        #expect(cacheFactory.fullSnapshotLoadCount == 0)
+        #expect(cacheFactory.relationshipsSliceLoadCount == 3)
+        #expect(cacheFactory.assignmentsSliceLoadCount == 1)
+        #expect(cacheFactory.notesSliceLoadCount == 1)
+        #expect(cacheFactory.notificationStateSliceLoadCount == 2)
+        #expect(cacheFactory.blueprintsSliceLoadCount == 1)
+        #expect(cacheFactory.sharesSliceLoadCount == 2)
+    }
+
     private actor ActorCounter {
         private(set) var value: Int = 0
         func increment() { value += 1 }
@@ -1771,6 +1952,162 @@ private final class MockCollaborationClient: CloudCollaborationClient {
     }
 }
 
+@MainActor
+private final class CountingCollaborationCacheStoreFactory {
+    private let counters = CollaborationCacheStoreLoadCounters()
+
+    var fullSnapshotLoadCount: Int { counters.fullSnapshotLoadCount }
+    var relationshipsSliceLoadCount: Int { counters.relationshipsSliceLoadCount }
+    var assignmentsSliceLoadCount: Int { counters.assignmentsSliceLoadCount }
+    var notesSliceLoadCount: Int { counters.notesSliceLoadCount }
+    var notificationStateSliceLoadCount: Int { counters.notificationStateSliceLoadCount }
+    var insightsSliceLoadCount: Int { counters.insightsSliceLoadCount }
+    var blueprintsSliceLoadCount: Int { counters.blueprintsSliceLoadCount }
+    var sharesSliceLoadCount: Int { counters.sharesSliceLoadCount }
+
+    var totalSliceLoadCount: Int {
+        relationshipsSliceLoadCount +
+            assignmentsSliceLoadCount +
+            notesSliceLoadCount +
+            notificationStateSliceLoadCount +
+            insightsSliceLoadCount +
+            blueprintsSliceLoadCount +
+            sharesSliceLoadCount
+    }
+
+    func makeStore(modelContext: ModelContext) -> any CollaborationCacheStoring {
+        CountingCollaborationCacheStore(
+            base: LocalCollaborationCacheStore(modelContext: modelContext),
+            counters: counters
+        )
+    }
+
+    func reset() {
+        counters.reset()
+    }
+}
+
+@MainActor
+private final class CountingCollaborationCacheStore: CollaborationCacheStoring {
+    private let base: LocalCollaborationCacheStore
+    private let counters: CollaborationCacheStoreLoadCounters
+
+    init(
+        base: LocalCollaborationCacheStore,
+        counters: CollaborationCacheStoreLoadCounters
+    ) {
+        self.base = base
+        self.counters = counters
+    }
+
+    func loadSnapshot() throws -> CollaborationCacheSnapshot {
+        counters.fullSnapshotLoadCount += 1
+        return try base.loadSnapshot()
+    }
+
+    func loadRelationshipsAndInvites() throws -> CollaborationRelationshipsCacheSlice {
+        counters.relationshipsSliceLoadCount += 1
+        return try base.loadRelationshipsAndInvites()
+    }
+
+    func loadAssignments() throws -> [ProgramAssignment] {
+        counters.assignmentsSliceLoadCount += 1
+        return try base.loadAssignments()
+    }
+
+    func loadNotes() throws -> [CoachNote] {
+        counters.notesSliceLoadCount += 1
+        return try base.loadNotes()
+    }
+
+    func loadNotificationState() throws -> CollaborationNotificationStateCacheSlice {
+        counters.notificationStateSliceLoadCount += 1
+        return try base.loadNotificationState()
+    }
+
+    func loadInsightsAndDigests() throws -> CollaborationInsightsCacheSlice {
+        counters.insightsSliceLoadCount += 1
+        return try base.loadInsightsAndDigests()
+    }
+
+    func loadBlueprints() throws -> [SavedProgramBlueprint] {
+        counters.blueprintsSliceLoadCount += 1
+        return try base.loadBlueprints()
+    }
+
+    func loadShares() throws -> CollaborationSharesCacheSlice {
+        counters.sharesSliceLoadCount += 1
+        return try base.loadShares()
+    }
+
+    func clearAll() throws {
+        try base.clearAll()
+    }
+
+    func replaceAll(with payload: CollaborationFullRefreshPayload) throws {
+        try base.replaceAll(with: payload)
+    }
+
+    func replaceRelationships(with dtos: [CoachRelationshipDTO]) throws {
+        try base.replaceRelationships(with: dtos)
+    }
+
+    func replaceInvites(with dtos: [CoachInviteDTO]) throws {
+        try base.replaceInvites(with: dtos)
+    }
+
+    func replaceAssignments(with dtos: [ProgramAssignmentDTO]) throws {
+        try base.replaceAssignments(with: dtos)
+    }
+
+    func replaceNotes(with dtos: [CoachNoteDTO]) throws {
+        try base.replaceNotes(with: dtos)
+    }
+
+    func replaceNotificationPreference(with dto: NotificationPreferenceDTO?) throws {
+        try base.replaceNotificationPreference(with: dto)
+    }
+
+    func replaceDeviceRegistration(with dto: DevicePushRegistrationDTO?) throws {
+        try base.replaceDeviceRegistration(with: dto)
+    }
+
+    func replaceBlueprints(with dtos: [SavedProgramBlueprintDTO]) throws {
+        try base.replaceBlueprints(with: dtos)
+    }
+
+    func replaceProgramShares(with dtos: [ProgramShareGrantDTO]) throws {
+        try base.replaceProgramShares(with: dtos)
+    }
+
+    func replaceProgressShares(with dtos: [ProgressShareCardDTO]) throws {
+        try base.replaceProgressShares(with: dtos)
+    }
+}
+
+@MainActor
+private final class CollaborationCacheStoreLoadCounters {
+    var fullSnapshotLoadCount = 0
+    var relationshipsSliceLoadCount = 0
+    var assignmentsSliceLoadCount = 0
+    var notesSliceLoadCount = 0
+    var notificationStateSliceLoadCount = 0
+    var insightsSliceLoadCount = 0
+    var blueprintsSliceLoadCount = 0
+    var sharesSliceLoadCount = 0
+
+    func reset() {
+        fullSnapshotLoadCount = 0
+        relationshipsSliceLoadCount = 0
+        assignmentsSliceLoadCount = 0
+        notesSliceLoadCount = 0
+        notificationStateSliceLoadCount = 0
+        insightsSliceLoadCount = 0
+        blueprintsSliceLoadCount = 0
+        sharesSliceLoadCount = 0
+    }
+}
+
 private final class MockCloudBackendClient: CloudBackendClient {
     func exchangeAppleIdentity(_ request: CloudAuthExchangeRequest) async throws -> CloudAuthSessionResponse { throw MockError.unused }
     func refreshSession(_ request: CloudSessionRefreshRequest) async throws -> CloudAuthSessionResponse { throw MockError.unused }
@@ -1854,6 +2191,101 @@ private func feature19Tokens() -> CloudSessionTokensDTO {
 
 private func defaultsSuiteName(_ defaults: UserDefaults) -> String {
     defaults.string(forKey: "suiteName") ?? ""
+}
+
+private func feature20RelationshipDTO(
+    stableID: String,
+    athleteAccountID: UUID = uuid(2),
+    athleteDisplayName: String = "Athlete Sam"
+) -> CoachRelationshipDTO {
+    CoachRelationshipDTO(
+        stableID: stableID,
+        createdAt: day(1),
+        updatedAt: day(2),
+        statusRawValue: CoachRelationshipStatus.active.rawValue,
+        coachAccountID: uuid(1),
+        coachDisplayName: "Coach Alex",
+        athleteAccountID: athleteAccountID,
+        athleteDisplayName: athleteDisplayName,
+        invitedByAccountID: uuid(1),
+        visibilityScopeBitmask: CollaborationVisibilityScope.bitmask(
+            for: CollaborationVisibilityScope.defaultInviteScopes
+        ),
+        unreadCoachNoteCount: 0,
+        pendingAssignmentCount: 0,
+        latestInsightSnapshotAt: day(2)
+    )
+}
+
+private func feature20BlueprintDTO(stableID: String) -> SavedProgramBlueprintDTO {
+    SavedProgramBlueprintDTO(
+        stableID: stableID,
+        createdAt: day(1),
+        updatedAt: day(2),
+        name: "Seeded Blueprint",
+        focusText: "Strength",
+        notesText: "Seeded notes",
+        tags: ["seeded"],
+        durationWeeks: 6,
+        sessionsPerWeek: 4,
+        sourceProgramStableID: "program-seeded",
+        createdByAccountID: uuid(1),
+        createdByDisplayName: "Coach Alex",
+        trainingProgramSnapshotJSON: "{\"name\":\"Seeded Blueprint\"}",
+        lastSharedAt: nil
+    )
+}
+
+private func feature20ProgramShareDTO(stableID: String) -> ProgramShareGrantDTO {
+    ProgramShareGrantDTO(
+        stableID: stableID,
+        createdAt: day(1),
+        updatedAt: day(2),
+        relationshipStableID: "rel-slice",
+        shareKindRawValue: ProgramShareKind.blueprint.rawValue,
+        statusRawValue: ShareGrantStatus.active.rawValue,
+        blueprintStableID: "blueprint-seeded",
+        sourceProgramStableID: nil,
+        grantedByAccountID: uuid(1),
+        grantedByDisplayName: "Coach Alex",
+        grantedToAccountID: uuid(3),
+        grantedToDisplayName: "Athlete Taylor",
+        messageText: "Seeded program share"
+    )
+}
+
+private func feature20ProgressShareDTO(stableID: String) -> ProgressShareCardDTO {
+    ProgressShareCardDTO(
+        stableID: stableID,
+        createdAt: day(1),
+        updatedAt: day(2),
+        relationshipStableID: "rel-slice",
+        shareKindRawValue: ProgressShareKind.prHighlight.rawValue,
+        statusRawValue: ShareGrantStatus.active.rawValue,
+        grantedByAccountID: uuid(1),
+        grantedByDisplayName: "Coach Alex",
+        grantedToAccountID: uuid(3),
+        grantedToDisplayName: "Athlete Taylor",
+        titleText: "Seeded PR",
+        subtitleText: nil,
+        summaryText: "Bench PR",
+        payloadJSON: "{\"seeded\":true}"
+    )
+}
+
+private func feature20BlueprintSourceProgram() -> TrainingProgram {
+    TrainingProgram(
+        id: uuid(40),
+        syncStableID: "program-feature20-slice",
+        syncVersion: 2,
+        syncLastModifiedAt: day(3),
+        name: "Feature 20 Slice Source",
+        lengthInWeeks: 6,
+        sessionsPerWeek: 4,
+        createdDate: day(1),
+        source: .aiGenerated,
+        descriptionText: "Program used to verify blueprint slice refreshes."
+    )
 }
 
 private func day(_ offset: TimeInterval) -> Date {

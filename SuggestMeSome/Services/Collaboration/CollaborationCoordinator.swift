@@ -176,19 +176,28 @@ final class CollaborationCoordinator {
     /// so tests can drive non-premium flows without touching the shared
     /// PurchaseManager singleton.
     private let entitlementStateProvider: @MainActor () -> EntitlementState
+    private let cacheStoreFactory: @MainActor (ModelContext) -> any CollaborationCacheStoring
 
     init(
         collaborationClient: CloudCollaborationClient? = nil,
         backendClient: CloudBackendClient? = nil,
         tokenStore: CloudSessionTokenStore? = nil,
         syncStateStore: CloudSyncStateStore? = nil,
-        entitlementStateProvider: (@MainActor () -> EntitlementState)? = nil
+        entitlementStateProvider: (@MainActor () -> EntitlementState)? = nil,
+        cacheStoreFactory: (@MainActor (ModelContext) -> any CollaborationCacheStoring)? = nil
     ) {
         self.collaborationClient = collaborationClient ?? HTTPCloudCollaborationClient()
         self.backendClient = backendClient ?? HTTPCloudBackendClient()
         self.tokenStore = tokenStore ?? KeychainCloudSessionTokenStore.shared
         self.syncStateStore = syncStateStore ?? CloudSyncStateStore()
         self.entitlementStateProvider = entitlementStateProvider ?? { PurchaseManager.shared.entitlementState }
+        self.cacheStoreFactory = cacheStoreFactory ?? { modelContext in
+            LocalCollaborationCacheStore(modelContext: modelContext)
+        }
+    }
+
+    private func cacheStore(for modelContext: ModelContext) -> any CollaborationCacheStoring {
+        cacheStoreFactory(modelContext)
     }
 
     /// Defense-in-depth gate on every collaboration mutation. UI already
@@ -302,7 +311,7 @@ final class CollaborationCoordinator {
            previousAccountID != nil,
            nextAccountID != nil,
            let modelContext {
-            try? LocalCollaborationCacheStore(modelContext: modelContext).clearAll()
+            try? cacheStore(for: modelContext).clearAll()
             clearInMemoryState()
         }
 
@@ -311,7 +320,7 @@ final class CollaborationCoordinator {
         guard nextAccountID != nil else {
             clearInMemoryState()
             if let modelContext {
-                try? LocalCollaborationCacheStore(modelContext: modelContext).clearAll()
+                try? cacheStore(for: modelContext).clearAll()
             }
             phase = .signedOut
             statusMessage = nil
@@ -379,7 +388,7 @@ final class CollaborationCoordinator {
             let progressShares = try await progressSharesTask
 
             let mergedSnapshots = mergeInsightSnapshots(primary: snapshots, roster: rosterSnapshots)
-            let store = LocalCollaborationCacheStore(modelContext: modelContext)
+            let store = cacheStore(for: modelContext)
             try store.replaceAll(
                 with: CollaborationFullRefreshPayload(
                     relationships: relationships,
@@ -453,9 +462,9 @@ final class CollaborationCoordinator {
                 ),
                 accessToken: accessToken
             )
-            try LocalCollaborationCacheStore(modelContext: modelContext)
-                .replaceDeviceRegistration(with: registration)
-            loadCache()
+            let store = cacheStore(for: modelContext)
+            try store.replaceDeviceRegistration(with: registration)
+            applyNotificationState(try store.loadNotificationState())
             clearError(.pushRegistration)
         } catch {
             recordError(.pushRegistration, error)
@@ -475,9 +484,11 @@ final class CollaborationCoordinator {
             lastRegisteredAt: nil,
             lastErrorMessage: message
         )
-        try? LocalCollaborationCacheStore(modelContext: modelContext)
-            .replaceDeviceRegistration(with: registration)
-        loadCache()
+        let store = cacheStore(for: modelContext)
+        try? store.replaceDeviceRegistration(with: registration)
+        if let notificationState = try? store.loadNotificationState() {
+            applyNotificationState(notificationState)
+        }
     }
 
     func updateNotificationPreferences(
@@ -491,9 +502,9 @@ final class CollaborationCoordinator {
                 update,
                 accessToken: accessToken
             )
-            try LocalCollaborationCacheStore(modelContext: modelContext)
-                .replaceNotificationPreference(with: dto)
-            loadCache()
+            let store = cacheStore(for: modelContext)
+            try store.replaceNotificationPreference(with: dto)
+            applyNotificationState(try store.loadNotificationState())
             statusMessage = "Notification preferences updated."
             appendActivity(.info, statusMessage ?? "Notification preferences updated.")
             clearError(.notificationPreferences)
@@ -848,96 +859,193 @@ final class CollaborationCoordinator {
         using accessToken: String,
         context: ModelContext
     ) async throws {
+        let store = cacheStore(for: context)
         let relationships = try await collaborationClient.fetchRelationships(accessToken: accessToken)
-        try LocalCollaborationCacheStore(modelContext: context)
-            .replaceRelationships(with: relationships)
-        loadCache()
+        try store.replaceRelationships(with: relationships)
+        applyRelationshipsAndInvites(try store.loadRelationshipsAndInvites())
     }
 
     private func refreshInvites(
         using accessToken: String,
         context: ModelContext
     ) async throws {
+        let store = cacheStore(for: context)
         let invites = try await collaborationClient.fetchInvites(accessToken: accessToken)
-        try LocalCollaborationCacheStore(modelContext: context)
-            .replaceInvites(with: invites)
-        loadCache()
+        try store.replaceInvites(with: invites)
+        applyRelationshipsAndInvites(try store.loadRelationshipsAndInvites())
     }
 
     private func refreshAssignments(
         using accessToken: String,
         context: ModelContext
     ) async throws {
+        let store = cacheStore(for: context)
         let assignments = try await collaborationClient.fetchAssignments(accessToken: accessToken)
-        try LocalCollaborationCacheStore(modelContext: context)
-            .replaceAssignments(with: assignments)
-        loadCache()
+        try store.replaceAssignments(with: assignments)
+        applyAssignments(try store.loadAssignments())
     }
 
     private func refreshNotes(
         using accessToken: String,
         context: ModelContext
     ) async throws {
+        let store = cacheStore(for: context)
         let notes = try await collaborationClient.fetchNotes(accessToken: accessToken)
-        try LocalCollaborationCacheStore(modelContext: context)
-            .replaceNotes(with: notes)
-        loadCache()
+        try store.replaceNotes(with: notes)
+        applyNotes(try store.loadNotes())
     }
 
     private func refreshBlueprints(
         using accessToken: String,
         context: ModelContext
     ) async throws {
+        let store = cacheStore(for: context)
         let blueprints = try await collaborationClient.fetchBlueprints(accessToken: accessToken)
-        try LocalCollaborationCacheStore(modelContext: context)
-            .replaceBlueprints(with: blueprints)
-        loadCache()
+        try store.replaceBlueprints(with: blueprints)
+        applyBlueprints(try store.loadBlueprints())
     }
 
     private func refreshProgramShares(
         using accessToken: String,
         context: ModelContext
     ) async throws {
+        let store = cacheStore(for: context)
         let shares = try await collaborationClient.fetchProgramShares(accessToken: accessToken)
-        try LocalCollaborationCacheStore(modelContext: context)
-            .replaceProgramShares(with: shares)
-        loadCache()
+        try store.replaceProgramShares(with: shares)
+        applyShares(try store.loadShares())
     }
 
     private func refreshProgressShares(
         using accessToken: String,
         context: ModelContext
     ) async throws {
+        let store = cacheStore(for: context)
         let shares = try await collaborationClient.fetchProgressShares(accessToken: accessToken)
-        try LocalCollaborationCacheStore(modelContext: context)
-            .replaceProgressShares(with: shares)
-        loadCache()
+        try store.replaceProgressShares(with: shares)
+        applyShares(try store.loadShares())
     }
 
     private func loadCache() {
         guard let modelContext else { return }
-        guard let snapshot = try? LocalCollaborationCacheStore(modelContext: modelContext).loadSnapshot() else {
+        guard let snapshot = try? cacheStore(for: modelContext).loadSnapshot() else {
             return
         }
+        applyCacheSnapshot(snapshot)
+    }
 
-        relationshipsStore.apply(
-            relationships: snapshot.relationships,
-            invites: snapshot.invites
+    private func applyCacheSnapshot(_ snapshot: CollaborationCacheSnapshot) {
+        applyRelationshipsAndInvites(
+            CollaborationRelationshipsCacheSlice(
+                relationships: snapshot.relationships,
+                invites: snapshot.invites
+            ),
+            invalidateDerived: false
         )
-        assignmentsStore.apply(assignments: snapshot.assignments)
-        notesStore.apply(notes: snapshot.notes)
-        notificationPreference = snapshot.notificationPreference
-        deviceRegistration = snapshot.deviceRegistration
-        insightsStore.apply(
-            insightSnapshots: snapshot.insightSnapshots,
-            weeklyDigests: snapshot.weeklyDigests
+        applyAssignments(snapshot.assignments, invalidateDerived: false)
+        applyNotes(snapshot.notes, invalidateDerived: false)
+        applyNotificationState(
+            CollaborationNotificationStateCacheSlice(
+                notificationPreference: snapshot.notificationPreference,
+                deviceRegistration: snapshot.deviceRegistration
+            ),
+            invalidateDerived: false
         )
-        blueprintsStore.apply(blueprints: snapshot.blueprints)
-        sharesStore.apply(
-            programShares: snapshot.programShares,
-            progressShares: snapshot.progressShares
+        applyInsightsAndDigests(
+            CollaborationInsightsCacheSlice(
+                insightSnapshots: snapshot.insightSnapshots,
+                weeklyDigests: snapshot.weeklyDigests
+            ),
+            invalidateDerived: false
+        )
+        applyBlueprints(snapshot.blueprints, invalidateDerived: false)
+        applyShares(
+            CollaborationSharesCacheSlice(
+                programShares: snapshot.programShares,
+                progressShares: snapshot.progressShares
+            ),
+            invalidateDerived: false
         )
         invalidateDerivedCaches()
+    }
+
+    private func applyRelationshipsAndInvites(
+        _ slice: CollaborationRelationshipsCacheSlice,
+        invalidateDerived: Bool = true
+    ) {
+        relationshipsStore.apply(
+            relationships: slice.relationships,
+            invites: slice.invites
+        )
+        if invalidateDerived {
+            invalidateDerivedCaches()
+        }
+    }
+
+    private func applyAssignments(
+        _ assignments: [ProgramAssignment],
+        invalidateDerived: Bool = true
+    ) {
+        assignmentsStore.apply(assignments: assignments)
+        if invalidateDerived {
+            invalidateDerivedCaches()
+        }
+    }
+
+    private func applyNotes(
+        _ notes: [CoachNote],
+        invalidateDerived: Bool = true
+    ) {
+        notesStore.apply(notes: notes)
+        if invalidateDerived {
+            invalidateDerivedCaches()
+        }
+    }
+
+    private func applyNotificationState(
+        _ state: CollaborationNotificationStateCacheSlice,
+        invalidateDerived: Bool = true
+    ) {
+        notificationPreference = state.notificationPreference
+        deviceRegistration = state.deviceRegistration
+        if invalidateDerived {
+            invalidateDerivedCaches()
+        }
+    }
+
+    private func applyInsightsAndDigests(
+        _ slice: CollaborationInsightsCacheSlice,
+        invalidateDerived: Bool = true
+    ) {
+        insightsStore.apply(
+            insightSnapshots: slice.insightSnapshots,
+            weeklyDigests: slice.weeklyDigests
+        )
+        if invalidateDerived {
+            invalidateDerivedCaches()
+        }
+    }
+
+    private func applyBlueprints(
+        _ blueprints: [SavedProgramBlueprint],
+        invalidateDerived: Bool = true
+    ) {
+        blueprintsStore.apply(blueprints: blueprints)
+        if invalidateDerived {
+            invalidateDerivedCaches()
+        }
+    }
+
+    private func applyShares(
+        _ slice: CollaborationSharesCacheSlice,
+        invalidateDerived: Bool = true
+    ) {
+        sharesStore.apply(
+            programShares: slice.programShares,
+            progressShares: slice.progressShares
+        )
+        if invalidateDerived {
+            invalidateDerivedCaches()
+        }
     }
 
     private func clearInMemoryState() {

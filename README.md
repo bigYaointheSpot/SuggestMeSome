@@ -4221,6 +4221,20 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature20LiveActivityTests`
 
+#### Prompt 10 [Feature 20 audit remediation — targeted collaboration slice reloads] — 2026-04-20
+
+- Closed the remaining collaboration scalability follow-up from the Feature 20 audit without changing user-facing flows:
+  - Added focused cache readers in `LocalCollaborationCacheStore` for relationships/invites, assignments, notes, notification state, insights/digests, blueprints, and shares, then composed the full snapshot loader from those same slice helpers so the cache store has one consistent read path
+  - Reworked `CollaborationCoordinator` narrow refresh paths to apply only the affected slice after note, invite, assignment, blueprint, share, or notification mutations instead of calling `loadCache()` and rebuilding every collaboration sub-store from a whole-snapshot read
+  - Introduced an internal cache-store protocol/factory seam so Feature 19 collaboration tests can prove the distinction between targeted slice reloads and full snapshot loads during hydrate, account refresh, and account-switch flows
+- Added focused collaboration regression coverage for:
+  - hydrate continuing to use a full snapshot cache load
+  - account refresh and account switch continuing to use full snapshot reloads, aside from the expected notification-state follow-up after device registration sync
+  - narrow collaboration mutations reloading only their owning cache slice and leaving unrelated stores untouched
+- Verification:
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests`
+
 ### Feature 21 — Cloud, collaboration, and consumer-health disclosure hardening
 
 **Status:** Complete

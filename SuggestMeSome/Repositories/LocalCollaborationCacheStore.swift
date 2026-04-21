@@ -1,6 +1,26 @@
 import Foundation
 import SwiftData
 
+struct CollaborationRelationshipsCacheSlice {
+    var relationships: [CoachRelationship]
+    var invites: [CoachInvite]
+}
+
+struct CollaborationNotificationStateCacheSlice {
+    var notificationPreference: NotificationPreference?
+    var deviceRegistration: DevicePushRegistration?
+}
+
+struct CollaborationInsightsCacheSlice {
+    var insightSnapshots: [InsightSnapshot]
+    var weeklyDigests: [WeeklyDigest]
+}
+
+struct CollaborationSharesCacheSlice {
+    var programShares: [ProgramShareGrant]
+    var progressShares: [ProgressShareCard]
+}
+
 struct CollaborationCacheSnapshot {
     var relationships: [CoachRelationship]
     var invites: [CoachInvite]
@@ -13,6 +33,30 @@ struct CollaborationCacheSnapshot {
     var blueprints: [SavedProgramBlueprint]
     var programShares: [ProgramShareGrant]
     var progressShares: [ProgressShareCard]
+}
+
+@MainActor
+protocol CollaborationCacheStoring {
+    func loadSnapshot() throws -> CollaborationCacheSnapshot
+    func loadRelationshipsAndInvites() throws -> CollaborationRelationshipsCacheSlice
+    func loadAssignments() throws -> [ProgramAssignment]
+    func loadNotes() throws -> [CoachNote]
+    func loadNotificationState() throws -> CollaborationNotificationStateCacheSlice
+    func loadInsightsAndDigests() throws -> CollaborationInsightsCacheSlice
+    func loadBlueprints() throws -> [SavedProgramBlueprint]
+    func loadShares() throws -> CollaborationSharesCacheSlice
+
+    func clearAll() throws
+    func replaceAll(with payload: CollaborationFullRefreshPayload) throws
+    func replaceRelationships(with dtos: [CoachRelationshipDTO]) throws
+    func replaceInvites(with dtos: [CoachInviteDTO]) throws
+    func replaceAssignments(with dtos: [ProgramAssignmentDTO]) throws
+    func replaceNotes(with dtos: [CoachNoteDTO]) throws
+    func replaceNotificationPreference(with dto: NotificationPreferenceDTO?) throws
+    func replaceDeviceRegistration(with dto: DevicePushRegistrationDTO?) throws
+    func replaceBlueprints(with dtos: [SavedProgramBlueprintDTO]) throws
+    func replaceProgramShares(with dtos: [ProgramShareGrantDTO]) throws
+    func replaceProgressShares(with dtos: [ProgressShareCardDTO]) throws
 }
 
 struct CollaborationFullRefreshPayload {
@@ -29,7 +73,7 @@ struct CollaborationFullRefreshPayload {
 }
 
 @MainActor
-struct LocalCollaborationCacheStore {
+struct LocalCollaborationCacheStore: CollaborationCacheStoring {
     let modelContext: ModelContext
     private let saveHandler: @MainActor () throws -> Void
 
@@ -42,37 +86,82 @@ struct LocalCollaborationCacheStore {
     }
 
     func loadSnapshot() throws -> CollaborationCacheSnapshot {
-        let notes = try modelContext.fetch(
-            FetchDescriptor(sortBy: [SortDescriptor(\CoachNote.updatedAt, order: .reverse)])
-        )
+        let relationshipsSlice = try loadRelationshipsAndInvites()
+        let notes = try loadNotes()
+        let notificationState = try loadNotificationState()
+        let insightsSlice = try loadInsightsAndDigests()
+        let sharesSlice = try loadShares()
 
         return CollaborationCacheSnapshot(
+            relationships: relationshipsSlice.relationships,
+            invites: relationshipsSlice.invites,
+            assignments: try loadAssignments(),
+            notes: notes,
+            notificationPreference: notificationState.notificationPreference,
+            deviceRegistration: notificationState.deviceRegistration,
+            insightSnapshots: insightsSlice.insightSnapshots,
+            weeklyDigests: insightsSlice.weeklyDigests,
+            blueprints: try loadBlueprints(),
+            programShares: sharesSlice.programShares,
+            progressShares: sharesSlice.progressShares
+        )
+    }
+
+    func loadRelationshipsAndInvites() throws -> CollaborationRelationshipsCacheSlice {
+        CollaborationRelationshipsCacheSlice(
             relationships: try modelContext.fetch(
                 FetchDescriptor(sortBy: [SortDescriptor(\CoachRelationship.updatedAt, order: .reverse)])
             ),
             invites: try modelContext.fetch(
                 FetchDescriptor(sortBy: [SortDescriptor(\CoachInvite.updatedAt, order: .reverse)])
-            ),
-            assignments: try modelContext.fetch(
-                FetchDescriptor(sortBy: [SortDescriptor(\ProgramAssignment.updatedAt, order: .reverse)])
-            ),
-            notes: notes.sorted { lhs, rhs in
-                if lhs.isUnread != rhs.isUnread {
-                    return lhs.isUnread && !rhs.isUnread
-                }
-                return lhs.updatedAt > rhs.updatedAt
-            },
+            )
+        )
+    }
+
+    func loadAssignments() throws -> [ProgramAssignment] {
+        try modelContext.fetch(
+            FetchDescriptor(sortBy: [SortDescriptor(\ProgramAssignment.updatedAt, order: .reverse)])
+        )
+    }
+
+    func loadNotes() throws -> [CoachNote] {
+        let notes = try modelContext.fetch(
+            FetchDescriptor(sortBy: [SortDescriptor(\CoachNote.updatedAt, order: .reverse)])
+        )
+        return notes.sorted { lhs, rhs in
+            if lhs.isUnread != rhs.isUnread {
+                return lhs.isUnread && !rhs.isUnread
+            }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    func loadNotificationState() throws -> CollaborationNotificationStateCacheSlice {
+        CollaborationNotificationStateCacheSlice(
             notificationPreference: try modelContext.fetch(FetchDescriptor<NotificationPreference>()).first,
-            deviceRegistration: try modelContext.fetch(FetchDescriptor<DevicePushRegistration>()).first,
+            deviceRegistration: try modelContext.fetch(FetchDescriptor<DevicePushRegistration>()).first
+        )
+    }
+
+    func loadInsightsAndDigests() throws -> CollaborationInsightsCacheSlice {
+        CollaborationInsightsCacheSlice(
             insightSnapshots: try modelContext.fetch(
                 FetchDescriptor(sortBy: [SortDescriptor(\InsightSnapshot.updatedAt, order: .reverse)])
             ),
             weeklyDigests: try modelContext.fetch(
                 FetchDescriptor(sortBy: [SortDescriptor(\WeeklyDigest.updatedAt, order: .reverse)])
-            ),
-            blueprints: try modelContext.fetch(
-                FetchDescriptor(sortBy: [SortDescriptor(\SavedProgramBlueprint.updatedAt, order: .reverse)])
-            ),
+            )
+        )
+    }
+
+    func loadBlueprints() throws -> [SavedProgramBlueprint] {
+        try modelContext.fetch(
+            FetchDescriptor(sortBy: [SortDescriptor(\SavedProgramBlueprint.updatedAt, order: .reverse)])
+        )
+    }
+
+    func loadShares() throws -> CollaborationSharesCacheSlice {
+        CollaborationSharesCacheSlice(
             programShares: try modelContext.fetch(
                 FetchDescriptor(sortBy: [SortDescriptor(\ProgramShareGrant.updatedAt, order: .reverse)])
             ),
