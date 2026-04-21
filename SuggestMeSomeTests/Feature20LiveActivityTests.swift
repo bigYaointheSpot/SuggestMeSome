@@ -217,10 +217,79 @@ struct Feature20LiveActivityTests {
         #expect(route?.id == "activeWorkout::\(sessionID)")
     }
 
+    @Test func deepLinkHelperBuildsExpectedWorkoutURL() {
+        let sessionID = UUID()
+        let url = WorkoutLiveActivityAttributes.deepLinkURL(for: sessionID)
+
+        #expect(url.absoluteString == "suggestmesome://workout/\(sessionID.uuidString)")
+        #expect(AppDeepLinkRoute(url: url) == .activeWorkout(sessionID: sessionID.uuidString))
+    }
+
     @Test func deepLinkRejectsWorkoutHostWithoutSessionID() {
         // `suggestmesome://workout` (no path) should fall through to nil so
         // a malformed widget URL doesn't open a mismatched sheet.
         #expect(AppDeepLinkRoute(url: URL(string: "suggestmesome://workout")!) == nil)
+    }
+
+    // MARK: - Controller sequencing
+
+    @Test func controllerSerializesRapidUpdatesForSameSession() async {
+        let driver = ControlledLiveActivityDriver()
+        let controller = WorkoutLiveActivityController(driver: driver)
+        let sessionID = UUID()
+        driver.runningSessionIDs = [sessionID]
+        driver.blockedUpdateCount = 1
+
+        controller.update(for: Self.sampleSession(
+            id: sessionID,
+            exercises: [Self.strength(name: "Bench Press", logged: 0, total: 1)]
+        ))
+        controller.update(for: Self.sampleSession(
+            id: sessionID,
+            exercises: [Self.strength(name: "Squat", logged: 0, total: 1)]
+        ))
+
+        await Self.waitUntil { driver.events == ["update-start:Bench Press"] }
+        #expect(driver.events == ["update-start:Bench Press"])
+
+        driver.releaseNextBlockedUpdate()
+        await Self.waitUntil { driver.events.count == 4 }
+
+        #expect(driver.events == [
+            "update-start:Bench Press",
+            "update-end:Bench Press",
+            "update-start:Squat",
+            "update-end:Squat"
+        ])
+    }
+
+    @Test func controllerEndSkipsQueuedUpdatesForEndedSession() async {
+        let driver = ControlledLiveActivityDriver()
+        let controller = WorkoutLiveActivityController(driver: driver)
+        let sessionID = UUID()
+        driver.runningSessionIDs = [sessionID]
+        driver.blockedUpdateCount = 1
+
+        controller.update(for: Self.sampleSession(
+            id: sessionID,
+            exercises: [Self.strength(name: "Bench Press", logged: 0, total: 1)]
+        ))
+        controller.update(for: Self.sampleSession(
+            id: sessionID,
+            exercises: [Self.strength(name: "Squat", logged: 0, total: 1)]
+        ))
+        await Self.waitUntil { driver.events == ["update-start:Bench Press"] }
+
+        controller.end(sessionID: sessionID)
+        driver.releaseNextBlockedUpdate()
+        await Self.waitUntil { driver.events.count == 3 }
+        try? await Task.sleep(for: .milliseconds(25))
+
+        #expect(driver.events == [
+            "update-start:Bench Press",
+            "update-end:Bench Press",
+            "end:\(sessionID.uuidString)"
+        ])
     }
 
     // MARK: - Helpers
@@ -235,8 +304,63 @@ struct Feature20LiveActivityTests {
         func endLiveActivity(sessionID: UUID) { ends.append(sessionID) }
     }
 
-    private static func sampleSession(exercises: [DraftExerciseEntry]) -> ActiveWorkoutSession {
+    private final class ControlledLiveActivityDriver: WorkoutLiveActivitySystemDriving {
+        var areActivitiesEnabled = true
+        var runningSessionIDs: Set<UUID> = []
+        var events: [String] = []
+        var blockedUpdateCount = 0
+
+        private var blockedUpdateContinuations: [CheckedContinuation<Void, Never>] = []
+
+        func hasRunningActivity(for sessionID: UUID) -> Bool {
+            runningSessionIDs.contains(sessionID)
+        }
+
+        func requestActivity(
+            attributes: WorkoutLiveActivityAttributes,
+            state: WorkoutLiveActivityAttributes.ContentState
+        ) {
+            runningSessionIDs.insert(attributes.sessionID)
+            events.append("start:\(attributes.sessionID.uuidString)")
+        }
+
+        func updateActivity(
+            sessionID: UUID,
+            state: WorkoutLiveActivityAttributes.ContentState
+        ) async {
+            let label = state.currentExerciseName ?? "none"
+            events.append("update-start:\(label)")
+            if blockedUpdateCount > 0 {
+                blockedUpdateCount -= 1
+                await withCheckedContinuation { continuation in
+                    blockedUpdateContinuations.append(continuation)
+                }
+            }
+            events.append("update-end:\(label)")
+        }
+
+        func endActivity(sessionID: UUID) async {
+            events.append("end:\(sessionID.uuidString)")
+            runningSessionIDs.remove(sessionID)
+        }
+
+        func endAllActivities() async {
+            events.append("end-all")
+            runningSessionIDs.removeAll()
+        }
+
+        func releaseNextBlockedUpdate() {
+            guard !blockedUpdateContinuations.isEmpty else { return }
+            blockedUpdateContinuations.removeFirst().resume()
+        }
+    }
+
+    private static func sampleSession(
+        id: UUID = UUID(),
+        exercises: [DraftExerciseEntry]
+    ) -> ActiveWorkoutSession {
         ActiveWorkoutSession(
+            id: id,
             startTime: Date(timeIntervalSince1970: 1_776_000_000),
             exerciseEntries: exercises
         )
@@ -263,5 +387,15 @@ struct Feature20LiveActivityTests {
 
     private static func ephemeralDefaults() -> UserDefaults {
         UserDefaults(suiteName: "Feature20LiveActivity.\(UUID().uuidString)")!
+    }
+
+    private static func waitUntil(
+        timeout: TimeInterval = 1,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
     }
 }

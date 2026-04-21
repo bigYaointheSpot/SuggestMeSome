@@ -4208,6 +4208,19 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature20CloudClientCacheTests -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests -only-testing:SuggestMeSomeTests/Feature16Prompt3DashboardViewModelTests`
 
+#### Prompt 9 [Feature 20 audit remediation — Live Activity deep-link parity + ordered updates] — 2026-04-20
+
+- Closed the remaining Live Activity audit items without changing the shipped UI layout or copy:
+  - Added one shared `WorkoutLiveActivityAttributes.deepLinkURL(for:)` helper and switched both the Lock Screen card and Dynamic Island surfaces to use it, so taps from either presentation route into the active workout sheet through the same `suggestmesome://workout/<uuid>` deep link
+  - Reworked `WorkoutLiveActivityController` around an internal per-session operation sequencer plus a small testable system driver seam. Rapid pause/resume or watch-driven mutations now serialize before reaching ActivityKit, and `end(sessionID:)` / `endAll()` invalidate queued stale updates so they cannot outlive the session teardown path
+- Added focused Feature 20 Live Activity coverage for:
+  - the shared workout deep-link URL helper
+  - serialized controller updates for back-to-back mutations on the same session
+  - queued update invalidation when the activity ends mid-burst
+- Verification:
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature20LiveActivityTests`
+
 ### Feature 21 — Cloud, collaboration, and consumer-health disclosure hardening
 
 **Status:** Complete

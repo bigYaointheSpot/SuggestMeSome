@@ -93,6 +93,15 @@ struct WorkoutLiveActivityAttributes: Codable, Hashable {
 extension WorkoutLiveActivityAttributes: ActivityAttributes {}
 #endif
 
+extension WorkoutLiveActivityAttributes {
+    /// Shared widget tap target used by both the Lock Screen and Dynamic
+    /// Island presentations so all Live Activity surfaces route into the
+    /// active workout sheet consistently.
+    static func deepLinkURL(for sessionID: UUID) -> URL {
+        URL(string: "suggestmesome://workout/\(sessionID.uuidString)")!
+    }
+}
+
 extension WorkoutLiveActivityAttributes.ContentState {
     /// First letter of the exercise name, uppercased, stripped of
     /// diacritics. Returns nil for empty / whitespace-only names so the

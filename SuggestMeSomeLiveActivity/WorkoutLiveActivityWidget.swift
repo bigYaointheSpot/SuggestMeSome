@@ -28,6 +28,7 @@ struct WorkoutLiveActivityWidget: Widget {
             )
             .activityBackgroundTint(.indigo.opacity(0.35))
             .activitySystemActionForegroundColor(.white)
+            .widgetURL(WorkoutLiveActivityAttributes.deepLinkURL(for: context.attributes.sessionID))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -49,7 +50,7 @@ struct WorkoutLiveActivityWidget: Widget {
             } minimal: {
                 MinimalView(state: context.state)
             }
-            .widgetURL(URL(string: "suggestmesome://workout/\(context.attributes.sessionID.uuidString)"))
+            .widgetURL(WorkoutLiveActivityAttributes.deepLinkURL(for: context.attributes.sessionID))
             .keylineTint(.indigo)
         }
     }
