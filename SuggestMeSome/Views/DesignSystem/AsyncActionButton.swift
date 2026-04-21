@@ -19,6 +19,11 @@ struct AsyncActionButton<Label: View>: View {
 
     @State private var isRunning = false
     @State private var completionCount = 0
+    /// Tracked so the in-flight work is cancelled if the containing view
+    /// disappears mid-action (user pops the stack before a slow network
+    /// call returns). Without this the Task leaks past the view's
+    /// lifetime and the haptic fires into the void.
+    @State private var runningTask: Task<Void, Never>?
 
     init(
         role: ButtonRole? = nil,
@@ -34,12 +39,14 @@ struct AsyncActionButton<Label: View>: View {
         Button(role: role) {
             guard !isRunning else { return }
             isRunning = true
-            Task {
+            // Task inherits MainActor from the enclosing view body, so
+            // the post-await state mutations below run on main without
+            // a manual MainActor.run hop.
+            runningTask = Task { @MainActor in
                 await action()
-                await MainActor.run {
-                    isRunning = false
-                    completionCount &+= 1
-                }
+                guard !Task.isCancelled else { return }
+                isRunning = false
+                completionCount &+= 1
             }
         } label: {
             HStack(spacing: DSSpacing.s) {
@@ -52,6 +59,10 @@ struct AsyncActionButton<Label: View>: View {
         }
         .disabled(isRunning)
         .sensoryFeedback(.success, trigger: completionCount)
+        .onDisappear {
+            runningTask?.cancel()
+            runningTask = nil
+        }
     }
 }
 

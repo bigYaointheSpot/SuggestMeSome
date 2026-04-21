@@ -75,4 +75,44 @@ struct Feature20UIModernizationTests {
         #expect(decoded.weightText == "185.5")
         #expect(decoded.setNumber == 1)
     }
+
+    // MARK: - ExerciseDisplayFormatter extracted helpers
+
+    @Test func workingSetStyleLabelPicksCardioWhenTargetSetsNil() {
+        let cardio = ProgramSessionExercise(exerciseName: "Run", orderIndex: 0)
+        cardio.targetSets = nil
+        #expect(ExerciseDisplayFormatter.workingSetStyleLabel(for: cardio) == "Cardio")
+    }
+
+    @Test func workingSetStyleLabelCoversAllStrengthVariants() {
+        let exercise = ProgramSessionExercise(exerciseName: "Bench Press", orderIndex: 0)
+        exercise.targetSets = 3
+
+        exercise.workingSetStyle = .topSet
+        #expect(ExerciseDisplayFormatter.workingSetStyleLabel(for: exercise) == "Top Set")
+
+        exercise.workingSetStyle = .backoff
+        #expect(ExerciseDisplayFormatter.workingSetStyleLabel(for: exercise) == "Backoff")
+
+        exercise.workingSetStyle = .straight
+        #expect(ExerciseDisplayFormatter.workingSetStyleLabel(for: exercise) == "Straight Sets")
+
+        exercise.workingSetStyle = nil
+        #expect(ExerciseDisplayFormatter.workingSetStyleLabel(for: exercise) == "Straight Sets")
+    }
+
+    @Test func exercisePurposeAndSelectionReasonLabelsForwardShortLabel() {
+        let exercise = ProgramSessionExercise(exerciseName: "Seated Row", orderIndex: 0)
+        exercise.explainabilityPurpose = .specificity
+        exercise.explainabilitySelectionReason = .sessionSpecificity
+
+        #expect(ExerciseDisplayFormatter.exercisePurposeLabel(for: exercise) == ProgramExercisePurposeCode.specificity.shortLabel)
+        #expect(ExerciseDisplayFormatter.exerciseSelectionReasonLabel(for: exercise) == ProgramAccessorySelectionReason.sessionSpecificity.shortLabel)
+    }
+
+    @Test func exercisePurposeAndSelectionReasonReturnNilWhenUntagged() {
+        let exercise = ProgramSessionExercise(exerciseName: "Curl", orderIndex: 0)
+        #expect(ExerciseDisplayFormatter.exercisePurposeLabel(for: exercise) == nil)
+        #expect(ExerciseDisplayFormatter.exerciseSelectionReasonLabel(for: exercise) == nil)
+    }
 }

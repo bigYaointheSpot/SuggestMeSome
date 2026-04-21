@@ -70,7 +70,17 @@ struct NameEditorSheet: View {
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
-        .onAppear { isFocused = true }
+        .onAppear {
+            // Raising the FocusState the same tick the sheet appears
+            // races the detent animation and intermittently drops the
+            // keyboard on iPad and when Reduce Motion is off. A 100ms
+            // breather lets the sheet settle before focusing so the
+            // keyboard lifts reliably.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                isFocused = true
+            }
+        }
     }
 
     private func save() {

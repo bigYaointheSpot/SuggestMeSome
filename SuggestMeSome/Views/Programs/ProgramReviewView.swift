@@ -8,41 +8,11 @@
 import SwiftUI
 import SwiftData
 
-private func exerciseDisplayText(
-    exercise: ProgramSessionExercise,
-    oneRepMaxes: [String: (weight: Double, unit: String)]
-) -> String {
-    ExerciseDisplayFormatter.exerciseDisplayText(
-        exercise: exercise,
-        oneRepMaxes: oneRepMaxes
-    )
-}
-
-private func workingSetStyleLabel(for exercise: ProgramSessionExercise) -> String {
-    if exercise.targetSets == nil { return "Cardio" }
-    switch exercise.workingSetStyle {
-    case .topSet: return "Top Set"
-    case .backoff: return "Backoff"
-    case .straight, .none: return "Straight Sets"
-    }
-}
-
-private func workingSetStyleColor(for exercise: ProgramSessionExercise) -> Color {
-    if exercise.targetSets == nil { return .green }
-    switch exercise.workingSetStyle {
-    case .topSet: return .indigo
-    case .backoff: return .blue
-    case .straight, .none: return .secondary
-    }
-}
-
-private func exercisePurposeLabel(for exercise: ProgramSessionExercise) -> String? {
-    exercise.explainabilityPurpose?.shortLabel
-}
-
-private func exerciseSelectionReasonLabel(for exercise: ProgramSessionExercise) -> String? {
-    exercise.explainabilitySelectionReason?.shortLabel
-}
+// The five inline helpers that used to live here (exerciseDisplayText,
+// workingSetStyleLabel, workingSetStyleColor, exercisePurposeLabel,
+// exerciseSelectionReasonLabel) moved into ExerciseDisplayFormatter +
+// its SwiftUI sibling so Daily Coach previews, coach-facing views, and
+// headless tests can reuse them without reaching into a view file.
 
 // MARK: - ProgramReviewView
 
@@ -714,20 +684,20 @@ private struct GroupedExerciseRowView: View {
                     HStack(spacing: 6) {
                         Text(group.workingSet.exerciseName)
                             .font(.subheadline)
-                        Text(workingSetStyleLabel(for: group.workingSet))
+                        Text(ExerciseDisplayFormatter.workingSetStyleLabel(for: group.workingSet))
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(workingSetStyleColor(for: group.workingSet).opacity(0.15))
-                            .foregroundStyle(workingSetStyleColor(for: group.workingSet))
+                            .background(ExerciseDisplayFormatter.workingSetStyleColor(for: group.workingSet).opacity(0.15))
+                            .foregroundStyle(ExerciseDisplayFormatter.workingSetStyleColor(for: group.workingSet))
                             .clipShape(Capsule())
                     }
-                    Text(exerciseDisplayText(exercise: group.workingSet, oneRepMaxes: input.oneRepMaxes))
+                    Text(ExerciseDisplayFormatter.exerciseDisplayText(exercise: group.workingSet, oneRepMaxes: input.oneRepMaxes))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if showAdditionalInfo {
                         HStack(spacing: 4) {
-                            if let purpose = exercisePurposeLabel(for: group.workingSet) {
+                            if let purpose = ExerciseDisplayFormatter.exercisePurposeLabel(for: group.workingSet) {
                                 Text(purpose)
                                     .font(.caption2.weight(.semibold))
                                     .padding(.horizontal, 6)
@@ -736,7 +706,7 @@ private struct GroupedExerciseRowView: View {
                                     .foregroundStyle(.secondary)
                                     .clipShape(Capsule())
                             }
-                            if let reason = exerciseSelectionReasonLabel(for: group.workingSet) {
+                            if let reason = ExerciseDisplayFormatter.exerciseSelectionReasonLabel(for: group.workingSet) {
                                 Text(reason)
                                     .font(.caption2.weight(.semibold))
                                     .padding(.horizontal, 6)
@@ -802,7 +772,7 @@ private struct GroupedExerciseRowView: View {
                             Text("Warmup")
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.orange)
-                            Text(exerciseDisplayText(exercise: warmup, oneRepMaxes: input.oneRepMaxes))
+                            Text(ExerciseDisplayFormatter.exerciseDisplayText(exercise: warmup, oneRepMaxes: input.oneRepMaxes))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

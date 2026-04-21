@@ -97,6 +97,36 @@ enum ExerciseDisplayFormatter {
         return "\(sStr)×\(rStr)"
     }
 
+    // MARK: - Working-set style + explainability chips
+
+    /// Short chip label describing how the prescribed sets should be
+    /// executed — "Top Set" for a single-rep heavy working set with
+    /// follow-on backoffs, "Backoff" for the percentage-drop sets
+    /// themselves, "Straight Sets" for equal-load repeats, and "Cardio"
+    /// when the exercise has no targetSets (cardio uses duration only).
+    static func workingSetStyleLabel(for exercise: ProgramSessionExercise) -> String {
+        if exercise.targetSets == nil { return "Cardio" }
+        switch exercise.workingSetStyle {
+        case .topSet: return "Top Set"
+        case .backoff: return "Backoff"
+        case .straight, .none: return "Straight Sets"
+        }
+    }
+
+    /// Chip label for the exercise's programmed purpose (e.g. "Primary",
+    /// "Assistance"). Returns nil when the program didn't tag the
+    /// exercise — call sites should hide the chip entirely in that case
+    /// rather than show an empty capsule.
+    static func exercisePurposeLabel(for exercise: ProgramSessionExercise) -> String? {
+        exercise.explainabilityPurpose?.shortLabel
+    }
+
+    /// Chip label for the selector's reason tag (e.g. "Rotation",
+    /// "Balance"). Same nil-means-hide contract as purposeLabel.
+    static func exerciseSelectionReasonLabel(for exercise: ProgramSessionExercise) -> String? {
+        exercise.explainabilitySelectionReason?.shortLabel
+    }
+
     // MARK: - Private helpers
 
     private static func formatEffortValue(_ value: Double) -> String {
