@@ -60,8 +60,14 @@ struct AsyncActionButton<Label: View>: View {
         .disabled(isRunning)
         .sensoryFeedback(.success, trigger: completionCount)
         .onDisappear {
+            // Cancel the in-flight work AND reset the spinner. If @State
+            // survives the disappear/reappear cycle (scroll-recycled cells,
+            // dismiss-to-reopen sheets) we'd otherwise come back with the
+            // button frozen as disabled-with-spinner, because the Task's
+            // cancelled branch bails before flipping isRunning back off.
             runningTask?.cancel()
             runningTask = nil
+            isRunning = false
         }
     }
 }

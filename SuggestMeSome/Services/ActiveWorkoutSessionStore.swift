@@ -197,6 +197,11 @@ final class ActiveWorkoutSessionStore {
             sessionVersionStableID: metadata.versionID,
             usesLinkedWatchHealthSession: usesLinkedWatchHealthSession
         )
+        // Reset the dedup set so action IDs from a prior session can't
+        // accidentally suppress freshly-received ones. Paired with the
+        // same reset in `discardSession`. UUID collision risk is zero
+        // in practice, but the semantics are wrong without this.
+        appliedWatchActionIDs.removeAll()
         latestWatchMetrics = nil
         latestWatchHealthSummary = nil
     }

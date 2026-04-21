@@ -52,6 +52,12 @@ actor CollaborationGETRequestCache {
     /// Runs `execute` if no identical request is in flight; otherwise
     /// awaits the existing Task. Caches successful responses for future
     /// cachedData hits. Failures are not cached — the next caller retries.
+    ///
+    /// Cleanup is bound to the shared Task's own completion (inside its
+    /// body) rather than to each caller's await, so a cancelled first
+    /// caller can't yank `inFlight[key]` out from under still-waiting
+    /// piggy-backers and cause a subsequent caller to spawn a duplicate
+    /// request.
     func coalesce(
         key: Key,
         execute: @Sendable @escaping () async throws -> Data
@@ -63,19 +69,26 @@ actor CollaborationGETRequestCache {
             return try await existing.value
         }
 
-        let task = Task<Data, Error> {
-            try await execute()
+        let task = Task<Data, Error> { [weak self] in
+            do {
+                let data = try await execute()
+                await self?.finishInFlight(key: key, cachedData: data)
+                return data
+            } catch {
+                await self?.finishInFlight(key: key, cachedData: nil)
+                throw error
+            }
         }
         inFlight[key] = task
+        return try await task.value
+    }
 
-        do {
-            let data = try await task.value
-            inFlight[key] = nil
-            cache[key] = Entry(data: data, cachedAt: clock())
-            return data
-        } catch {
-            inFlight[key] = nil
-            throw error
+    /// Single cleanup entry point — called exactly once by the shared
+    /// Task when it completes, regardless of how many callers awaited it.
+    private func finishInFlight(key: Key, cachedData: Data?) {
+        inFlight[key] = nil
+        if let cachedData {
+            cache[key] = Entry(data: cachedData, cachedAt: clock())
         }
     }
 
