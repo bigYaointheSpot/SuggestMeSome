@@ -4194,6 +4194,20 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
 - Verification:
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20LiveActivityTests -only-testing:SuggestMeSomeTests/Feature20UIModernizationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests -only-testing:SuggestMeSomeTests/Feature20CloudClientCacheTests` (the full Feature 19 + 20 matrix stayed green through the fixes)
 
+#### Prompt 8 [Feature 20 audit remediation — invalidation hardening + correctness-first refresh fingerprints] — 2026-04-20
+
+- Closed the two remaining P2 correctness regressions from the Feature 20 audit:
+  - `CollaborationGETRequestCache.invalidateAll()` now increments an invalidation generation, clears settled cache entries, and severs `inFlight` joins as well. Any GET that started before a successful write can still finish for its original caller, but it can no longer accept new piggybackers or repopulate the cache after the mutation boundary
+  - Replaced the prompt-1 `count + first` sampling in `DashboardView` and `DailyCoachView` with correctness-first metadata fingerprints. The new tokens hash every row's identity plus change-driving fields (`syncVersion`, `syncLastModifiedAt`, `updatedAt`, and `Exercise` / `MuscleGroup` metadata where sync fields do not exist) so edits to older workouts, non-leading active runs, lower-priority proposals, and renamed exercises now retrigger the derived-state refresh immediately
+- Added regression coverage for:
+  - cache invalidation while an identical GET is still in flight
+  - stale task completion after invalidation not repopulating the cache
+  - Dashboard fingerprint changes on in-place exercise edits and non-leading workout / run / proposal mutations
+  - Daily Coach refresh token changes when a lower-priority proposal changes
+- Verification:
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:SuggestMeSomeTests/Feature20CloudClientCacheTests -only-testing:SuggestMeSomeTests/Feature10Prompt6TodayPlanEngineTests -only-testing:SuggestMeSomeTests/Feature16Prompt3DashboardViewModelTests`
+
 ### Feature 21 — Cloud, collaboration, and consumer-health disclosure hardening
 
 **Status:** Complete

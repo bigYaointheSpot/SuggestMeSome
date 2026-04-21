@@ -1147,6 +1147,65 @@ struct Feature10Prompt6TodayPlanEngineTests {
         #expect(baseInsightsToken != updatedInsightsToken)
     }
 
+    @Test func dailyCoachRefreshTokenChangesWhenLowerPriorityProposalChanges() {
+        let referenceNow = Date(timeIntervalSince1970: 1_776_000_000)
+        let highPriorityProposal = AdaptationProposal(
+            proposalType: .increaseLoad,
+            proposalStatus: .pendingUserConfirmation,
+            requiresUserConfirmation: true,
+            confidenceScore: 0.9,
+            priority: 90,
+            targetWeekStart: 1,
+            adjustmentReason: .positiveLiftTrend,
+            summaryText: "High priority"
+        )
+        let lowPriorityProposal = AdaptationProposal(
+            proposalType: .increaseLoad,
+            proposalStatus: .pendingUserConfirmation,
+            requiresUserConfirmation: true,
+            confidenceScore: 0.5,
+            priority: 10,
+            targetWeekStart: 1,
+            adjustmentReason: .positiveLiftTrend,
+            summaryText: "Low priority"
+        )
+
+        let baseToken = DailyCoachDerivedState.refreshToken(
+            activeRuns: [],
+            recentWorkouts: [],
+            weeklyAnalyses: [],
+            allProposals: [highPriorityProposal, lowPriorityProposal],
+            allOverlays: [],
+            checkIns: [],
+            weeklyReviews: [],
+            healthKitDailySummaries: [],
+            healthKitEnabled: false,
+            useHealthKitInDailyCoach: false,
+            recoveryLastSyncTimestamp: 0,
+            now: referenceNow
+        )
+
+        lowPriorityProposal.syncVersion += 1
+        lowPriorityProposal.syncLastModifiedAt = Date(timeIntervalSince1970: 1_776_000_240)
+
+        let updatedToken = DailyCoachDerivedState.refreshToken(
+            activeRuns: [],
+            recentWorkouts: [],
+            weeklyAnalyses: [],
+            allProposals: [highPriorityProposal, lowPriorityProposal],
+            allOverlays: [],
+            checkIns: [],
+            weeklyReviews: [],
+            healthKitDailySummaries: [],
+            healthKitEnabled: false,
+            useHealthKitInDailyCoach: false,
+            recoveryLastSyncTimestamp: 0,
+            now: referenceNow
+        )
+
+        #expect(baseToken != updatedToken)
+    }
+
     // MARK: - Helpers
 
     private func daysAgo(_ days: Int) -> Date {

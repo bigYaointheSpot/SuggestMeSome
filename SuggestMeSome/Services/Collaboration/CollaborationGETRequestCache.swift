@@ -26,10 +26,16 @@ actor CollaborationGETRequestCache {
         let cachedAt: Date
     }
 
+    private struct InFlightEntry {
+        let task: Task<Data, Error>
+        let generation: UInt64
+    }
+
     private var cache: [Key: Entry] = [:]
-    private var inFlight: [Key: Task<Data, Error>] = [:]
+    private var inFlight: [Key: InFlightEntry] = [:]
     private let ttl: TimeInterval
     private let clock: @Sendable () -> Date
+    private var invalidationGeneration: UInt64 = 0
 
     init(
         ttl: TimeInterval = 300,
@@ -66,28 +72,39 @@ actor CollaborationGETRequestCache {
             return entry.data
         }
         if let existing = inFlight[key] {
-            return try await existing.value
+            return try await existing.task.value
         }
 
+        let generation = invalidationGeneration
         let task = Task<Data, Error> { [weak self] in
             do {
                 let data = try await execute()
-                await self?.finishInFlight(key: key, cachedData: data)
+                await self?.finishInFlight(
+                    key: key,
+                    generation: generation,
+                    cachedData: data
+                )
                 return data
             } catch {
-                await self?.finishInFlight(key: key, cachedData: nil)
+                await self?.finishInFlight(
+                    key: key,
+                    generation: generation,
+                    cachedData: nil
+                )
                 throw error
             }
         }
-        inFlight[key] = task
+        inFlight[key] = InFlightEntry(task: task, generation: generation)
         return try await task.value
     }
 
     /// Single cleanup entry point — called exactly once by the shared
     /// Task when it completes, regardless of how many callers awaited it.
-    private func finishInFlight(key: Key, cachedData: Data?) {
-        inFlight[key] = nil
-        if let cachedData {
+    private func finishInFlight(key: Key, generation: UInt64, cachedData: Data?) {
+        if let entry = inFlight[key], entry.generation == generation {
+            inFlight[key] = nil
+        }
+        if generation == invalidationGeneration, let cachedData {
             cache[key] = Entry(data: cachedData, cachedAt: clock())
         }
     }
@@ -95,6 +112,8 @@ actor CollaborationGETRequestCache {
     /// Clears the entire cache. Called from HTTPCloudCollaborationClient
     /// after any POST/PUT so subsequent GETs don't return stale reads.
     func invalidateAll() {
+        invalidationGeneration &+= 1
         cache.removeAll()
+        inFlight.removeAll()
     }
 }

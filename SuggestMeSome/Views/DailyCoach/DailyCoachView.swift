@@ -20,27 +20,38 @@ struct DailyCoachCompletedBlockInsights {
         longHorizonSummary: nil
     )
 
-    /// O(1) replacement for the previous per-row `Hasher` — samples only
-    /// `count` + `first?.(syncLastModifiedAt|syncVersion)` per array so
-    /// token computation doesn't re-iterate every row on every SwiftUI
-    /// body invocation. See `DashboardView.DashboardRefreshToken` for the
-    /// same pattern and the documented tradeoff on missed in-place edits
-    /// to old rows.
+    /// Full fingerprint over the completed-block inputs. Correctness-first:
+    /// touching any workout, completed run, or PR row updates the token.
     static func refreshToken(
         recentWorkouts: [Workout],
         completedRuns: [ProgramRun],
         personalRecords: [PersonalRecord]
     ) -> Int {
         var hasher = Hasher()
-        hasher.combine(completedRuns.count)
-        hasher.combine(completedRuns.first?.syncLastModifiedAt)
-        hasher.combine(completedRuns.first?.syncVersion)
-        hasher.combine(recentWorkouts.count)
-        hasher.combine(recentWorkouts.first?.syncLastModifiedAt)
-        hasher.combine(recentWorkouts.first?.syncVersion)
-        hasher.combine(personalRecords.count)
-        hasher.combine(personalRecords.first?.syncLastModifiedAt)
-        hasher.combine(personalRecords.first?.syncVersion)
+        ViewRefreshFingerprinting.combineSyncBacked(
+            completedRuns,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            recentWorkouts,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            personalRecords,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
         return hasher.finalize()
     }
 }
@@ -173,12 +184,9 @@ struct DailyCoachDerivedState {
         )
     }
 
-    /// O(1) replacement for the previous per-row `Hasher`. Samples only
-    /// `count` + `first?.(syncLastModifiedAt|syncVersion)` per array, then
-    /// mixes in the scalar config flags (HealthKit enabled, coach toggle,
-    /// sync timestamp) and the current day-start so the token rolls over at
-    /// local midnight. See `DashboardView.DashboardRefreshToken` for the
-    /// same pattern.
+    /// Correctness-first fingerprint across every query the derived state reads.
+    /// We still mix in the scalar config flags and local day-start so the token
+    /// turns over when settings or the calendar day changes.
     static func refreshToken(
         activeRuns: [ProgramRun],
         recentWorkouts: [Workout],
@@ -198,30 +206,70 @@ struct DailyCoachDerivedState {
         hasher.combine(healthKitEnabled)
         hasher.combine(useHealthKitInDailyCoach)
         hasher.combine(recoveryLastSyncTimestamp)
-        hasher.combine(activeRuns.count)
-        hasher.combine(activeRuns.first?.syncLastModifiedAt)
-        hasher.combine(activeRuns.first?.syncVersion)
-        hasher.combine(recentWorkouts.count)
-        hasher.combine(recentWorkouts.first?.syncLastModifiedAt)
-        hasher.combine(recentWorkouts.first?.syncVersion)
-        hasher.combine(weeklyAnalyses.count)
-        hasher.combine(weeklyAnalyses.first?.syncLastModifiedAt)
-        hasher.combine(weeklyAnalyses.first?.syncVersion)
-        hasher.combine(allProposals.count)
-        hasher.combine(allProposals.first?.syncLastModifiedAt)
-        hasher.combine(allProposals.first?.syncVersion)
-        hasher.combine(allOverlays.count)
-        hasher.combine(allOverlays.first?.syncLastModifiedAt)
-        hasher.combine(allOverlays.first?.syncVersion)
-        hasher.combine(checkIns.count)
-        hasher.combine(checkIns.first?.syncLastModifiedAt)
-        hasher.combine(checkIns.first?.syncVersion)
-        hasher.combine(weeklyReviews.count)
-        hasher.combine(weeklyReviews.first?.syncLastModifiedAt)
-        hasher.combine(weeklyReviews.first?.syncVersion)
-        hasher.combine(healthKitDailySummaries.count)
-        hasher.combine(healthKitDailySummaries.first?.syncLastModifiedAt)
-        hasher.combine(healthKitDailySummaries.first?.syncVersion)
+        ViewRefreshFingerprinting.combineSyncBacked(
+            activeRuns,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            recentWorkouts,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            weeklyAnalyses,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            allProposals,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            allOverlays,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            checkIns,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            weeklyReviews,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            healthKitDailySummaries,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
         return hasher.finalize()
     }
 

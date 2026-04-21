@@ -104,6 +104,59 @@ struct Feature20CloudClientCacheTests {
         #expect(await counter.value == 2)
     }
 
+    @Test func invalidateAllSeversInFlightRequestFromLaterCallers() async throws {
+        let cache = CollaborationGETRequestCache(ttl: 300)
+        let key = CollaborationGETRequestCache.Key(urlString: "https://example/stale-join", authHash: 41)
+        let counter = FetchCounter()
+
+        async let stale = cache.coalesce(key: key) {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            await counter.increment()
+            return Data("stale".utf8)
+        }
+        try? await Task.sleep(nanoseconds: 5_000_000)
+        await cache.invalidateAll()
+
+        let fresh = try await cache.coalesce(key: key) {
+            await counter.increment()
+            return Data("fresh".utf8)
+        }
+        let staleResult = try await stale
+
+        #expect(fresh == Data("fresh".utf8))
+        #expect(staleResult == Data("stale".utf8))
+        #expect(await counter.value == 2)
+    }
+
+    @Test func staleInFlightCompletionDoesNotRepopulateCacheAfterInvalidation() async throws {
+        let cache = CollaborationGETRequestCache(ttl: 300)
+        let key = CollaborationGETRequestCache.Key(urlString: "https://example/stale-cache", authHash: 42)
+        let counter = FetchCounter()
+
+        async let stale = cache.coalesce(key: key) {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            await counter.increment()
+            return Data("stale".utf8)
+        }
+        try? await Task.sleep(nanoseconds: 5_000_000)
+        await cache.invalidateAll()
+
+        let fresh = try await cache.coalesce(key: key) {
+            await counter.increment()
+            return Data("fresh".utf8)
+        }
+        let staleResult = try await stale
+        let cached = try await cache.coalesce(key: key) {
+            await counter.increment()
+            return Data("should-not-run".utf8)
+        }
+
+        #expect(fresh == Data("fresh".utf8))
+        #expect(staleResult == Data("stale".utf8))
+        #expect(cached == Data("fresh".utf8))
+        #expect(await counter.value == 2)
+    }
+
     // MARK: - Failures are not cached
 
     @Test func cacheDoesNotPersistFailedFetches() async throws {

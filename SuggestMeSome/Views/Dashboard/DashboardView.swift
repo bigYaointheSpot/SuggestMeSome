@@ -9,6 +9,144 @@ import SwiftUI
 import SwiftData
 import Charts
 
+enum ViewRefreshFingerprinting {
+    static func combineSyncBacked<Model>(
+        _ models: [Model],
+        into hasher: inout Hasher,
+        stableID: (Model) -> String?,
+        id: (Model) -> UUID,
+        version: (Model) -> Int,
+        modifiedAt: (Model) -> Date
+    ) {
+        let sortedModels = models.sorted {
+            resolvedStableID(for: $0, stableID: stableID, id: id)
+                < resolvedStableID(for: $1, stableID: stableID, id: id)
+        }
+        hasher.combine(sortedModels.count)
+        for model in sortedModels {
+            hasher.combine(resolvedStableID(for: model, stableID: stableID, id: id))
+            hasher.combine(version(model))
+            hasher.combine(modifiedAt(model))
+        }
+    }
+
+    static func combineExercises(_ exercises: [Exercise], into hasher: inout Hasher) {
+        let sortedExercises = exercises.sorted { exerciseSortKey(for: $0) < exerciseSortKey(for: $1) }
+        hasher.combine(sortedExercises.count)
+        for exercise in sortedExercises {
+            hasher.combine(String(describing: exercise.persistentModelID))
+            hasher.combine(exercise.name)
+            hasher.combine(exercise.exerciseType)
+            hasher.combine(exercise.muscleGroup.map { String(describing: $0.persistentModelID) })
+            hasher.combine(exercise.muscleGroup?.name)
+        }
+    }
+
+    static func combineLiftTrends(_ liftTrends: [LiftPerformanceTrend], into hasher: inout Hasher) {
+        let sortedTrends = liftTrends.sorted {
+            resolvedStableID(
+                for: $0,
+                stableID: { $0.syncStableID },
+                id: { $0.id }
+            ) < resolvedStableID(
+                for: $1,
+                stableID: { $0.syncStableID },
+                id: { $0.id }
+            )
+        }
+        hasher.combine(sortedTrends.count)
+        for trend in sortedTrends {
+            hasher.combine(trend.syncStableID ?? trend.id.uuidString)
+            hasher.combine(trend.updatedAt)
+        }
+    }
+
+    private static func resolvedStableID<Model>(
+        for model: Model,
+        stableID: (Model) -> String?,
+        id: (Model) -> UUID
+    ) -> String {
+        stableID(model) ?? id(model).uuidString
+    }
+
+    private static func exerciseSortKey(for exercise: Exercise) -> String {
+        [
+            exercise.name,
+            exercise.exerciseType.rawValue,
+            exercise.muscleGroup?.name ?? "",
+            String(describing: exercise.persistentModelID)
+        ].joined(separator: "::")
+    }
+}
+
+struct DashboardRefreshFingerprint: Hashable {
+    private let value: Int
+
+    init(
+        activeProgramRuns: [ProgramRun],
+        workouts: [Workout],
+        prs: [PersonalRecord],
+        exercises: [Exercise],
+        weeklyAnalyses: [WeeklyTrainingAnalysis],
+        liftTrends: [LiftPerformanceTrend],
+        proposals: [AdaptationProposal],
+        healthSummaries: [HealthKitDailySummary]
+    ) {
+        var hasher = Hasher()
+        ViewRefreshFingerprinting.combineSyncBacked(
+            activeProgramRuns,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            workouts,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            prs,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineExercises(exercises, into: &hasher)
+        ViewRefreshFingerprinting.combineSyncBacked(
+            weeklyAnalyses,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineLiftTrends(liftTrends, into: &hasher)
+        ViewRefreshFingerprinting.combineSyncBacked(
+            proposals,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        ViewRefreshFingerprinting.combineSyncBacked(
+            healthSummaries,
+            into: &hasher,
+            stableID: { $0.syncStableID },
+            id: { $0.id },
+            version: { $0.syncVersion },
+            modifiedAt: { $0.syncLastModifiedAt }
+        )
+        value = hasher.finalize()
+    }
+}
+
 // MARK: - Time Window
 
 enum DashboardTimeWindow: String, CaseIterable {
@@ -68,53 +206,23 @@ struct DashboardView: View {
         case programWorkout
     }
 
-    /// Lightweight summary of the eight source arrays the dashboard reads from.
+    /// Full metadata fingerprint for every source array the dashboard reads.
     ///
-    /// Replaces a 60-LOC `Hasher` that iterated every row of every array on every
-    /// SwiftUI body invocation — an `O(N)` cost paid on every render tick. This
-    /// struct is `O(1)` to build because it samples only `count` and
-    /// `first?.syncLastModifiedAt` per array. Counts catch adds/deletes;
-    /// `.first?.syncLastModifiedAt` (on arrays sorted by date desc or
-    /// updatedAt desc) catches edits to the newest row. Edits to old rows
-    /// without an insert/delete will miss this token — the user can swap
-    /// tabs or re-enter the Dashboard to force a refresh. That tradeoff is
-    /// deliberate: the old hasher paid ~20k hash operations per second
-    /// during animations on a dashboard with 2k rows.
-    private struct DashboardRefreshToken: Hashable {
-        var activeProgramRunsCount: Int
-        var activeProgramRunsLatest: Date?
-        var workoutsCount: Int
-        var workoutsLatest: Date?
-        var prsCount: Int
-        var prsLatest: Date?
-        var exercisesCount: Int
-        var weeklyAnalysesCount: Int
-        var weeklyAnalysesLatest: Date?
-        var liftTrendsCount: Int
-        var liftTrendsLatest: Date?
-        var proposalsCount: Int
-        var proposalsLatest: Date?
-        var healthSummariesCount: Int
-        var healthSummariesLatest: Date?
-    }
-
-    private var dashboardRefreshToken: DashboardRefreshToken {
-        DashboardRefreshToken(
-            activeProgramRunsCount: activeProgramRuns.count,
-            activeProgramRunsLatest: activeProgramRuns.first?.syncLastModifiedAt,
-            workoutsCount: allWorkouts.count,
-            workoutsLatest: allWorkouts.first?.syncLastModifiedAt,
-            prsCount: allPRs.count,
-            prsLatest: allPRs.first?.syncLastModifiedAt,
-            exercisesCount: allExercises.count,
-            weeklyAnalysesCount: weeklyAnalyses.count,
-            weeklyAnalysesLatest: weeklyAnalyses.first?.syncLastModifiedAt,
-            liftTrendsCount: liftTrends.count,
-            liftTrendsLatest: liftTrends.first?.updatedAt,
-            proposalsCount: allProposals.count,
-            proposalsLatest: allProposals.first?.syncLastModifiedAt,
-            healthSummariesCount: healthKitSummaries.count,
-            healthSummariesLatest: healthKitSummaries.first?.syncLastModifiedAt
+    /// Prompt 1's `count + first` token improved render cost but could miss
+    /// in-place edits on non-leading rows and on unsorted collections. The
+    /// fingerprint is intentionally correctness-first for Feature 20 audit
+    /// remediation: it hashes only per-row identity plus change-driving fields,
+    /// but it touches every row so existing edits always retrigger the refresh.
+    private var dashboardRefreshToken: DashboardRefreshFingerprint {
+        DashboardRefreshFingerprint(
+            activeProgramRuns: activeProgramRuns,
+            workouts: allWorkouts,
+            prs: allPRs,
+            exercises: allExercises,
+            weeklyAnalyses: weeklyAnalyses,
+            liftTrends: liftTrends,
+            proposals: allProposals,
+            healthSummaries: healthKitSummaries
         )
     }
 
