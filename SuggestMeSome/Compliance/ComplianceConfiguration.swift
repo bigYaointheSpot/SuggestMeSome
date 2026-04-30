@@ -59,6 +59,8 @@ struct LegalDocumentRecord: Codable, Equatable {
 enum ComplianceConfiguration {
     static let appName = "SuggestMeSome"
     static let premiumUnlockProductID = "premium_unlock"
+    static let currentLegalVersion = "2.2"
+    static let legalEffectiveDateText = "2026-04-30"
     static let sellerName = "Alexander Yao"
     static let supportEmail = "support@suggestmesome.app"
     static let privacyEmail = "privacy@suggestmesome.app"
@@ -110,6 +112,13 @@ enum ComplianceConfiguration {
         "Account support records"
     ]
     static let consumerHealthConsentPurpose = "Account sync, collaboration sharing, and privacy-rights fulfillment for workouts, readiness, recovery, and coaching outputs."
+    static let consumerHealthConsentRequiredDocumentIDs: [String] = [
+        "privacyPolicy::\(currentLegalVersion)",
+        "termsOfUse::\(currentLegalVersion)",
+        "consumerHealthNotice::\(currentLegalVersion)"
+    ]
+    static let consumerHealthConsentRequiredCopy = "Cloud sync and collaboration stay paused until you record Consumer Health Data consent for version \(currentLegalVersion) of the Privacy Policy, Terms of Use, and Consumer Health Data Notice."
+    static let consumerHealthConsentMissingMessage = "Record Consumer Health Data consent in Privacy Choices before syncing or sharing training data."
 
     static var releaseGateChecklist: [String] {
         [
@@ -117,9 +126,10 @@ enum ComplianceConfiguration {
             "Publish the privacy choices page so App Store Connect can link directly to in-app and hosted data-rights controls.",
             "Complete the App Store Connect privacy questionnaire and product-page copy using the real production data flows for Premium Unlock, Sign in with Apple, cloud collaboration, private sharing, push registration, and Apple Health.",
             "Sign the Paid Apps Agreement and finish the premium_unlock in-app purchase metadata and review notes.",
-            "Validate the production backend's Sign in with Apple, sync, export, deletion, and token-revocation flows against the shipped app before App Store submission.",
+            "Validate the production backend's Sign in with Apple, consumer-health consent, sync, export, deletion, and token-revocation flows against the shipped app before App Store submission.",
             "Document the built-in Preview Cloud Features mode in App Review notes so reviewers can inspect premium and collaboration surfaces without a second live account.",
             "Finalize a custom U.S. Terms/EULA in App Store Connect and review the hosted legal text with counsel before release.",
+            "Confirm the hosted legal pages match in-app version \(currentLegalVersion), effective date \(legalEffectiveDateText), contact, consent, appeal, retention, and Apple Health off-backend claims.",
             "Complete retention, breach-response, and vendor-contract work before any off-device account or consumer health sync goes live."
         ]
     }
@@ -127,10 +137,12 @@ enum ComplianceConfiguration {
     static let legalDocuments: [LegalDocumentVersion] = [
         LegalDocumentVersion(
             kind: .privacyPolicy,
-            version: "2.1",
+            version: currentLegalVersion,
             title: "Privacy Policy",
             summary: "How SuggestMeSome handles workout data, cloud accounts, coach collaboration, Premium Unlock, Apple Health access, and privacy-rights workflows in the United States.",
             bodyMarkdown: """
+            **Version \(currentLegalVersion). Effective \(legalEffectiveDateText).**
+
             ## Overview
 
             \(appName) is published by **\(sellerName)**. This app is a fitness and wellness product. It helps you log workouts, review progress, unlock premium coaching, and optionally connect Apple Health. It is not designed for diagnosis, treatment, or emergency use.
@@ -172,7 +184,7 @@ enum ComplianceConfiguration {
 
             ## Local storage and cloud sync
 
-            The current build stores workout, coaching, Apple Health sync summaries, and purchase state on device. If you connect an account, workouts, programs, daily coaching records, adaptive history, privacy requests, relationship records, private sharing records, and key training preferences may also sync through the dedicated backend.
+            The current build stores workout, coaching, Apple Health-derived recovery summaries, and purchase state on device. If you connect an account and record Consumer Health Data consent, workouts, programs, daily coaching records, adaptive history, privacy requests, relationship records, private sharing records, and key training preferences may also sync through the dedicated backend.
 
             \(cloudSyncStorageDisclosure)
             \(collaborationDataDisclosure)
@@ -229,10 +241,12 @@ enum ComplianceConfiguration {
         ),
         LegalDocumentVersion(
             kind: .termsOfUse,
-            version: "2.1",
+            version: currentLegalVersion,
             title: "Terms of Use",
             summary: "Use terms for SuggestMeSome, including wellness limitations, Premium Unlock terms, account sync, coach collaboration, and deletion expectations.",
             bodyMarkdown: """
+            **Version \(currentLegalVersion). Effective \(legalEffectiveDateText).**
+
             ## Eligibility
 
             \(adultsOnlyLegalDisclosure)
@@ -258,6 +272,8 @@ enum ComplianceConfiguration {
             ## Accounts and privacy requests
 
             \(appName) provides optional account-backed cloud sync through the production backend and includes in-app account deletion and privacy-rights request tools for that service.
+
+            Cloud sync and collaboration features that transmit training or coaching records require Consumer Health Data consent. You can withdraw that consent in Privacy Choices; withdrawing it pauses future backend sync and collaboration writes until consent is recorded again.
 
             ## Collaboration and sharing
 
@@ -303,10 +319,12 @@ enum ComplianceConfiguration {
         ),
         LegalDocumentVersion(
             kind: .consumerHealthNotice,
-            version: "2.1",
+            version: currentLegalVersion,
             title: "Consumer Health Data Notice",
             summary: "Notice covering workout, readiness, recovery, coaching, account sync, collaboration, and Apple Health-derived information that may reveal health status.",
             bodyMarkdown: """
+            **Version \(currentLegalVersion). Effective \(legalEffectiveDateText).**
+
             ## Scope
 
             \(appName) processes workout, readiness, recovery, and coaching information that may reveal health status. This notice is written for a U.S. release that includes Washington residents and other state consumer health privacy requirements.
@@ -334,6 +352,8 @@ enum ComplianceConfiguration {
             ## Purposes
 
             \(appName) uses this information to provide the workout logging, coaching, recovery, analytics, collaboration, private sharing, privacy-rights, support, and optional push-notification features you request.
+
+            Account-backed sync and collaboration writes require explicit Consumer Health Data consent for the current legal document version. You may withdraw that consent from Privacy Choices, which pauses future backend sync and collaboration sharing.
 
             ## Sharing
 
@@ -381,10 +401,12 @@ enum ComplianceConfiguration {
         ),
         LegalDocumentVersion(
             kind: .automationDisclosure,
-            version: "2.0",
+            version: currentLegalVersion,
             title: "Smart Guidance Disclosure",
             summary: "How smart generation and coaching outputs are produced and how to use them safely.",
             bodyMarkdown: """
+            **Version \(currentLegalVersion). Effective \(legalEffectiveDateText).**
+
             \(smartGuidanceDisclosure)
 
             \(appName) currently uses on-device training history, saved program context, optional Apple Health summaries, and deterministic app logic to generate training guidance. Review every recommendation before acting on it.
@@ -399,10 +421,12 @@ enum ComplianceConfiguration {
         ),
         LegalDocumentVersion(
             kind: .wellnessDisclaimer,
-            version: "2.0",
+            version: currentLegalVersion,
             title: "Wellness Disclaimer",
             summary: "Important non-medical framing for workout, readiness, recovery, and coaching outputs.",
             bodyMarkdown: """
+            **Version \(currentLegalVersion). Effective \(legalEffectiveDateText).**
+
             \(wellnessDisclaimerDisclosure)
 
             \(dailyCoachGuidanceDisclosure)
@@ -415,10 +439,12 @@ enum ComplianceConfiguration {
         ),
         LegalDocumentVersion(
             kind: .support,
-            version: "2.1",
+            version: currentLegalVersion,
             title: "Support",
             summary: "Support contacts, privacy choices, and help topics for SuggestMeSome accounts, Premium Unlock, Apple Health, and cloud sync.",
             bodyMarkdown: """
+            **Version \(currentLegalVersion). Effective \(legalEffectiveDateText).**
+
             ## Support Contacts
 
             - Seller: \(sellerName)

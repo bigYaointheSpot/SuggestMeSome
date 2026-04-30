@@ -282,6 +282,34 @@ struct CloudPrivacyRequestResponse: Codable, Equatable {
     var accountState: AccountBackendContractState
 }
 
+struct CloudConsumerHealthConsentRequest: Codable, Equatable {
+    var granted: Bool
+    var categories: [String]
+    var purpose: String
+    var legalDocumentIDs: [String]
+    var legalVersion: String
+    var legalEffectiveDate: String
+    var recordedAt: Date
+
+    init(
+        granted: Bool,
+        categories: [String] = ComplianceConfiguration.consumerHealthConsentCategories,
+        purpose: String = ComplianceConfiguration.consumerHealthConsentPurpose,
+        legalDocumentIDs: [String] = ComplianceConfiguration.consumerHealthConsentRequiredDocumentIDs,
+        legalVersion: String = ComplianceConfiguration.currentLegalVersion,
+        legalEffectiveDate: String = ComplianceConfiguration.legalEffectiveDateText,
+        recordedAt: Date = Date()
+    ) {
+        self.granted = granted
+        self.categories = categories
+        self.purpose = purpose
+        self.legalDocumentIDs = legalDocumentIDs
+        self.legalVersion = legalVersion
+        self.legalEffectiveDate = legalEffectiveDate
+        self.recordedAt = recordedAt
+    }
+}
+
 struct CloudAccountExportResponse: Codable, Equatable {
     var fileName: String
     var mimeType: String

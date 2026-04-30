@@ -88,12 +88,16 @@ final class ComplianceStateStore {
     }
 
     func acceptRequiredDocuments(at date: Date = Date()) {
+        acceptDocuments(ComplianceConfiguration.requiredOnboardingDocumentIDs, at: date)
+    }
+
+    func acceptDocuments(_ documentIDs: Set<String>, at date: Date = Date()) {
         let existingByID = Dictionary(
             uniqueKeysWithValues: onboardingState.acceptedDocumentRecords.map { ($0.documentID, $0) }
         )
 
         var merged = existingByID
-        for documentID in ComplianceConfiguration.requiredOnboardingDocumentIDs {
+        for documentID in documentIDs {
             merged[documentID] = LegalDocumentRecord(documentID: documentID, acceptedAt: date)
         }
 

@@ -4,6 +4,7 @@ import SwiftData
 
 enum CloudSyncPhase: String, Codable, Equatable {
     case signedOut
+    case consentRequired
     case idle
     case bootstrapping
     case pushing
@@ -14,6 +15,8 @@ enum CloudSyncPhase: String, Codable, Equatable {
         switch self {
         case .signedOut:
             return "Signed Out"
+        case .consentRequired:
+            return "Consent Needed"
         case .idle:
             return "Up to Date"
         case .bootstrapping:
@@ -67,6 +70,8 @@ final class CloudSyncManager {
         switch phase {
         case .signedOut:
             return "Connect an account to sync training history across devices."
+        case .consentRequired:
+            return ComplianceConfiguration.consumerHealthConsentRequiredCopy
         case .idle:
             if let lastSuccessfulSyncAt {
                 return "Last synced \(lastSuccessfulSyncAt.formatted(date: .abbreviated, time: .shortened))."
@@ -105,6 +110,10 @@ final class CloudSyncManager {
         }
 
         guard modelContext != nil else { return }
+        guard state.hasActiveConsumerHealthConsentForCurrentAccount else {
+            setConsentRequiredPhase()
+            return
+        }
         if !stateStore.isBootstrapped(accountID: state.currentAccountID) {
             await sync(reason: "Bootstrap cloud sync", preferBootstrap: true)
         } else {
@@ -186,18 +195,26 @@ final class CloudSyncManager {
             phase = .signedOut
             return
         }
+        guard currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount else {
+            setConsentRequiredPhase()
+            return
+        }
 
         isSyncInFlight = true
         defer {
             isSyncInFlight = false
             if phase != .error, currentAccountState.currentAccountID != nil {
-                phase = .idle
+                phase = currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount ? .idle : .consentRequired
             }
             scheduleFollowUpSyncIfNeeded()
         }
 
         do {
             let accessToken = try await validAccessToken()
+            guard currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount else {
+                setConsentRequiredPhase()
+                return
+            }
             if preferBootstrap || !stateStore.isBootstrapped(accountID: currentAccountState.currentAccountID) {
                 phase = .bootstrapping
                 try await performBootstrap(accessToken: accessToken, context: modelContext)
@@ -443,6 +460,11 @@ final class CloudSyncManager {
         recentActivity = stateStore.activity()
     }
 
+    private func setConsentRequiredPhase() {
+        phase = .consentRequired
+        lastErrorMessage = nil
+    }
+
     private func queueFollowUpSync(_ reason: String) {
         if pendingSyncReasons.contains(reason) == false {
             pendingSyncReasons.append(reason)
@@ -452,6 +474,10 @@ final class CloudSyncManager {
     private func scheduleFollowUpSyncIfNeeded() {
         guard currentAccountState.currentAccountID != nil else {
             pendingSyncReasons.removeAll()
+            return
+        }
+        guard currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount else {
+            setConsentRequiredPhase()
             return
         }
 

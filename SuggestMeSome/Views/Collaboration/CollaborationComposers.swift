@@ -21,12 +21,11 @@ import SwiftData
 struct CreateCoachInviteView: View {
     @Environment(CollaborationCoordinator.self) private var collaborationCoordinator
 
-    @AppStorage("collaboration.disclosure.invite.v1") private var hasAcceptedInviteDisclosure = false
-
     @State private var inviteeEmail = ""
     @State private var noteText = ""
     @State private var inviterRole: CollaborationRole = .coach
     @State private var preset: VisibilityPreset = .full
+    @State private var hasAcceptedInviteDisclosure = false
     @State private var acknowledgedInviteDisclosure = false
 
     var body: some View {
@@ -43,7 +42,7 @@ struct CreateCoachInviteView: View {
                     scopes: preset.scopes.sorted { $0.rawValue < $1.rawValue }
                 )
                 if collaborationCoordinator.lastErrorMessage == nil {
-                    hasAcceptedInviteDisclosure = true
+                    recordInviteDisclosureAcknowledgement()
                 }
             }
         ) {
@@ -87,8 +86,21 @@ struct CreateCoachInviteView: View {
             }
         }
         .onAppear {
+            hasAcceptedInviteDisclosure = CollaborationDisclosureAcknowledgementStore.isAcknowledged(
+                .coachInvite,
+                accountID: collaborationCoordinator.currentAccountID
+            )
             acknowledgedInviteDisclosure = hasAcceptedInviteDisclosure
         }
+    }
+
+    private func recordInviteDisclosureAcknowledgement() {
+        CollaborationDisclosureAcknowledgementStore.recordAcknowledgement(
+            .coachInvite,
+            accountID: collaborationCoordinator.currentAccountID
+        )
+        hasAcceptedInviteDisclosure = true
+        acknowledgedInviteDisclosure = true
     }
 }
 
@@ -230,14 +242,13 @@ struct ProgramShareComposerView: View {
 
     let blueprint: SavedProgramBlueprint
 
-    @AppStorage("collaboration.disclosure.privateShare.v1") private var hasAcceptedPrivateShareDisclosure = false
-
     @State private var selectedRelationshipID = ""
     @State private var messageText = ""
     @State private var shareKind: ProgramShareKind = .blueprint
     @State private var showingConfirm = false
     @State private var isSending = false
     @State private var errorMessage: String?
+    @State private var hasAcceptedPrivateShareDisclosure = false
     @State private var acknowledgedPrivateShareDisclosure = false
 
     private var relationships: [CoachRelationship] {
@@ -282,6 +293,10 @@ struct ProgramShareComposerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             selectedRelationshipID = relationships.first?.stableID ?? ""
+            hasAcceptedPrivateShareDisclosure = CollaborationDisclosureAcknowledgementStore.isAcknowledged(
+                .privateShare,
+                accountID: collaborationCoordinator.currentAccountID
+            )
             acknowledgedPrivateShareDisclosure = hasAcceptedPrivateShareDisclosure
         }
         .toolbar {
@@ -327,9 +342,18 @@ struct ProgramShareComposerView: View {
         if let pending = collaborationCoordinator.lastErrorMessage {
             errorMessage = pending
         } else {
-            hasAcceptedPrivateShareDisclosure = true
+            recordPrivateShareDisclosureAcknowledgement()
             dismiss()
         }
+    }
+
+    private func recordPrivateShareDisclosureAcknowledgement() {
+        CollaborationDisclosureAcknowledgementStore.recordAcknowledgement(
+            .privateShare,
+            accountID: collaborationCoordinator.currentAccountID
+        )
+        hasAcceptedPrivateShareDisclosure = true
+        acknowledgedPrivateShareDisclosure = true
     }
 }
 
@@ -339,13 +363,12 @@ struct ProgressShareComposerView: View {
 
     let snapshot: InsightSnapshot
 
-    @AppStorage("collaboration.disclosure.privateShare.v1") private var hasAcceptedPrivateShareDisclosure = false
-
     @State private var selectedRelationshipID = ""
     @State private var kind: ProgressShareKind = .completedBlockSummary
     @State private var showingConfirm = false
     @State private var isSending = false
     @State private var errorMessage: String?
+    @State private var hasAcceptedPrivateShareDisclosure = false
     @State private var acknowledgedPrivateShareDisclosure = false
 
     private var relationships: [CoachRelationship] {
@@ -393,6 +416,10 @@ struct ProgressShareComposerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             selectedRelationshipID = relationships.first?.stableID ?? ""
+            hasAcceptedPrivateShareDisclosure = CollaborationDisclosureAcknowledgementStore.isAcknowledged(
+                .privateShare,
+                accountID: collaborationCoordinator.currentAccountID
+            )
             acknowledgedPrivateShareDisclosure = hasAcceptedPrivateShareDisclosure
         }
         .toolbar {
@@ -444,9 +471,18 @@ struct ProgressShareComposerView: View {
         if let pending = collaborationCoordinator.lastErrorMessage {
             errorMessage = pending
         } else {
-            hasAcceptedPrivateShareDisclosure = true
+            recordPrivateShareDisclosureAcknowledgement()
             dismiss()
         }
+    }
+
+    private func recordPrivateShareDisclosureAcknowledgement() {
+        CollaborationDisclosureAcknowledgementStore.recordAcknowledgement(
+            .privateShare,
+            accountID: collaborationCoordinator.currentAccountID
+        )
+        hasAcceptedPrivateShareDisclosure = true
+        acknowledgedPrivateShareDisclosure = true
     }
 }
 

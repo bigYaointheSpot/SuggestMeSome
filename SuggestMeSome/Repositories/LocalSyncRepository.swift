@@ -7,8 +7,7 @@ final class LocalSyncRepository:
     ProgramSyncRepository,
     DailyCoachSyncRepository,
     AdaptiveSyncRepository,
-    TrainingPreferencesSyncRepository,
-    HealthKitSummarySyncRepository {
+    TrainingPreferencesSyncRepository {
     private let context: LocalSyncStoreContext
 
     init(modelContext: ModelContext, userDefaults: UserDefaults = .standard) {
@@ -114,11 +113,4 @@ final class LocalSyncRepository:
         try LocalTrainingPreferencesSyncStore(context: context).upsertTrainingPreferencesPayload(payload)
     }
 
-    func fetchHealthKitSummaryPayloads(since: Date?) throws -> [HealthKitDailySummarySyncDTO] {
-        try LocalHealthKitSummarySyncStore(context: context).fetchHealthKitSummaryPayloads(since: since)
-    }
-
-    func upsertHealthKitSummaryPayloads(_ payloads: [HealthKitDailySummarySyncDTO]) throws {
-        try LocalHealthKitSummarySyncStore(context: context).upsertHealthKitSummaryPayloads(payloads)
-    }
 }

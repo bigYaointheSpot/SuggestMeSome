@@ -241,22 +241,6 @@ struct AppliedProgramOverlaySyncDTO: Codable, Equatable {
     var adjustments: [AppliedOverlayAdjustmentSyncDTO]
 }
 
-struct HealthKitDailySummarySyncDTO: Codable, Equatable {
-    var contractVersion: Int = SyncContractVersion.v1
-    var metadata: SyncRecordMetadataDTO
-    var dayStart: Date
-    var sleepDurationSeconds: Int?
-    var timeInBedSeconds: Int?
-    var restingHeartRateBPM: Double?
-    var heartRateVariabilityMS: Double?
-    var activeEnergyKilocalories: Double?
-    var stepCount: Double?
-    var bodyMassKilograms: Double?
-    var sourceUpdatedAt: Date
-    var createdAt: Date
-    var updatedAt: Date
-}
-
 /// Future watch transport can reuse these same contract types by wrapping in a channel envelope.
 struct SyncEnvelopeDTO<Payload: Codable & Equatable>: Codable, Equatable {
     var sentAt: Date

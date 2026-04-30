@@ -170,6 +170,20 @@ struct Feature18AuditFixRegressionTests {
         #expect(harness.stateStore.cursors() == [updatedCursor])
     }
 
+    @Test func cloudSyncManagerPausesWhenConsumerHealthConsentIsMissing() async throws {
+        let harness = try await makeCloudSyncHarness(
+            initialLastSuccessfulSyncAt: day(10),
+            includesConsumerHealthConsent: false
+        )
+        defer { harness.cleanup() }
+
+        await harness.manager.retryNow()
+
+        #expect(harness.manager.phase == .consentRequired)
+        #expect(harness.backend.pushRequests.isEmpty)
+        #expect(harness.backend.pullRequests.isEmpty)
+    }
+
     @Test func dailyCheckInCanonicalThenTombstoneKeepsCanonicalRecord() throws {
         let container = try makeInMemoryContainer()
         let repository = LocalSyncRepository(modelContext: container.mainContext)
@@ -549,6 +563,13 @@ private final class AuditFixCloudBackendClient: CloudBackendClient {
         throw StubError.unimplemented
     }
 
+    func setConsumerHealthConsent(
+        _ request: CloudConsumerHealthConsentRequest,
+        accessToken: String
+    ) async throws -> CloudPrivacyRequestResponse {
+        throw StubError.unimplemented
+    }
+
     func fetchAccountExport(accessToken: String) async throws -> CloudAccountExportResponse {
         throw StubError.unimplemented
     }
@@ -561,7 +582,8 @@ private final class AuditFixCloudBackendClient: CloudBackendClient {
 @MainActor
 private func makeCloudSyncHarness(
     initialCursors: [CloudSyncCollectionCursorDTO] = [],
-    initialLastSuccessfulSyncAt: Date? = nil
+    initialLastSuccessfulSyncAt: Date? = nil,
+    includesConsumerHealthConsent: Bool = true
 ) async throws -> CloudSyncHarness {
     let suiteName = "Feature18AuditFixHarness.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
@@ -590,7 +612,12 @@ private func makeCloudSyncHarness(
 
     let accountID = UUID(uuidString: "30000000-0000-0000-0000-000000000001")!
     stateStore.setBootstrappedAccountID(accountID)
-    await manager.handleAccountStateDidChange(signedInState(accountID: accountID))
+    await manager.handleAccountStateDidChange(
+        signedInState(
+            accountID: accountID,
+            includesConsumerHealthConsent: includesConsumerHealthConsent
+        )
+    )
 
     return CloudSyncHarness(
         suiteName: suiteName,
@@ -603,7 +630,10 @@ private func makeCloudSyncHarness(
     )
 }
 
-private func signedInState(accountID: UUID) -> AccountBackendContractState {
+private func signedInState(
+    accountID: UUID,
+    includesConsumerHealthConsent: Bool = true
+) -> AccountBackendContractState {
     AccountBackendContractState(
         knownAccounts: [
             UserAccount(
@@ -618,7 +648,14 @@ private func signedInState(accountID: UUID) -> AccountBackendContractState {
         ],
         currentAccountID: accountID,
         privacyRequests: [],
-        consumerHealthConsents: []
+        consumerHealthConsents: includesConsumerHealthConsent ? [
+            ConsumerHealthConsentRecord(
+                accountID: accountID,
+                categories: ComplianceConfiguration.consumerHealthConsentCategories,
+                purpose: ComplianceConfiguration.consumerHealthConsentPurpose,
+                acceptedAt: day(0)
+            )
+        ] : []
     )
 }
 

@@ -4277,6 +4277,32 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - attempted: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests`
     - local Xcode test runs currently hang after build while repeatedly polling a passcode-locked physical device via `com.apple.mobile.notification_proxy`; rerun this focused suite once the local CoreSimulator/device state is stable
 
+#### Prompt 3 [Whole-repo scope, scalability, and counsel-ready legal hardening] — 2026-04-30
+
+- Hardened the production consent path for cloud sync and collaboration:
+  - bumped bundled legal documents to version `2.2` with effective date `2026-04-30`, added explicit onboarding document acknowledgements, and surfaced Consumer Health Data consent grant/withdraw controls from Account & Cloud and Privacy Choices
+  - added `CloudConsumerHealthConsentRequest` plus the `account/consumer-health-consent` backend contract so production consent changes are no longer local-only
+  - added consent-required phases/gates for cloud sync and collaboration writes so backend sync, invites, visibility changes, assignments, notes, shares, notification preferences, and push registration pause until current-version consent exists
+- Reduced legal/scope drift:
+  - aligned hosted privacy, terms, consumer-health, and privacy-choices pages with the in-app version/effective date, support/privacy contacts, Premium Unlock copy, no-ads/no-third-party-analytics copy, appeal language, and Apple Health off-backend claim
+  - switched collaboration disclosure acknowledgements from device-wide `@AppStorage` flags to account- and legal-version-scoped acknowledgement keys
+  - clarified Preview Cloud Features as read-only sample data with no backend connection
+- Trimmed future-facing sync scaffolding and fixed the widget platform risk:
+  - removed the unused HealthKit daily-summary cloud-sync DTO, repository protocol, local sync store, mapper, and tests so Apple Health-derived recovery data remains local-only
+  - added the main app App Group entitlement `group.com.alexyao.SuggestMeSome` to match the watch widget snapshot store and project capabilities
+  - expanded the App Store launch checklist with App Group, backend consent endpoint, hosted parity, App Privacy, and counsel-review checks
+- Added focused Feature 21 regression coverage for:
+  - production backend consent contract calls and state updates
+  - cloud sync and collaboration mutation consent gates
+  - hosted legal page parity anchors
+  - no HealthKit daily-summary cloud payload/export
+  - main app App Group entitlement coverage
+  - account/version-scoped collaboration disclosure acknowledgements
+- Verification:
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests -only-testing:SuggestMeSomeTests/Feature21LegalAndScopeHardeningTests`
+  - succeeded after final test-name cleanup: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests`
+
 ---
 
 ## Project Setup

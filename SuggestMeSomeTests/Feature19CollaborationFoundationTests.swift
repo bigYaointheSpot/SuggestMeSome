@@ -255,6 +255,34 @@ struct Feature19CollaborationFoundationTests {
         #expect(coordinator.blueprints.count == 1)
     }
 
+    @Test func collaborationMutationsRequireConsumerHealthConsent() async throws {
+        let container = try makeInMemoryContainer()
+        let tokenStore = InMemoryCloudSessionTokenStore(tokens: feature19Tokens())
+        let collaborationClient = MockCollaborationClient()
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: collaborationClient,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: tokenStore,
+            entitlementStateProvider: { .premiumUnlocked }
+        )
+
+        coordinator.configure(modelContext: container.mainContext)
+        coordinator.hydrateAccountState(
+            feature19SignedInState(includesConsumerHealthConsent: false)
+        )
+
+        await coordinator.createCoachInvite(
+            inviteeEmail: "athlete@example.com",
+            noteText: nil,
+            inviterRole: .coach,
+            scopes: CollaborationVisibilityScope.defaultInviteScopes
+        )
+
+        #expect(collaborationClient.invites.isEmpty)
+        #expect(coordinator.phase == .consentRequired)
+        #expect(coordinator.lastErrorMessage == ComplianceConfiguration.consumerHealthConsentMissingMessage)
+    }
+
     @Test func collaborationCoordinatorSeparatesIncomingAndOutgoingInvites() async throws {
         let container = try makeInMemoryContainer()
         let suiteName = "Feature19InviteModes.\(UUID().uuidString)"
@@ -2115,6 +2143,7 @@ private final class MockCloudBackendClient: CloudBackendClient {
     func push(_ request: CloudSyncPushRequest, accessToken: String) async throws -> CloudSyncPushResponse { throw MockError.unused }
     func pull(_ request: CloudSyncPullRequest, accessToken: String) async throws -> CloudSyncResponse { throw MockError.unused }
     func submitPrivacyRequest(_ type: PrivacyRequestType, accessToken: String) async throws -> CloudPrivacyRequestResponse { throw MockError.unused }
+    func setConsumerHealthConsent(_ request: CloudConsumerHealthConsentRequest, accessToken: String) async throws -> CloudPrivacyRequestResponse { throw MockError.unused }
     func fetchAccountExport(accessToken: String) async throws -> CloudAccountExportResponse { throw MockError.unused }
     func deleteAccount(accessToken: String) async throws -> CloudPrivacyRequestResponse { throw MockError.unused }
 }
@@ -2143,7 +2172,9 @@ private enum MockError: Error {
     case unused
 }
 
-private func feature19SignedInState() -> AccountBackendContractState {
+private func feature19SignedInState(
+    includesConsumerHealthConsent: Bool = true
+) -> AccountBackendContractState {
     AccountBackendContractState(
         knownAccounts: [
             UserAccount(
@@ -2158,11 +2189,20 @@ private func feature19SignedInState() -> AccountBackendContractState {
         ],
         currentAccountID: uuid(2),
         privacyRequests: [],
-        consumerHealthConsents: []
+        consumerHealthConsents: includesConsumerHealthConsent ? [
+            ConsumerHealthConsentRecord(
+                accountID: uuid(2),
+                categories: ComplianceConfiguration.consumerHealthConsentCategories,
+                purpose: ComplianceConfiguration.consumerHealthConsentPurpose,
+                acceptedAt: day(0)
+            )
+        ] : []
     )
 }
 
-private func feature19CoachState() -> AccountBackendContractState {
+private func feature19CoachState(
+    includesConsumerHealthConsent: Bool = true
+) -> AccountBackendContractState {
     AccountBackendContractState(
         knownAccounts: [
             UserAccount(
@@ -2177,7 +2217,14 @@ private func feature19CoachState() -> AccountBackendContractState {
         ],
         currentAccountID: uuid(1),
         privacyRequests: [],
-        consumerHealthConsents: []
+        consumerHealthConsents: includesConsumerHealthConsent ? [
+            ConsumerHealthConsentRecord(
+                accountID: uuid(1),
+                categories: ComplianceConfiguration.consumerHealthConsentCategories,
+                purpose: ComplianceConfiguration.consumerHealthConsentPurpose,
+                acceptedAt: day(0)
+            )
+        ] : []
     )
 }
 

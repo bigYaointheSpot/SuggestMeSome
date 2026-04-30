@@ -9,6 +9,7 @@ This checklist tracks the non-code work required to ship `SuggestMeSome` as a **
   - Push Notifications
   - Sign in with Apple
   - HealthKit
+  - App Groups (`group.com.alexyao.SuggestMeSome`) for the watch widget snapshot store
 - Create and store APNs auth credentials for the production backend.
 - Confirm automatic signing is using the correct team and provisioning profiles.
 
@@ -19,6 +20,7 @@ This checklist tracks the non-code work required to ship `SuggestMeSome` as a **
   - Sign in with Apple token exchange
   - session refresh
   - sync bootstrap / push / pull
+  - consumer-health consent grant / withdrawal
   - privacy request submission
   - export generation and download
   - delete-account handling and server-side token revocation
@@ -28,9 +30,11 @@ This checklist tracks the non-code work required to ship `SuggestMeSome` as a **
   - sync failures
   - push registration failures
   - privacy request failures
+  - consent update failures
   - deletion failures
 - Staff `support@suggestmesome.app` and `privacy@suggestmesome.app`.
 - Finalize retention, deletion, and incident-response procedures before public launch.
+- Have counsel review the in-app and hosted version `2.2` legal copy before enabling production sync for the public launch.
 
 ## Hosted Site
 
@@ -42,6 +46,7 @@ This checklist tracks the non-code work required to ship `SuggestMeSome` as a **
   - `/consumer-health`
   - `/privacy-choices`
 - Ensure hosted copy stays aligned with the in-app legal documents in `ComplianceConfiguration`.
+- Confirm each legal page shows version `2.2`, effective date `2026-04-30`, support/privacy contact emails, appeal language, Premium Unlock copy, no-ads/no-third-party-analytics copy, and the Apple Health off-backend claim.
 
 ## App Store Connect
 
@@ -70,6 +75,7 @@ This checklist tracks the non-code work required to ship `SuggestMeSome` as a **
   - private sharing
   - push registration
   - optional Apple Health access
+  - consumer-health consent records and privacy-rights workflows
 - Add App Review notes that explain:
   - the app is free
   - Premium Unlock is a one-time purchase

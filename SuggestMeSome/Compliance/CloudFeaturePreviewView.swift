@@ -17,6 +17,8 @@ struct CloudFeaturePreviewView: View {
                 Text(ComplianceConfiguration.cloudFeaturePreviewDisclosure)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                Label("Read-only sample data", systemImage: "eye")
+                    .foregroundStyle(.secondary)
             }
 
             Section("Premium Unlock") {
@@ -39,7 +41,7 @@ struct CloudFeaturePreviewView: View {
                     lines: [
                         "Name: \(snapshot.accountDisplayName)",
                         "Email: \(snapshot.accountEmail)",
-                        "Sync status: \(snapshot.syncStatus)",
+                        "Preview sync status: \(snapshot.syncStatus)",
                         "Local logging remains available while signed out."
                     ]
                 )
@@ -141,7 +143,7 @@ struct CloudFeaturePreviewSnapshot: Equatable {
     static let sample = CloudFeaturePreviewSnapshot(
         accountDisplayName: "Preview Athlete",
         accountEmail: "preview-athlete@suggestmesome.app",
-        syncStatus: "Up to date on iPhone and iPad",
+        syncStatus: "sample only, no backend connection",
         relationshipSummaries: [
             "Coach Jordan — readiness, workouts, and program visibility enabled",
             "Training partner Maya — private progress sharing only"

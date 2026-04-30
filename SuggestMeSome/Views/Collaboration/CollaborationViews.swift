@@ -744,12 +744,11 @@ struct RelationshipDetailView: View {
 
     let relationship: CoachRelationship
 
-    @AppStorage("collaboration.disclosure.visibilityScopes.v1") private var hasAcceptedVisibilityDisclosure = false
-
     @State private var scopeSelection: Set<CollaborationVisibilityScope> = []
     @State private var showingNoteComposer = false
     @State private var showingScopeDetails = false
     @State private var didSaveScopesTrigger = 0
+    @State private var hasAcceptedVisibilityDisclosure = false
     @State private var acknowledgedVisibilityDisclosure = false
 
     var body: some View {
@@ -812,7 +811,7 @@ struct RelationshipDetailView: View {
                         scopes: Array(scopeSelection).sorted { $0.rawValue < $1.rawValue }
                     )
                     if collaborationCoordinator.lastErrorMessage == nil {
-                        hasAcceptedVisibilityDisclosure = true
+                        recordVisibilityDisclosureAcknowledgement()
                         didSaveScopesTrigger &+= 1
                     }
                 }
@@ -836,6 +835,10 @@ struct RelationshipDetailView: View {
         .sensoryFeedback(.success, trigger: didSaveScopesTrigger)
         .onAppear {
             scopeSelection = Set(relationship.visibilityScopes)
+            hasAcceptedVisibilityDisclosure = CollaborationDisclosureAcknowledgementStore.isAcknowledged(
+                .visibilityScopes,
+                accountID: collaborationCoordinator.currentAccountID
+            )
             acknowledgedVisibilityDisclosure = hasAcceptedVisibilityDisclosure
         }
         .sheet(isPresented: $showingNoteComposer) {
@@ -849,6 +852,15 @@ struct RelationshipDetailView: View {
             }
             .presentationDetents([.medium, .large])
         }
+    }
+
+    private func recordVisibilityDisclosureAcknowledgement() {
+        CollaborationDisclosureAcknowledgementStore.recordAcknowledgement(
+            .visibilityScopes,
+            accountID: collaborationCoordinator.currentAccountID
+        )
+        hasAcceptedVisibilityDisclosure = true
+        acknowledgedVisibilityDisclosure = true
     }
 }
 
@@ -1432,4 +1444,3 @@ private struct NotificationPreferenceDraft {
         }
     }
 }
-

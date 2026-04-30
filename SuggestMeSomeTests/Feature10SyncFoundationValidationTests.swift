@@ -465,7 +465,7 @@ struct Feature10SyncFoundationValidationTests {
         #expect(adjustments[0].overlay?.id == overlays[0].id)
     }
 
-    @Test func localSyncRepositoryUpsertsCoachAndHealthKitRows() throws {
+    @Test func localSyncRepositoryUpsertsCoachRows() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
         let repository = LocalSyncRepository(modelContext: context)
@@ -534,41 +534,14 @@ struct Feature10SyncFoundationValidationTests {
                 createdAt: day(2)
             )
         ])
-        try repository.upsertHealthKitSummaryPayloads([
-            HealthKitDailySummarySyncDTO(
-                metadata: SyncRecordMetadataDTO(
-                    stableID: "health-sync-1",
-                    version: 1,
-                    lastModifiedAt: day(3)
-                ),
-                dayStart: day(1),
-                sleepDurationSeconds: 28_000,
-                timeInBedSeconds: 30_000,
-                restingHeartRateBPM: 55,
-                heartRateVariabilityMS: 48,
-                activeEnergyKilocalories: 620,
-                stepCount: 9_500,
-                bodyMassKilograms: 84.5,
-                sourceUpdatedAt: day(3),
-                createdAt: day(3),
-                updatedAt: day(3)
-            )
-        ])
 
         let checkIns = try fetchAll(DailyCoachCheckIn.self, context)
         let reviews = try fetchAll(DailyCoachWeeklyReview.self, context)
-        let healthSummaries = try fetchAll(HealthKitDailySummary.self, context)
 
         #expect(checkIns.count == 1)
         #expect(checkIns[0].programRun?.id == run.id)
         #expect(reviews.count == 1)
         #expect(reviews[0].programRun?.id == run.id)
-        #expect(healthSummaries.count == 1)
-        #expect(healthSummaries[0].restingHeartRateBPM == 55)
-
-        let since = try repository.fetchHealthKitSummaryPayloads(since: day(2))
-        #expect(since.count == 1)
-        #expect(since[0].metadata.stableID == "health-sync-1")
     }
 
     @Test func localSyncRepositoryAppliesIncrementalSincePredicatesAcrossDomains() throws {
@@ -753,27 +726,6 @@ struct Feature10SyncFoundationValidationTests {
             createdAt: day(4)
         )
 
-        let healthOld = HealthKitDailySummary(
-            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000016")!,
-            syncStableID: "health-old",
-            syncVersion: 1,
-            syncLastModifiedAt: day(1),
-            dayStart: day(1),
-            sourceUpdatedAt: day(1),
-            createdAt: day(1),
-            updatedAt: day(1)
-        )
-        let healthNew = HealthKitDailySummary(
-            id: UUID(uuidString: "E0000000-0000-0000-0000-000000000017")!,
-            syncStableID: "health-new",
-            syncVersion: 2,
-            syncLastModifiedAt: day(4),
-            dayStart: day(4),
-            sourceUpdatedAt: day(4),
-            createdAt: day(4),
-            updatedAt: day(4)
-        )
-
         context.insert(programOld)
         context.insert(programNew)
         context.insert(runOld)
@@ -789,8 +741,6 @@ struct Feature10SyncFoundationValidationTests {
         context.insert(checkInNew)
         context.insert(reviewOld)
         context.insert(reviewNew)
-        context.insert(healthOld)
-        context.insert(healthNew)
         try context.save()
 
         let since = day(2)
@@ -807,7 +757,6 @@ struct Feature10SyncFoundationValidationTests {
         #expect(try repository.fetchAppliedOverlayPayloads(since: since).map(\.metadata.stableID) == ["overlay-new"])
         #expect(try repository.fetchDailyCheckInPayloads(since: since).map(\.metadata.stableID) == ["checkin-new"])
         #expect(try repository.fetchWeeklyReviewPayloads(since: since).map(\.metadata.stableID) == ["review-new"])
-        #expect(try repository.fetchHealthKitSummaryPayloads(since: since).map(\.metadata.stableID) == ["health-new"])
     }
 
     @Test func trainingPreferencesSyncStoreRoundTripsAndRespectsSinceFiltering() throws {

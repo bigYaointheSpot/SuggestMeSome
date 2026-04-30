@@ -25,6 +25,10 @@ struct LegalDocumentView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                Text("Version \(document.version) • Effective \(ComplianceConfiguration.legalEffectiveDateText)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
                 Text(document.summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -678,6 +682,7 @@ struct ComplianceOnboardingFlow: View {
     @State private var stepIndex = 0
     @State private var showingDocumentKind: LegalDocumentKind?
     @State private var showingLegalCenter = false
+    @State private var acceptedDocumentKinds: Set<LegalDocumentKind> = []
 
     private let orderedSteps: [ComplianceOnboardingStep] = [
         .welcome,
@@ -780,18 +785,22 @@ struct ComplianceOnboardingFlow: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Review key documents")
                 .font(.title3.weight(.semibold))
-            Text("These documents are available anytime from Settings.")
+            Text("These documents are available anytime from Settings. Confirm each required document to continue.")
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 12) {
-                Button("Privacy Policy") {
-                    showingDocumentKind = .privacyPolicy
-                }
-                Button("Terms of Use") {
-                    showingDocumentKind = .termsOfUse
-                }
-                Button("Consumer Health Data Notice") {
-                    showingDocumentKind = .consumerHealthNotice
+                ForEach(requiredDocumentKinds) { kind in
+                    Toggle(isOn: binding(for: kind)) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("I have reviewed \(kind.title)")
+                                .font(.headline)
+                            Button("Open \(kind.title)") {
+                                showingDocumentKind = kind
+                            }
+                            .font(.footnote.weight(.semibold))
+                        }
+                    }
+                    .toggleStyle(.switch)
                 }
                 Button("Open Legal & Privacy Center") {
                     showingLegalCenter = true
@@ -816,13 +825,43 @@ struct ComplianceOnboardingFlow: View {
             .font(.headline.weight(.semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(Color.indigo)
+            .background(canAdvanceCurrentStep ? Color.indigo : Color.gray)
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            .disabled(!canAdvanceCurrentStep)
         }
     }
 
+    private var requiredDocumentKinds: [LegalDocumentKind] {
+        ComplianceConfiguration.legalDocuments
+            .filter(\.requiresOnboardingAcceptance)
+            .map(\.kind)
+    }
+
+    private var acceptedRequiredDocumentIDs: Set<String> {
+        Set(acceptedDocumentKinds.map { ComplianceConfiguration.document(for: $0).id })
+    }
+
+    private var canAdvanceCurrentStep: Bool {
+        guard orderedSteps[stepIndex] == .documents else { return true }
+        return ComplianceConfiguration.requiredOnboardingDocumentIDs.isSubset(of: acceptedRequiredDocumentIDs)
+    }
+
+    private func binding(for kind: LegalDocumentKind) -> Binding<Bool> {
+        Binding(
+            get: { acceptedDocumentKinds.contains(kind) },
+            set: { isAccepted in
+                if isAccepted {
+                    acceptedDocumentKinds.insert(kind)
+                } else {
+                    acceptedDocumentKinds.remove(kind)
+                }
+            }
+        )
+    }
+
     private func advance() {
+        guard canAdvanceCurrentStep else { return }
         switch orderedSteps[stepIndex] {
         case .welcome:
             break
@@ -833,7 +872,7 @@ struct ComplianceOnboardingFlow: View {
         case .automation:
             complianceStateStore.acknowledgeAutomationDisclosure()
         case .documents:
-            complianceStateStore.acceptRequiredDocuments()
+            complianceStateStore.acceptDocuments(acceptedRequiredDocumentIDs)
             complianceStateStore.markCompleted()
         }
 

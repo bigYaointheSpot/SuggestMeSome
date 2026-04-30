@@ -164,6 +164,9 @@ struct ConsumerHealthConsentRecord: Codable, Equatable, Identifiable {
     let accountID: UUID
     let categories: [String]
     let purpose: String
+    let legalDocumentIDs: [String]?
+    let legalVersion: String?
+    let legalEffectiveDate: String?
     let acceptedAt: Date
     var withdrawnAt: Date?
 
@@ -172,6 +175,9 @@ struct ConsumerHealthConsentRecord: Codable, Equatable, Identifiable {
         accountID: UUID,
         categories: [String],
         purpose: String,
+        legalDocumentIDs: [String]? = ComplianceConfiguration.consumerHealthConsentRequiredDocumentIDs,
+        legalVersion: String? = ComplianceConfiguration.currentLegalVersion,
+        legalEffectiveDate: String? = ComplianceConfiguration.legalEffectiveDateText,
         acceptedAt: Date = Date(),
         withdrawnAt: Date? = nil
     ) {
@@ -179,6 +185,9 @@ struct ConsumerHealthConsentRecord: Codable, Equatable, Identifiable {
         self.accountID = accountID
         self.categories = categories
         self.purpose = purpose
+        self.legalDocumentIDs = legalDocumentIDs
+        self.legalVersion = legalVersion
+        self.legalEffectiveDate = legalEffectiveDate
         self.acceptedAt = acceptedAt
         self.withdrawnAt = withdrawnAt
     }
@@ -200,6 +209,25 @@ struct AccountBackendContractState: Codable, Equatable {
         privacyRequests: [],
         consumerHealthConsents: []
     )
+}
+
+extension AccountBackendContractState {
+    func activeConsumerHealthConsent(for accountID: UUID?) -> ConsumerHealthConsentRecord? {
+        guard let accountID else { return nil }
+        return consumerHealthConsents.first {
+            $0.accountID == accountID &&
+            $0.isActive &&
+            $0.legalVersion == ComplianceConfiguration.currentLegalVersion
+        }
+    }
+
+    var currentConsumerHealthConsent: ConsumerHealthConsentRecord? {
+        activeConsumerHealthConsent(for: currentAccountID)
+    }
+
+    var hasActiveConsumerHealthConsentForCurrentAccount: Bool {
+        currentConsumerHealthConsent != nil
+    }
 }
 
 enum AuthServiceError: LocalizedError, Equatable {
@@ -493,10 +521,11 @@ final class AccountManager {
     }
 
     var currentConsumerHealthConsent: ConsumerHealthConsentRecord? {
-        guard let accountID = currentUser?.id else { return nil }
-        return consumerHealthConsents.first {
-            $0.accountID == accountID && $0.isActive
-        }
+        currentState.currentConsumerHealthConsent
+    }
+
+    var hasActiveConsumerHealthConsent: Bool {
+        currentConsumerHealthConsent != nil
     }
 
     func createAccount(displayName: String, email: String) async {

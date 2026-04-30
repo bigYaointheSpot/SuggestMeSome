@@ -36,6 +36,10 @@ protocol CloudBackendClient {
         _ type: PrivacyRequestType,
         accessToken: String
     ) async throws -> CloudPrivacyRequestResponse
+    func setConsumerHealthConsent(
+        _ request: CloudConsumerHealthConsentRequest,
+        accessToken: String
+    ) async throws -> CloudPrivacyRequestResponse
     func fetchAccountExport(accessToken: String) async throws -> CloudAccountExportResponse
     func deleteAccount(accessToken: String) async throws -> CloudPrivacyRequestResponse
 }
@@ -117,6 +121,18 @@ struct HTTPCloudBackendClient: CloudBackendClient {
             path: "account/privacy/request",
             method: "POST",
             body: PrivacyRequestBody(typeRawValue: type.rawValue),
+            accessToken: accessToken
+        )
+    }
+
+    func setConsumerHealthConsent(
+        _ request: CloudConsumerHealthConsentRequest,
+        accessToken: String
+    ) async throws -> CloudPrivacyRequestResponse {
+        try await send(
+            path: "account/consumer-health-consent",
+            method: "POST",
+            body: request,
             accessToken: accessToken
         )
     }

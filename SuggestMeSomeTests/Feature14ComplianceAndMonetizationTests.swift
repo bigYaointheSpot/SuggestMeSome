@@ -215,6 +215,12 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(
             ComplianceConfiguration.legalDocuments.allSatisfy { !$0.containsPlaceholders }
         )
+        #expect(
+            ComplianceConfiguration.legalDocuments.allSatisfy { $0.version == ComplianceConfiguration.currentLegalVersion }
+        )
+        #expect(
+            privacyPolicy.bodyMarkdown.contains("Effective \(ComplianceConfiguration.legalEffectiveDateText)")
+        )
     }
 
     @Test func cloudFeaturePreviewSnapshotUsesReadOnlyReviewerSafeSampleData() {
@@ -447,6 +453,48 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(tokenStore.loadTokens() == nil)
         #expect(backendClient.deletedAccessTokens == ["access-live"])
     }
+
+    @Test func productionBackendConsumerHealthConsentUsesBackendContract() async throws {
+        let suiteName = "Feature21ProductionConsent.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let backendClient = TestCloudBackendClient()
+        let tokenStore = InMemoryCloudSessionTokenStore()
+        let authService = ProductionBackendAuthService(
+            userDefaults: defaults,
+            backendClient: backendClient,
+            tokenStore: tokenStore,
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+        )
+        let accountManager = AccountManager(authService: authService)
+        let consent = ConsumerHealthConsentRecord(
+            accountID: feature18AccountID,
+            categories: ComplianceConfiguration.consumerHealthConsentCategories,
+            purpose: ComplianceConfiguration.consumerHealthConsentPurpose,
+            acceptedAt: Date(timeIntervalSince1970: 1_900_000_500)
+        )
+
+        backendClient.exchangeResponse = CloudAuthSessionResponse(
+            accountState: feature18SignedInState(),
+            tokens: feature18Tokens(
+                accessToken: "access-consent",
+                refreshToken: "refresh-consent",
+                expiresAt: Date(timeIntervalSince1970: 1_900_000_000)
+            )
+        )
+        backendClient.consumerHealthConsentResponse = CloudPrivacyRequestResponse(
+            accountState: feature18SignedInState(consumerHealthConsents: [consent])
+        )
+
+        await accountManager.signInWithApple(feature18AppleIdentity())
+        await accountManager.setConsumerHealthConsent(granted: true)
+
+        #expect(accountManager.currentConsumerHealthConsent == consent)
+        #expect(backendClient.consumerHealthConsentRequests.map(\.granted) == [true])
+        #expect(backendClient.consumerHealthConsentRequests.first?.legalVersion == ComplianceConfiguration.currentLegalVersion)
+        #expect(backendClient.consumerHealthConsentAccessTokens == ["access-consent"])
+    }
 }
 
 private let feature18AccountID = UUID(uuidString: "F1000000-0000-0000-0000-000000000001")!
@@ -474,7 +522,8 @@ private func feature18Tokens(
 }
 
 private func feature18SignedInState(
-    privacyRequests: [PrivacyRequestRecord] = []
+    privacyRequests: [PrivacyRequestRecord] = [],
+    consumerHealthConsents: [ConsumerHealthConsentRecord] = []
 ) -> AccountBackendContractState {
     AccountBackendContractState(
         knownAccounts: [
@@ -490,7 +539,7 @@ private func feature18SignedInState(
         ],
         currentAccountID: feature18AccountID,
         privacyRequests: privacyRequests,
-        consumerHealthConsents: []
+        consumerHealthConsents: consumerHealthConsents
     )
 }
 
@@ -502,12 +551,15 @@ private final class TestCloudBackendClient: CloudBackendClient {
     var exchangeResponse: CloudAuthSessionResponse?
     var refreshResponse: CloudAuthSessionResponse?
     var privacyResponses: [PrivacyRequestType: CloudPrivacyRequestResponse] = [:]
+    var consumerHealthConsentResponse: CloudPrivacyRequestResponse?
     var exportResponse: CloudAccountExportResponse?
     var deleteResponse: CloudPrivacyRequestResponse?
 
     var exchangedAppleIdentities: [CloudAuthExchangeRequest] = []
     var refreshedSessionRequests: [CloudSessionRefreshRequest] = []
     var submittedPrivacyRequests: [PrivacyRequestType] = []
+    var consumerHealthConsentRequests: [CloudConsumerHealthConsentRequest] = []
+    var consumerHealthConsentAccessTokens: [String] = []
     var exportedAccessTokens: [String] = []
     var deletedAccessTokens: [String] = []
 
@@ -565,6 +617,18 @@ private final class TestCloudBackendClient: CloudBackendClient {
             throw TestCloudBackendClientError.missingStub
         }
         return response
+    }
+
+    func setConsumerHealthConsent(
+        _ request: CloudConsumerHealthConsentRequest,
+        accessToken: String
+    ) async throws -> CloudPrivacyRequestResponse {
+        consumerHealthConsentRequests.append(request)
+        consumerHealthConsentAccessTokens.append(accessToken)
+        guard let consumerHealthConsentResponse else {
+            throw TestCloudBackendClientError.missingStub
+        }
+        return consumerHealthConsentResponse
     }
 
     func fetchAccountExport(accessToken: String) async throws -> CloudAccountExportResponse {

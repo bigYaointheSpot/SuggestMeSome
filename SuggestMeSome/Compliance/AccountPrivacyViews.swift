@@ -21,9 +21,11 @@ struct AccountSettingsView: View {
             accountModeSection
             if let currentUser = accountManager.currentUser {
                 signedInSection(currentUser)
+                consumerHealthConsentSection
                 privacyHistorySection(accountManager.currentAccountPrivacyRequests)
             } else {
                 signedOutSection
+                consumerHealthConsentSection
             }
             messageSection
         }
@@ -46,6 +48,9 @@ struct AccountSettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Text(ComplianceConfiguration.cloudSyncStorageDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text(ComplianceConfiguration.consumerHealthConsentRequiredCopy)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             if let lastSuccessfulSyncAt = cloudSyncManager.lastSuccessfulSyncAt {
@@ -167,6 +172,16 @@ struct AccountSettingsView: View {
             Text(accountManager.launchMode == .productionBackend
                  ? "Sign in is optional. The app remains fully usable while signed out, and Preview Cloud Features shows sample collaboration surfaces without creating an account or contacting the backend."
                  : "This build does not transmit account data off device. Replace the local contract service with your production backend before public cloud launch.")
+        }
+    }
+
+    private var consumerHealthConsentSection: some View {
+        Section {
+            ConsumerHealthConsentControlsView()
+        } header: {
+            Text("Consumer Health Consent")
+        } footer: {
+            Text("Consent controls apply to backend sync and collaboration transmissions. Local workout logging remains available while signed out or after withdrawal.")
         }
     }
 
@@ -381,6 +396,8 @@ struct PrivacyChoicesView: View {
             }
 
             Section("Consumer Health Sync and Sharing") {
+                ConsumerHealthConsentControlsView()
+
                 Label("Apple Health-derived recovery data stays on this device", systemImage: "iphone")
                     .foregroundStyle(.secondary)
 
@@ -411,6 +428,63 @@ struct PrivacyChoicesView: View {
         }
         .navigationTitle("Privacy Choices")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct ConsumerHealthConsentControlsView: View {
+    @Environment(AccountManager.self) private var accountManager
+
+    private var currentConsent: ConsumerHealthConsentRecord? {
+        accountManager.currentConsumerHealthConsent
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if accountManager.currentUser == nil {
+                Label("Sign in required for cloud consent", systemImage: "person.crop.circle.badge.exclamationmark")
+                    .foregroundStyle(.secondary)
+                Text(ComplianceConfiguration.consumerHealthConsentRequiredCopy)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if let currentConsent {
+                Label("Active for cloud sync and collaboration", systemImage: "checkmark.seal.fill")
+                    .foregroundStyle(.green)
+                Text("Recorded \(currentConsent.acceptedAt.formatted(date: .abbreviated, time: .shortened)).")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if let legalVersion = currentConsent.legalVersion,
+                   let legalEffectiveDate = currentConsent.legalEffectiveDate {
+                    Text("Legal version \(legalVersion), effective \(legalEffectiveDate).")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Button("Withdraw Consumer Health Consent", role: .destructive) {
+                    Task {
+                        await accountManager.setConsumerHealthConsent(granted: false)
+                    }
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Label("Consent not recorded", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(ComplianceConfiguration.consumerHealthConsentRequiredCopy)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Button {
+                    Task {
+                        await accountManager.setConsumerHealthConsent(granted: true)
+                    }
+                } label: {
+                    Label("Grant Consumer Health Sync Consent", systemImage: "checkmark.shield.fill")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            Text(ComplianceConfiguration.consumerHealthConsentPurpose)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -513,7 +587,7 @@ struct CloudSyncSettingsView: View {
                 } label: {
                     Label("Retry Sync", systemImage: "arrow.clockwise")
                 }
-                .disabled(accountManager.currentUser == nil)
+                .disabled(accountManager.currentUser == nil || !accountManager.hasActiveConsumerHealthConsent)
             } footer: {
                 Text("Cloud sync covers workouts, programs, program runs, daily coaching records, adaptive history, collaboration records, privacy requests, and key training preferences. Apple Health-derived recovery data stays on device in this release.")
             }

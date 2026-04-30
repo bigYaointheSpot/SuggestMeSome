@@ -42,8 +42,3 @@ protocol TrainingPreferencesSyncRepository {
     func fetchTrainingPreferencesPayload(since: Date?) throws -> TrainingPreferencesSyncDTO?
     func upsertTrainingPreferencesPayload(_ payload: TrainingPreferencesSyncDTO) throws
 }
-
-protocol HealthKitSummarySyncRepository {
-    func fetchHealthKitSummaryPayloads(since: Date?) throws -> [HealthKitDailySummarySyncDTO]
-    func upsertHealthKitSummaryPayloads(_ payloads: [HealthKitDailySummarySyncDTO]) throws
-}

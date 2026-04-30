@@ -110,31 +110,13 @@ final class ProductionBackendAuthService: AuthService {
     }
 
     func setConsumerHealthConsent(granted: Bool) async throws -> AccountBackendContractState {
-        var state = loadState()
-        guard let accountID = state.currentAccountID else {
-            throw AuthServiceError.noSignedInAccount
+        let state = try await withValidAccessToken { [self] accessToken in
+            let response = try await backendClient.setConsumerHealthConsent(
+                CloudConsumerHealthConsentRequest(granted: granted),
+                accessToken: accessToken
+            )
+            return normalized(response.accountState)
         }
-
-        if granted {
-            let activeRecord = state.consumerHealthConsents.first {
-                $0.accountID == accountID && $0.isActive
-            }
-            if activeRecord == nil {
-                state.consumerHealthConsents.insert(
-                    ConsumerHealthConsentRecord(
-                        accountID: accountID,
-                        categories: ComplianceConfiguration.consumerHealthConsentCategories,
-                        purpose: ComplianceConfiguration.consumerHealthConsentPurpose
-                    ),
-                    at: 0
-                )
-            }
-        } else if let index = state.consumerHealthConsents.firstIndex(where: {
-            $0.accountID == accountID && $0.isActive
-        }) {
-            state.consumerHealthConsents[index].withdrawnAt = Date()
-        }
-
         persist(state)
         return state
     }

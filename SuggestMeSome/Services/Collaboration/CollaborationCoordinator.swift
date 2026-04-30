@@ -10,6 +10,7 @@ enum InvitePresentationMode: Equatable {
 
 enum CollaborationSyncPhase: String, Equatable {
     case signedOut
+    case consentRequired
     case idle
     case loading
     case error
@@ -18,6 +19,8 @@ enum CollaborationSyncPhase: String, Equatable {
         switch self {
         case .signedOut:
             return "Signed Out"
+        case .consentRequired:
+            return "Consent Needed"
         case .idle:
             return "Up to Date"
         case .loading:
@@ -222,6 +225,17 @@ final class CollaborationCoordinator {
         }
     }
 
+    private func ensureConsumerHealthConsent(for endpoint: CollaborationEndpoint) -> Bool {
+        guard currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount else {
+            errorTracker.recordErrorMessage(
+                endpoint,
+                message: ComplianceConfiguration.consumerHealthConsentMissingMessage
+            )
+            return false
+        }
+        return true
+    }
+
     var currentAccountID: UUID? {
         currentAccountState.currentAccountID
     }
@@ -237,6 +251,8 @@ final class CollaborationCoordinator {
         switch phase {
         case .signedOut:
             return "Connect an account to use coach collaboration, deterministic cloud insights, and private sharing."
+        case .consentRequired:
+            return ComplianceConfiguration.consumerHealthConsentRequiredCopy
         case .idle:
             return statusMessage ?? "Coach collaboration is ready."
         case .loading:
@@ -286,6 +302,7 @@ final class CollaborationCoordinator {
     }
 
     func hydrateAccountState(_ state: AccountBackendContractState) {
+        let hadConsent = currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount
         currentAccountState = state
 
         guard state.currentAccountID != nil else {
@@ -297,13 +314,20 @@ final class CollaborationCoordinator {
         }
 
         loadCache()
-        if phase == .signedOut {
+        if state.hasActiveConsumerHealthConsentForCurrentAccount == false {
+            phase = .consentRequired
+            statusMessage = ComplianceConfiguration.consumerHealthConsentRequiredCopy
+            return
+        }
+        if phase == .signedOut || phase == .consentRequired || !hadConsent {
             phase = .idle
+            statusMessage = nil
         }
     }
 
     func handleAccountStateDidChange(_ state: AccountBackendContractState) async {
         let previousAccountID = currentAccountState.currentAccountID
+        let hadConsent = currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount
         let nextAccountID = state.currentAccountID
         let accountChanged = previousAccountID != nextAccountID
 
@@ -328,7 +352,13 @@ final class CollaborationCoordinator {
             return
         }
 
-        guard accountChanged else { return }
+        guard state.hasActiveConsumerHealthConsentForCurrentAccount else {
+            phase = .consentRequired
+            statusMessage = ComplianceConfiguration.consumerHealthConsentRequiredCopy
+            return
+        }
+
+        guard accountChanged || !hadConsent else { return }
 
         await refreshAll(reason: "Account connected", force: true)
         await syncPushRegistrationIfNeeded(
@@ -353,6 +383,11 @@ final class CollaborationCoordinator {
         guard let modelContext else { return }
         guard currentAccountID != nil else {
             phase = .signedOut
+            return
+        }
+        guard currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount else {
+            phase = .consentRequired
+            statusMessage = ComplianceConfiguration.consumerHealthConsentRequiredCopy
             return
         }
 
@@ -447,6 +482,10 @@ final class CollaborationCoordinator {
     private func syncPushRegistrationIfNeeded(deviceToken: String?) async {
         guard currentAccountID != nil else { return }
         guard let modelContext else { return }
+        guard currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount else {
+            phase = .consentRequired
+            return
+        }
         if pushAuthorizationState == .authorized && deviceToken == nil {
             return
         }
@@ -496,6 +535,7 @@ final class CollaborationCoordinator {
     ) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .notificationPreferences) else { return }
+        guard ensureConsumerHealthConsent(for: .notificationPreferences) else { return }
         do {
             let accessToken = try await validAccessToken()
             let dto = try await collaborationClient.updateNotificationPreferences(
@@ -521,6 +561,7 @@ final class CollaborationCoordinator {
     ) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .invites) else { return }
+        guard ensureConsumerHealthConsent(for: .invites) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.createInvite(
@@ -545,6 +586,7 @@ final class CollaborationCoordinator {
     func respondToInvite(_ invite: CoachInvite, action: CoachInviteStatus) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .invites) else { return }
+        guard ensureConsumerHealthConsent(for: .invites) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.respondToInvite(
@@ -565,6 +607,7 @@ final class CollaborationCoordinator {
     func revokeInvite(_ invite: CoachInvite) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .invites) else { return }
+        guard ensureConsumerHealthConsent(for: .invites) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.revokeInvite(
@@ -586,6 +629,7 @@ final class CollaborationCoordinator {
     ) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .relationships) else { return }
+        guard ensureConsumerHealthConsent(for: .relationships) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.updateRelationshipScopes(
@@ -612,6 +656,7 @@ final class CollaborationCoordinator {
     ) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .blueprints) else { return }
+        guard ensureConsumerHealthConsent(for: .blueprints) else { return }
         do {
             let accessToken = try await validAccessToken()
             let dto = program.toSyncDTO()
@@ -650,6 +695,7 @@ final class CollaborationCoordinator {
     ) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .assignments) else { return }
+        guard ensureConsumerHealthConsent(for: .assignments) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.createAssignment(
@@ -677,6 +723,7 @@ final class CollaborationCoordinator {
     ) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .assignments) else { return }
+        guard ensureConsumerHealthConsent(for: .assignments) else { return }
         do {
             let accessToken = try await validAccessToken()
             let response = try await collaborationClient.updateAssignmentStatus(
@@ -710,6 +757,7 @@ final class CollaborationCoordinator {
     ) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .notes) else { return }
+        guard ensureConsumerHealthConsent(for: .notes) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.createCoachNote(
@@ -739,6 +787,7 @@ final class CollaborationCoordinator {
     func markNoteRead(_ note: CoachNote) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .notes) else { return }
+        guard ensureConsumerHealthConsent(for: .notes) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.markCoachNoteRead(
@@ -763,6 +812,7 @@ final class CollaborationCoordinator {
     ) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .programShares) else { return }
+        guard ensureConsumerHealthConsent(for: .programShares) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.createProgramShare(
@@ -788,6 +838,7 @@ final class CollaborationCoordinator {
     func revokeProgramShare(_ share: ProgramShareGrant) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .programShares) else { return }
+        guard ensureConsumerHealthConsent(for: .programShares) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.revokeProgramShare(
@@ -814,6 +865,7 @@ final class CollaborationCoordinator {
     ) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .progressShares) else { return }
+        guard ensureConsumerHealthConsent(for: .progressShares) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.createProgressShare(
@@ -840,6 +892,7 @@ final class CollaborationCoordinator {
     func revokeProgressShare(_ share: ProgressShareCard) async {
         guard let modelContext else { return }
         guard ensurePremiumAccess(for: .progressShares) else { return }
+        guard ensureConsumerHealthConsent(for: .progressShares) else { return }
         do {
             let accessToken = try await validAccessToken()
             _ = try await collaborationClient.revokeProgressShare(
