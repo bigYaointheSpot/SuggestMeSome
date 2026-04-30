@@ -45,6 +45,8 @@ final class CloudSyncManager {
     private var currentAccountState: AccountBackendContractState = .empty
     private var isSyncInFlight = false
     private var pendingSyncReasons: [String] = []
+    private var lastAccountStateRefreshAt: Date?
+    private let accountStateRefreshInterval: TimeInterval = 300
 
     private(set) var phase: CloudSyncPhase = .signedOut
     private(set) var lastSuccessfulSyncAt: Date?
@@ -100,6 +102,7 @@ final class CloudSyncManager {
 
     func handleAccountStateDidChange(_ state: AccountBackendContractState) async {
         currentAccountState = state
+        lastAccountStateRefreshAt = Date()
         currentAccountEmail = state.knownAccounts.first(where: { $0.id == state.currentAccountID })?.email
 
         guard state.currentAccountID != nil else {
@@ -204,7 +207,9 @@ final class CloudSyncManager {
         defer {
             isSyncInFlight = false
             if phase != .error, currentAccountState.currentAccountID != nil {
-                phase = currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount ? .idle : .consentRequired
+                phase = phase == .consentRequired || !currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount
+                    ? .consentRequired
+                    : .idle
             }
             scheduleFollowUpSyncIfNeeded()
         }
@@ -225,9 +230,14 @@ final class CloudSyncManager {
             }
             lastErrorMessage = nil
         } catch {
-            phase = .error
-            lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            appendActivity(.error, lastErrorMessage ?? "Cloud sync failed")
+            if error.isCloudConsentRequiredResponse {
+                setConsentRequiredPhase()
+                appendActivity(.warning, ComplianceConfiguration.consumerHealthConsentMissingMessage)
+            } else {
+                phase = .error
+                lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                appendActivity(.error, lastErrorMessage ?? "Cloud sync failed")
+            }
         }
     }
 
@@ -429,7 +439,8 @@ final class CloudSyncManager {
             throw CloudBackendClientError.missingSession
         }
 
-        if tokens.accessTokenExpiresAt > Date().addingTimeInterval(60) {
+        if tokens.accessTokenExpiresAt > Date().addingTimeInterval(60),
+           !shouldRefreshAccountState() {
             return tokens.accessToken
         }
 
@@ -441,10 +452,16 @@ final class CloudSyncManager {
         )
         tokenStore.saveTokens(refreshed.tokens)
         currentAccountState = refreshed.accountState
+        lastAccountStateRefreshAt = Date()
         currentAccountEmail = refreshed.accountState.knownAccounts.first(where: {
             $0.id == refreshed.accountState.currentAccountID
         })?.email
         return refreshed.tokens.accessToken
+    }
+
+    private func shouldRefreshAccountState(now: Date = Date()) -> Bool {
+        guard let lastAccountStateRefreshAt else { return true }
+        return now.timeIntervalSince(lastAccountStateRefreshAt) >= accountStateRefreshInterval
     }
 
     private func localRepository(context: ModelContext) -> LocalSyncRepository {

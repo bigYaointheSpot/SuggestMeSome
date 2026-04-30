@@ -456,10 +456,17 @@ enum ComplianceConfiguration {
 
             ## Getting help
 
-            - Premium Unlock: purchase and restore are handled through Apple. Use Restore Purchases in the app if your prior unlock is missing on a device.
-            - Account & Cloud: Sign in with Apple is optional. If you stay signed out, manual workout logging still works locally on this device.
-            - Apple Health: Apple Health access is optional and user-controlled. Deleting local app data does not delete Apple Health records.
-            - Privacy Rights: Use the in-app account and privacy request screens, or the privacy choices page, for access, export, delete-data, and delete-account requests.
+            - Premium Unlock: Premium Unlock is a one-time in-app purchase. Purchases and restores are handled through Apple. Use Restore Purchases in the app if your prior unlock is missing on a device.
+            - Account & Cloud: Sign in with Apple is optional. If you stay signed out, manual workout logging still works locally on this device. Cloud sync and collaboration stay paused until current-version Consumer Health Data consent is recorded.
+            - Consumer Health Consent: Withdraw Consumer Health Data consent from Privacy Choices to pause future backend sync and collaboration sharing.
+            - Apple Health: Apple Health access is optional and user-controlled. Apple Health-derived recovery data stays on device in this release and is not sent to CloudKit or the sync backend. Deleting local app data does not delete Apple Health records.
+            - Privacy Rights: Use the in-app account and privacy request screens, or the privacy choices page, for access, export, delete-data, and delete-account requests. If a privacy request is denied, you can appeal through the in-app privacy request flow or by contacting \(privacyEmail).
+
+            ## Privacy and security commitments
+
+            \(noAdvertisingDisclosure)
+            \(dataRetentionDisclosure)
+            \(securityDisclosure)
 
             ## Privacy and data controls
 

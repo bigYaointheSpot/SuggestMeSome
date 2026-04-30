@@ -85,8 +85,10 @@ final class CollaborationCoordinator {
     private let refreshCoalescer = CollaborationRefreshCoalescer()
     private let errorTracker = CollaborationErrorTracker()
     private var lastSuccessfulRefreshAt: Date?
+    private var lastAccountStateRefreshAt: Date?
 
     private let automaticRefreshMinimumInterval: TimeInterval = 15
+    private let accountStateRefreshInterval: TimeInterval = 300
 
     // MARK: - Derived-view caches
     //
@@ -164,6 +166,15 @@ final class CollaborationCoordinator {
     }
 
     private func recordError(_ endpoint: CollaborationEndpoint, _ error: Error) {
+        guard !error.isCloudConsentRequiredResponse else {
+            phase = .consentRequired
+            statusMessage = ComplianceConfiguration.consumerHealthConsentRequiredCopy
+            errorTracker.recordErrorMessage(
+                endpoint,
+                message: ComplianceConfiguration.consumerHealthConsentMissingMessage
+            )
+            return
+        }
         errorTracker.recordError(endpoint, error)
     }
 
@@ -304,6 +315,7 @@ final class CollaborationCoordinator {
     func hydrateAccountState(_ state: AccountBackendContractState) {
         let hadConsent = currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount
         currentAccountState = state
+        lastAccountStateRefreshAt = Date()
 
         guard state.currentAccountID != nil else {
             clearInMemoryState()
@@ -397,6 +409,11 @@ final class CollaborationCoordinator {
 
         do {
             let accessToken = try await validAccessToken()
+            guard currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount else {
+                phase = .consentRequired
+                statusMessage = ComplianceConfiguration.consumerHealthConsentRequiredCopy
+                return
+            }
 
             async let relationshipsTask = collaborationClient.fetchRelationships(accessToken: accessToken)
             async let invitesTask = collaborationClient.fetchInvites(accessToken: accessToken)
@@ -1155,7 +1172,8 @@ final class CollaborationCoordinator {
             throw CloudBackendClientError.missingSession
         }
 
-        if tokens.accessTokenExpiresAt > Date().addingTimeInterval(60) {
+        if tokens.accessTokenExpiresAt > Date().addingTimeInterval(60),
+           !shouldRefreshAccountState() {
             return tokens.accessToken
         }
 
@@ -1167,7 +1185,16 @@ final class CollaborationCoordinator {
         )
         tokenStore.saveTokens(refreshed.tokens)
         currentAccountState = refreshed.accountState
+        lastAccountStateRefreshAt = Date()
+        guard currentAccountState.hasActiveConsumerHealthConsentForCurrentAccount else {
+            throw CloudBackendClientError.httpStatus(403)
+        }
         return refreshed.tokens.accessToken
+    }
+
+    private func shouldRefreshAccountState(now: Date = Date()) -> Bool {
+        guard let lastAccountStateRefreshAt else { return true }
+        return now.timeIntervalSince(lastAccountStateRefreshAt) >= accountStateRefreshInterval
     }
 
     private func mergeInsightSnapshots(

@@ -73,7 +73,7 @@ struct DataExportView: View {
             } header: {
                 Text("Backup Summary")
             } footer: {
-                Text("Portable backup includes local app records, settings, local account/privacy state, and cached Apple Health summaries stored inside SuggestMeSome. Unlike Cloud Sync, it is a one-time file export and does not keep devices continuously aligned.")
+                Text("Portable backup is a user-initiated local file export. It includes local app records, settings, local account/privacy state, and cached Apple Health-derived recovery summaries stored inside SuggestMeSome. Unlike Cloud Sync, it is not sent to CloudKit or the backend and does not keep devices continuously aligned.")
             }
 
             Section {
@@ -118,7 +118,7 @@ struct DataExportView: View {
             } header: {
                 Text("Device Backup")
             } footer: {
-                Text("Portable backup is a single unencrypted JSON file for device-to-device migration. Use it when you want a manual snapshot or to move local data without signing into Cloud Sync. Import replaces all local data on this device. Apple Health data outside SuggestMeSome, active live workout state, purchase cache, and watch widget cache are not included.")
+                Text("Portable backup is a single unencrypted JSON file for device-to-device migration. Use it when you want a manual snapshot or to move local data without signing into Cloud Sync. Import replaces all local data on this device. Apple Health records outside SuggestMeSome, active live workout state, purchase cache, and watch widget cache are not included.")
             }
 
             Section {

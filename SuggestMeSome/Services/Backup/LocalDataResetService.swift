@@ -17,6 +17,7 @@ enum LocalDataResetService {
     static func clearPortableBackupUserDefaults(_ userDefaults: UserDefaults = .standard) {
         PortableBackupPreferences.clear(from: userDefaults)
         userDefaults.removeObject(forKey: LocalContractAuthService.persistenceKey)
+        userDefaults.removeObject(forKey: ProductionBackendAuthService.persistenceKey)
         userDefaults.removeObject(forKey: ComplianceStateStore.persistenceKey)
     }
 

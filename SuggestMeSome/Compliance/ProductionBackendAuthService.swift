@@ -32,12 +32,7 @@ final class ProductionBackendAuthService: AuthService {
             persist(state)
             return state
         }
-
-        if tokens.accessTokenExpiresAt > Date().addingTimeInterval(60) {
-            let state = normalized(loadState())
-            persist(state)
-            return state
-        }
+        let hasFreshAccessToken = tokens.accessTokenExpiresAt > Date().addingTimeInterval(60)
 
         do {
             let response = try await backendClient.refreshSession(
@@ -51,6 +46,11 @@ final class ProductionBackendAuthService: AuthService {
             persist(state)
             return state
         } catch {
+            if hasFreshAccessToken, !error.isCloudConsentRequiredResponse {
+                let state = normalized(loadState())
+                persist(state)
+                return state
+            }
             tokenStore.clearTokens()
             var state = loadState()
             state.currentAccountID = nil

@@ -281,6 +281,52 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(accountManager.currentUser?.email == "alex@example.com")
     }
 
+    @Test func localConsentGrantCreatesCurrentVersionRecordWhenOldConsentIsActive() async throws {
+        let suiteName = "Feature21LocalConsentRenewal.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let authService = LocalContractAuthService(userDefaults: defaults)
+        let accountManager = AccountManager(authService: authService)
+
+        await accountManager.createAccount(
+            displayName: "Alex",
+            email: "alex@example.com"
+        )
+        let accountID = try #require(accountManager.currentUser?.id)
+        let oldConsent = ConsumerHealthConsentRecord(
+            accountID: accountID,
+            categories: ComplianceConfiguration.consumerHealthConsentCategories,
+            purpose: ComplianceConfiguration.consumerHealthConsentPurpose,
+            legalDocumentIDs: [
+                "privacyPolicy::2.1",
+                "termsOfUse::2.1",
+                "consumerHealthNotice::2.1"
+            ],
+            legalVersion: "2.1",
+            legalEffectiveDate: "2026-04-19",
+            acceptedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let staleState = AccountBackendContractState(
+            knownAccounts: accountManager.knownAccounts,
+            currentAccountID: accountID,
+            privacyRequests: [],
+            consumerHealthConsents: [oldConsent]
+        )
+        let data = try JSONEncoder().encode(staleState)
+        defaults.set(data, forKey: LocalContractAuthService.persistenceKey)
+
+        accountManager.reloadFromPersistence()
+        #expect(accountManager.currentConsumerHealthConsent == nil)
+
+        await accountManager.setConsumerHealthConsent(granted: true)
+
+        #expect(accountManager.currentConsumerHealthConsent?.legalVersion == ComplianceConfiguration.currentLegalVersion)
+        #expect(accountManager.statusMessage == "Consumer health sync consent recorded.")
+        #expect(accountManager.lastErrorMessage == nil)
+        #expect(accountManager.consumerHealthConsents.count == 2)
+    }
+
     @Test func accountDeletionClearsLocalAccountPrivacyState() async {
         let suiteName = "Feature15DeleteAccount.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -390,6 +436,93 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(tokenStore.loadTokens()?.accessToken == "access-refreshed")
         #expect(backendClient.refreshedSessionRequests.count == 1)
         #expect(backendClient.refreshedSessionRequests.first?.refreshToken == "refresh-expired")
+    }
+
+    @Test func productionBackendRestoreSessionRefreshesValidTokensForConsentFreshness() async throws {
+        let suiteName = "Feature21ProductionFreshRestore.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let backendClient = TestCloudBackendClient()
+        let tokenStore = InMemoryCloudSessionTokenStore()
+        let authService = ProductionBackendAuthService(
+            userDefaults: defaults,
+            backendClient: backendClient,
+            tokenStore: tokenStore,
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+        )
+        let cachedConsent = ConsumerHealthConsentRecord(
+            accountID: feature18AccountID,
+            categories: ComplianceConfiguration.consumerHealthConsentCategories,
+            purpose: ComplianceConfiguration.consumerHealthConsentPurpose,
+            acceptedAt: Date(timeIntervalSince1970: 1_900_000_100)
+        )
+
+        backendClient.exchangeResponse = CloudAuthSessionResponse(
+            accountState: feature18SignedInState(consumerHealthConsents: [cachedConsent]),
+            tokens: feature18Tokens(
+                accessToken: "access-valid",
+                refreshToken: "refresh-valid",
+                expiresAt: Date(timeIntervalSince1970: 1_900_000_000)
+            )
+        )
+
+        _ = try await authService.signInWithApple(feature18AppleIdentity())
+
+        backendClient.refreshResponse = CloudAuthSessionResponse(
+            accountState: feature18SignedInState(),
+            tokens: feature18Tokens(
+                accessToken: "access-refreshed-valid",
+                refreshToken: "refresh-refreshed-valid",
+                expiresAt: Date(timeIntervalSince1970: 1_900_000_600)
+            )
+        )
+
+        let restored = await authService.restoreSessionIfNeeded()
+
+        #expect(!restored.hasActiveConsumerHealthConsentForCurrentAccount)
+        #expect(tokenStore.loadTokens()?.accessToken == "access-refreshed-valid")
+        #expect(backendClient.refreshedSessionRequests.map(\.refreshToken) == ["refresh-valid"])
+    }
+
+    @Test func productionBackendRestoreSessionPreservesFreshCachedStateWhenRefreshTemporarilyFails() async throws {
+        let suiteName = "Feature21ProductionFreshRestoreFailure.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let backendClient = TestCloudBackendClient()
+        let tokenStore = InMemoryCloudSessionTokenStore()
+        let authService = ProductionBackendAuthService(
+            userDefaults: defaults,
+            backendClient: backendClient,
+            tokenStore: tokenStore,
+            syncStateStore: CloudSyncStateStore(userDefaults: defaults)
+        )
+        let cachedConsent = ConsumerHealthConsentRecord(
+            accountID: feature18AccountID,
+            categories: ComplianceConfiguration.consumerHealthConsentCategories,
+            purpose: ComplianceConfiguration.consumerHealthConsentPurpose,
+            acceptedAt: Date(timeIntervalSince1970: 1_900_000_100)
+        )
+
+        backendClient.exchangeResponse = CloudAuthSessionResponse(
+            accountState: feature18SignedInState(consumerHealthConsents: [cachedConsent]),
+            tokens: feature18Tokens(
+                accessToken: "access-valid",
+                refreshToken: "refresh-valid",
+                expiresAt: Date(timeIntervalSince1970: 1_900_000_000)
+            )
+        )
+
+        _ = try await authService.signInWithApple(feature18AppleIdentity())
+        backendClient.refreshResponse = nil
+
+        let restored = await authService.restoreSessionIfNeeded()
+
+        #expect(restored.currentAccountID == feature18AccountID)
+        #expect(restored.hasActiveConsumerHealthConsentForCurrentAccount)
+        #expect(tokenStore.loadTokens()?.accessToken == "access-valid")
+        #expect(backendClient.refreshedSessionRequests.map(\.refreshToken) == ["refresh-valid"])
     }
 
     @Test func productionBackendAccountManagerSupportsExportDeleteDataAndDeleteAccount() async throws {

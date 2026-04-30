@@ -21,6 +21,12 @@
       <p>Contact SuggestMeSome for purchase help, cloud account issues, privacy requests, and Apple Health questions.</p>
     </section>
 
+    <section class="card">
+      <h2>Version</h2>
+      <p><strong>Version 2.2.</strong> Effective 2026-04-30.</p>
+      <p class="muted small">SuggestMeSome is published by Alexander Yao. Support and privacy contacts are listed below so you can reach the right inbox for purchase, account, Consumer Health Data, or privacy-rights questions.</p>
+    </section>
+
     <section class="grid two-up">
       <article class="card">
         <h2>Contact</h2>
@@ -29,6 +35,7 @@
           <li>Support: <a href="mailto:support@suggestmesome.app">support@suggestmesome.app</a></li>
           <li>Privacy: <a href="mailto:privacy@suggestmesome.app">privacy@suggestmesome.app</a></li>
           <li>Website: <a href="https://www.suggestmesome.app">www.suggestmesome.app</a></li>
+          <li>Privacy Choices: <a href="/privacy-choices">suggestmesome.app/privacy-choices</a></li>
         </ul>
       </article>
 
@@ -41,11 +48,19 @@
     <section class="card">
       <h2>Help topics</h2>
       <ul>
-        <li><strong>Premium Unlock:</strong> Purchases and restores are handled through Apple. Use Restore Purchases in the app if your prior unlock does not appear on a device.</li>
-        <li><strong>Account & Cloud:</strong> Sign in with Apple is optional. Manual workout logging still works locally while signed out.</li>
-        <li><strong>Apple Health:</strong> Apple Health access is optional and user-controlled. Deleting local app data does not remove records already stored in Apple Health.</li>
-        <li><strong>Privacy Rights:</strong> Use the in-app account and privacy request screens or the <a href="/privacy-choices">privacy choices page</a> for access, export, delete-data, and delete-account requests.</li>
+        <li><strong>Premium Unlock:</strong> Premium Unlock is a one-time in-app purchase. Purchases and restores are handled through Apple. Use Restore Purchases in the app if your prior unlock does not appear on a device.</li>
+        <li><strong>Account & Cloud:</strong> Sign in with Apple is optional. Manual workout logging still works locally while signed out. Cloud sync and collaboration stay paused until current-version Consumer Health Data consent is recorded.</li>
+        <li><strong>Consumer Health Consent:</strong> Withdraw Consumer Health Data consent from Privacy Choices to pause future backend sync and collaboration sharing.</li>
+        <li><strong>Apple Health:</strong> Apple Health access is optional and user-controlled. Apple Health-derived recovery data stays on device in this release and is not sent to CloudKit or the sync backend. Deleting local app data does not remove records already stored in Apple Health.</li>
+        <li><strong>Privacy Rights:</strong> Use the in-app account and privacy request screens or the <a href="/privacy-choices">privacy choices page</a> for access, export, delete-data, and delete-account requests. If a privacy request is denied, you can appeal through the in-app privacy request flow or by contacting privacy@suggestmesome.app.</li>
       </ul>
+    </section>
+
+    <section class="card">
+      <h2>Privacy and security commitments</h2>
+      <p>SuggestMeSome does not include ads or third-party analytics in this public launch baseline.</p>
+      <p>Backend-held account, training, privacy request, notification-preference, and collaboration records are retained only as long as needed to provide the service, comply with law, resolve disputes, or enforce terms.</p>
+      <p>SuggestMeSome uses encrypted network transport for backend connections and is intended to protect backend-held account and training records with role-limited access, auditable deletion, secrets management, and a documented incident-response plan.</p>
     </section>
   </main>
 </body>

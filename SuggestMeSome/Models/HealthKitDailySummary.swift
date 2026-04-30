@@ -11,11 +11,11 @@ import SwiftData
 @Model
 final class HealthKitDailySummary {
     var id: UUID
-    /// Stable identifier for cross-device or watch transport contracts.
+    /// Local portable-backup migration identifier. Not used by cloud sync.
     var syncStableID: String?
-    /// Monotonic version for deterministic merge tie-breaks.
+    /// Local portable-backup metadata version. Not used by cloud sync.
     var syncVersion: Int
-    /// Last modified timestamp used by sync conflict policies.
+    /// Local portable-backup modified timestamp. Not used by cloud sync.
     var syncLastModifiedAt: Date
     var dayStart: Date
 
@@ -64,5 +64,16 @@ final class HealthKitDailySummary {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.syncLastModifiedAt = syncLastModifiedAt ?? updatedAt
+    }
+
+    func markLocalBackupMetadataUpdated(at date: Date = Date()) {
+        let trimmedStableID = syncStableID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedStableID?.isEmpty != false {
+            syncStableID = id.uuidString
+        } else {
+            syncStableID = trimmedStableID
+        }
+        syncVersion = max(1, syncVersion) + 1
+        syncLastModifiedAt = date
     }
 }

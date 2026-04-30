@@ -4303,6 +4303,29 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature20CollaborationStoresTests -only-testing:SuggestMeSomeTests/Feature21LegalAndScopeHardeningTests`
   - succeeded after final test-name cleanup: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:SuggestMeSomeTests/Feature10SyncFoundationValidationTests`
 
+#### Prompt 4 [Post-audit consent, legal parity, and local-only fences] — 2026-04-30
+
+- Closed the post-audit consent gaps from Prompt 3:
+  - local Consumer Health Data consent grants now create a new current-version consent record when only an older active record exists, and consent success/error messaging is based on the resulting active current-version state
+  - production session restore now refreshes backend account state even when cached access tokens are still valid, so remote consent withdrawal or legal-version invalidation is not trusted indefinitely, while preserving fresh cached sessions on non-auth transient refresh failures
+  - cloud sync and collaboration write paths refresh stale account state before transmission and map backend `401`/`403` consent-required responses into `.consentRequired` instead of generic errors
+- Finished legal parity and local-only fences:
+  - aligned the hosted and in-app Support legal surfaces with version `2.2`, effective `2026-04-30`, support/privacy contacts, Privacy Choices, Premium Unlock, no-ads/no-third-party-analytics, appeal, retention/deletion, security, and Apple Health off-backend copy
+  - expanded hosted legal parity tests to derive coverage from every configured `LegalDocumentVersion.hostedURL`, including `/support`
+  - removed `HealthKitDailySummary` from `SyncTrackableModel` conformance and sync metadata audit coverage, replacing the remaining update call with local portable-backup metadata
+- Preserved manual portable backups while making the disclosure and storage contract clearer:
+  - Settings copy now says portable backups are user-initiated local exports, unencrypted JSON files, may include cached Apple Health-derived recovery summaries, and are not sent to CloudKit or the backend
+  - portable backup restore now clears and restores both legacy local-contract and production-backend account-state keys so backup account/privacy state remains portable across the production launch-mode transition without depending on shared session tokens
+- Deferred follow-up plan from the Prompt 3 whole-repo scan:
+  - run a counsel review pass over the v2.2 in-app and hosted legal copy, then reconcile App Store Connect privacy nutrition labels and custom EULA metadata against the final counsel-approved text
+  - validate the production backend enforcement path end to end for consent, token refresh, privacy exports/deletion, audit logs, retention jobs, and consent-required error payloads before enabling live sync broadly
+  - schedule a schema-safe rename/migration for the remaining `sync*` columns on `HealthKitDailySummary` so local portable-backup metadata no longer looks cloud-sync-shaped in the data model
+  - split the largest touched settings/account/collaboration SwiftUI surfaces after launch hardening, with snapshot/performance checks, instead of folding broad refactors into this legal hardening patch
+  - isolate Xcode test session state for shared Keychain/App Group/simulator resources so focused legal and backup suites remain deterministic under parallel execution
+- Verification:
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'`
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature15Prompt9PortableBackupTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature21LegalAndScopeHardeningTests`
+
 ---
 
 ## Project Setup

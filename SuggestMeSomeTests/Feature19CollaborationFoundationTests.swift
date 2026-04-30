@@ -283,6 +283,34 @@ struct Feature19CollaborationFoundationTests {
         #expect(coordinator.lastErrorMessage == ComplianceConfiguration.consumerHealthConsentMissingMessage)
     }
 
+    @Test func collaborationWriteMapsBackendConsentRequiredToConsentPhase() async throws {
+        let container = try makeInMemoryContainer()
+        let tokenStore = InMemoryCloudSessionTokenStore(tokens: feature19Tokens())
+        let collaborationClient = MockCollaborationClient()
+        collaborationClient.throwConsentRequiredOnNextInvite = true
+        let coordinator = CollaborationCoordinator(
+            collaborationClient: collaborationClient,
+            backendClient: MockCloudBackendClient(),
+            tokenStore: tokenStore,
+            entitlementStateProvider: { .premiumUnlocked }
+        )
+
+        coordinator.configure(modelContext: container.mainContext)
+        coordinator.hydrateAccountState(feature19SignedInState())
+
+        await coordinator.createCoachInvite(
+            inviteeEmail: "athlete@example.com",
+            noteText: nil,
+            inviterRole: .coach,
+            scopes: CollaborationVisibilityScope.defaultInviteScopes
+        )
+
+        #expect(collaborationClient.invites.isEmpty)
+        #expect(coordinator.phase == .consentRequired)
+        #expect(coordinator.endpointError(.invites) == ComplianceConfiguration.consumerHealthConsentMissingMessage)
+        #expect(coordinator.lastErrorMessage == ComplianceConfiguration.consumerHealthConsentMissingMessage)
+    }
+
     @Test func collaborationCoordinatorSeparatesIncomingAndOutgoingInvites() async throws {
         let container = try makeInMemoryContainer()
         let suiteName = "Feature19InviteModes.\(UUID().uuidString)"
@@ -1708,6 +1736,8 @@ private final class MockCollaborationClient: CloudCollaborationClient {
     /// the flag auto-resets so the retry can succeed. Used to verify
     /// error-recovery behavior without having to fail every call.
     var throwOnNextUpdatePreferences = false
+    /// One-shot consent-required throw for write endpoint hardening tests.
+    var throwConsentRequiredOnNextInvite = false
     /// One-shot throw flag used by the Phase 4g refresh-recovery test to
     /// fail a single endpoint (relationships) so the coordinator records
     /// an endpoint error while the other endpoints succeed. Auto-resets
@@ -1740,6 +1770,10 @@ private final class MockCollaborationClient: CloudCollaborationClient {
         try await delayedFetch(&inviteFetchCount, value: invites)
     }
     func createInvite(_ request: CoachInviteCreateRequest, accessToken: String) async throws -> CoachInviteDTO {
+        if throwConsentRequiredOnNextInvite {
+            throwConsentRequiredOnNextInvite = false
+            throw CloudBackendClientError.httpStatus(403)
+        }
         let dto = CoachInviteDTO(
             stableID: "invite-\(invites.count + 1)",
             createdAt: Date(),

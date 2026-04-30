@@ -184,6 +184,36 @@ struct Feature18AuditFixRegressionTests {
         #expect(harness.backend.pullRequests.isEmpty)
     }
 
+    @Test func cloudSyncManagerMapsBackendConsentRequiredToConsentPhase() async throws {
+        let harness = try await makeCloudSyncHarness(initialLastSuccessfulSyncAt: day(10))
+        defer { harness.cleanup() }
+
+        harness.stateStore.setPendingBatches([
+            PendingCloudSyncBatch(
+                createdAt: day(1),
+                reason: "Queued workout sync",
+                payload: CloudSyncBatchPayload(
+                    workouts: [makeWorkoutDTO(
+                        stableID: "consent-required-workout",
+                        lastModifiedAt: day(1),
+                        exerciseName: "Bench Press",
+                        weight: 225
+                    )]
+                )
+            )
+        ])
+        harness.backend.pushHandler = { _, _ in
+            throw CloudBackendClientError.httpStatus(403)
+        }
+
+        await harness.manager.retryNow()
+
+        #expect(harness.manager.phase == .consentRequired)
+        #expect(harness.manager.lastErrorMessage == nil)
+        #expect(harness.backend.pushRequests.count == 1)
+        #expect(harness.backend.pullRequests.isEmpty)
+    }
+
     @Test func dailyCheckInCanonicalThenTombstoneKeepsCanonicalRecord() throws {
         let container = try makeInMemoryContainer()
         let repository = LocalSyncRepository(modelContext: container.mainContext)

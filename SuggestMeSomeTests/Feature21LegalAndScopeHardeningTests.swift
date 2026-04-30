@@ -45,6 +45,25 @@ struct Feature21LegalAndScopeHardeningTests {
         #expect(entitlementText.contains("group.com.alexyao.SuggestMeSome"))
     }
 
+    @Test func healthKitDailySummariesAreExcludedFromSyncMetadataAudit() throws {
+        let syncSupport = try repoText(at: "SuggestMeSome/SyncContracts/SyncMetadataSupport.swift")
+        let auditService = try repoText(at: "SuggestMeSome/Services/Persistence/SyncMetadataAuditService.swift")
+        let healthKitRecoverySupport = try repoText(at: "SuggestMeSome/Services/HealthKit/HealthKitRecoverySyncSupport.swift")
+
+        #expect(!syncSupport.contains("extension HealthKitDailySummary: SyncTrackableModel"))
+        #expect(!auditService.contains("audit(HealthKitDailySummary.self"))
+        #expect(!healthKitRecoverySupport.contains("markSyncUpdated"))
+    }
+
+    @Test func portableBackupDisclosureNamesLocalHealthSummaryScope() throws {
+        let exportView = try repoText(at: "SuggestMeSome/Views/Settings/DataExportView.swift")
+
+        #expect(exportView.contains("user-initiated local file export"))
+        #expect(exportView.contains("single unencrypted JSON file"))
+        #expect(exportView.contains("cached Apple Health-derived recovery summaries"))
+        #expect(exportView.contains("not sent to CloudKit or the backend"))
+    }
+
     @Test func collaborationDisclosureAcknowledgementsAreAccountAndVersionScoped() {
         let suiteName = "Feature21Disclosure.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -83,12 +102,16 @@ struct Feature21LegalAndScopeHardeningTests {
 }
 
 private func hostedLegalPages() throws -> [(String, String)] {
-    try [
-        "website/privacy/index.html",
-        "website/terms/index.html",
-        "website/consumer-health/index.html",
-        "website/privacy-choices/index.html"
-    ].map { path in
+    let paths = Set(
+        ComplianceConfiguration.legalDocuments
+            .compactMap(\.hostedURL)
+            .map { url in
+                let hostedPath = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                return hostedPath.isEmpty ? "website/index.html" : "website/\(hostedPath)/index.html"
+            }
+    )
+
+    return try paths.sorted().map { path in
         (path, try repoText(at: path))
     }
 }

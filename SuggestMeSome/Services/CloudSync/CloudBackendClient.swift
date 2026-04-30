@@ -24,6 +24,21 @@ enum CloudBackendClientError: LocalizedError {
             return message
         }
     }
+
+    var isConsentRequiredResponse: Bool {
+        switch self {
+        case .httpStatus(let statusCode):
+            return statusCode == 401 || statusCode == 403
+        default:
+            return false
+        }
+    }
+}
+
+extension Error {
+    var isCloudConsentRequiredResponse: Bool {
+        (self as? CloudBackendClientError)?.isConsentRequiredResponse == true
+    }
 }
 
 protocol CloudBackendClient {

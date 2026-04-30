@@ -277,7 +277,9 @@ struct Feature15Prompt9PortableBackupTests {
         #expect(viewModel.importPreview?.fileName == fileURL.lastPathComponent)
         #expect(viewModel.errorMessage == nil)
 
-        let accountManager = AccountManager(userDefaults: destinationDefaults)
+        let accountManager = AccountManager(
+            authService: LocalContractAuthService(userDefaults: destinationDefaults)
+        )
         let complianceStateStore = ComplianceStateStore(userDefaults: destinationDefaults)
 
         viewModel.restoreImport(
@@ -386,10 +388,19 @@ struct Feature15Prompt9PortableBackupTests {
             AccountBackendContractState.self,
             from: accountData
         )
+        let productionAccountData = try #require(
+            defaults.data(forKey: ProductionBackendAuthService.persistenceKey)
+        )
+        let productionAccountState = try JSONDecoder().decode(
+            AccountBackendContractState.self,
+            from: productionAccountData
+        )
         #expect(accountState.currentAccountID == fixture.accountID)
         #expect(accountState.knownAccounts.first?.email == "\(fixture.variantLabel)@example.com")
         #expect(accountState.privacyRequests.first?.accountID == fixture.accountID)
         #expect(accountState.consumerHealthConsents.first?.accountID == fixture.accountID)
+        #expect(productionAccountState.currentAccountID == fixture.accountID)
+        #expect(productionAccountState.knownAccounts.first?.email == "\(fixture.variantLabel)@example.com")
     }
 
     private func seedPortableBackupFixture(

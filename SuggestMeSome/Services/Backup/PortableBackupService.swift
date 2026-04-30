@@ -558,11 +558,25 @@ final class PortableBackupService {
     }
 
     private func loadAccountState() -> AccountBackendContractState {
-        guard let data = userDefaults.data(forKey: LocalContractAuthService.persistenceKey),
-              let state = try? JSONDecoder().decode(AccountBackendContractState.self, from: data) else {
-            return .empty
+        let preferredKey: String
+        let fallbackKey: String
+        switch ComplianceConfiguration.accountBackendLaunchMode {
+        case .localContractValidation:
+            preferredKey = LocalContractAuthService.persistenceKey
+            fallbackKey = ProductionBackendAuthService.persistenceKey
+        case .productionBackend:
+            preferredKey = ProductionBackendAuthService.persistenceKey
+            fallbackKey = LocalContractAuthService.persistenceKey
         }
-        return state
+
+        for key in [preferredKey, fallbackKey] {
+            guard let data = userDefaults.data(forKey: key),
+                  let state = try? JSONDecoder().decode(AccountBackendContractState.self, from: data) else {
+                continue
+            }
+            return state
+        }
+        return .empty
     }
 
     private func persistLocalState(_ localState: PortableBackupLocalState) {
@@ -573,6 +587,7 @@ final class PortableBackupService {
         }
         if let accountData = try? JSONEncoder().encode(localState.accountState) {
             userDefaults.set(accountData, forKey: LocalContractAuthService.persistenceKey)
+            userDefaults.set(accountData, forKey: ProductionBackendAuthService.persistenceKey)
         }
     }
 

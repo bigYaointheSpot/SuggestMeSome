@@ -51,7 +51,6 @@ enum SyncMetadataAuditService {
             audit(AppliedProgramOverlay.self, named: "AppliedProgramOverlay", context: context, auditedAt: auditedAt),
             audit(AppliedOverlayAdjustment.self, named: "AppliedOverlayAdjustment", context: context, auditedAt: auditedAt),
             audit(AdaptationEventHistory.self, named: "AdaptationEventHistory", context: context, auditedAt: auditedAt),
-            audit(HealthKitDailySummary.self, named: "HealthKitDailySummary", context: context, auditedAt: auditedAt),
         ]
 
         let report = SyncMetadataAuditReport(

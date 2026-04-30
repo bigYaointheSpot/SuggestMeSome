@@ -103,4 +103,3 @@ extension AdaptationProposal: SyncTrackableModel, SyncTombstoneTrackable {}
 extension AppliedProgramOverlay: SyncTrackableModel, SyncTombstoneTrackable {}
 extension AppliedOverlayAdjustment: SyncTrackableModel {}
 extension AdaptationEventHistory: SyncTrackableModel, SyncTombstoneTrackable {}
-extension HealthKitDailySummary: SyncTrackableModel {}

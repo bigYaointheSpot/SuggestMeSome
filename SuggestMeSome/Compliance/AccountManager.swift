@@ -389,10 +389,7 @@ final class LocalContractAuthService: AuthService {
         }
 
         if granted {
-            let activeRecord = state.consumerHealthConsents.first {
-                $0.accountID == accountID && $0.isActive
-            }
-            if activeRecord == nil {
+            if state.activeConsumerHealthConsent(for: accountID) == nil {
                 state.consumerHealthConsents.insert(
                     ConsumerHealthConsentRecord(
                         accountID: accountID,
@@ -402,10 +399,13 @@ final class LocalContractAuthService: AuthService {
                     at: 0
                 )
             }
-        } else if let index = state.consumerHealthConsents.firstIndex(where: {
-            $0.accountID == accountID && $0.isActive
-        }) {
-            state.consumerHealthConsents[index].withdrawnAt = Date()
+        } else {
+            let withdrawnAt = Date()
+            for index in state.consumerHealthConsents.indices where
+                state.consumerHealthConsents[index].accountID == accountID &&
+                state.consumerHealthConsents[index].isActive {
+                state.consumerHealthConsents[index].withdrawnAt = withdrawnAt
+            }
         }
 
         persist(state)
@@ -601,9 +601,16 @@ final class AccountManager {
         do {
             let state = try await authService.setConsumerHealthConsent(granted: granted)
             apply(state)
-            statusMessage = granted
-                ? "Consumer health sync consent recorded."
-                : "Consumer health sync consent withdrawn."
+            let hasActiveConsent = state.hasActiveConsumerHealthConsentForCurrentAccount
+            if granted, hasActiveConsent {
+                statusMessage = "Consumer health sync consent recorded."
+            } else if granted {
+                lastErrorMessage = "Consent update did not return an active current-version record. Try again from Privacy Choices."
+            } else if !hasActiveConsent {
+                statusMessage = "Consumer health sync consent withdrawn."
+            } else {
+                lastErrorMessage = "Consent withdrawal did not complete. Try again from Privacy Choices."
+            }
         } catch {
             lastErrorMessage = (error as? LocalizedError)?.errorDescription ?? "Consent update failed."
         }
