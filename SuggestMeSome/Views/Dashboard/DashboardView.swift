@@ -69,7 +69,9 @@ struct DashboardView: View {
                     quickStartSection
                     timeWindowPicker
                     statsBar
-                    CollaborationInsightSummaryCard()
+                    if AppBuildEnvironment.enablesProductionCloudFeatures {
+                        CollaborationInsightSummaryCard()
+                    }
                     strengthTrendsCard
                     if viewModel.hasAdaptiveSignals || viewModel.snapshotFatigueStatus != nil {
                         adaptiveSignalsRow
@@ -170,6 +172,7 @@ struct DashboardView: View {
             .sheet(
                 item: Binding(
                     get: {
+                        guard AppBuildEnvironment.enablesProductionCloudFeatures else { return nil }
                         guard let route = appRouteCoordinator.activeRoute,
                               route.targetTab == .dashboard else {
                             return nil

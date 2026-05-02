@@ -140,7 +140,8 @@ struct DailyCoachView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     todayTrainingCard
-                    if collaborationCoordinator.hasAnyCollaboration {
+                    if AppBuildEnvironment.enablesProductionCloudFeatures,
+                       collaborationCoordinator.hasAnyCollaboration {
                         DailyCoachCloudUpdatesCard()
                     }
                     if isBetweenBlocks {
@@ -197,6 +198,7 @@ struct DailyCoachView: View {
             .sheet(
                 item: Binding(
                     get: {
+                        guard AppBuildEnvironment.enablesProductionCloudFeatures else { return nil }
                         guard let route = appRouteCoordinator.activeRoute,
                               route.targetTab == .dailyCoach else {
                             return nil

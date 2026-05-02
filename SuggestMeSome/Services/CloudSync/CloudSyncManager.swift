@@ -69,6 +69,10 @@ final class CloudSyncManager {
     }
 
     var statusSummary: String {
+        guard AppBuildEnvironment.enablesProductionCloudFeatures else {
+            return ComplianceConfiguration.v1LocalReleaseDisclosure
+        }
+
         switch phase {
         case .signedOut:
             return "Connect an account to sync training history across devices."
@@ -94,6 +98,13 @@ final class CloudSyncManager {
         modelContext: ModelContext,
         userDefaults: UserDefaults = .standard
     ) {
+        guard AppBuildEnvironment.enablesProductionCloudFeatures else {
+            phase = .signedOut
+            lastErrorMessage = nil
+            currentAccountEmail = nil
+            return
+        }
+
         self.modelContext = modelContext
         self.userDefaults = userDefaults
         self.lastSuccessfulSyncAt = stateStore.lastSuccessfulSyncAt()
@@ -101,6 +112,15 @@ final class CloudSyncManager {
     }
 
     func handleAccountStateDidChange(_ state: AccountBackendContractState) async {
+        guard AppBuildEnvironment.enablesProductionCloudFeatures else {
+            currentAccountState = .empty
+            currentAccountEmail = nil
+            phase = .signedOut
+            lastErrorMessage = nil
+            pendingSyncReasons.removeAll()
+            return
+        }
+
         currentAccountState = state
         lastAccountStateRefreshAt = Date()
         currentAccountEmail = state.knownAccounts.first(where: { $0.id == state.currentAccountID })?.email
@@ -125,14 +145,17 @@ final class CloudSyncManager {
     }
 
     func syncOnAppDidBecomeActive() async {
+        guard AppBuildEnvironment.enablesProductionCloudFeatures else { return }
         await sync(reason: "App became active", preferBootstrap: false)
     }
 
     func retryNow() async {
+        guard AppBuildEnvironment.enablesProductionCloudFeatures else { return }
         await sync(reason: "Manual retry", preferBootstrap: false)
     }
 
     func notifyLocalMutation(_ reason: String) {
+        guard AppBuildEnvironment.enablesProductionCloudFeatures else { return }
         guard currentAccountState.currentAccountID != nil else { return }
         Task { @MainActor in
             await self.sync(reason: reason, preferBootstrap: false)
@@ -140,6 +163,7 @@ final class CloudSyncManager {
     }
 
     func captureDeletedWorkouts(_ workouts: [Workout], at deletedAt: Date = .now) {
+        guard AppBuildEnvironment.enablesProductionCloudFeatures else { return }
         guard !workouts.isEmpty else { return }
         let payload = CloudSyncBatchPayload(
             workouts: workouts.map { tombstoneWorkout($0, deletedAt: deletedAt) }
@@ -159,6 +183,7 @@ final class CloudSyncManager {
         events: [AdaptationEventHistory] = [],
         at deletedAt: Date = .now
     ) {
+        guard AppBuildEnvironment.enablesProductionCloudFeatures else { return }
         let payload = CloudSyncBatchPayload(
             workouts: [],
             trainingPrograms: programs.map { tombstoneProgram($0, deletedAt: deletedAt) },
@@ -176,6 +201,7 @@ final class CloudSyncManager {
     }
 
     private func enqueuePending(payload: CloudSyncBatchPayload, reason: String) {
+        guard AppBuildEnvironment.enablesProductionCloudFeatures else { return }
         guard currentAccountState.currentAccountID != nil else { return }
         guard !payload.isEmpty else { return }
         stateStore.enqueuePendingBatch(

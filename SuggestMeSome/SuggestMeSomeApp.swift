@@ -137,7 +137,7 @@ struct SuggestMeSomeApp: App {
                     HealthKitSettingsStorage.migrateLegacyRecoverySyncTimestampIfNeeded(
                         context: sharedModelContainer.mainContext
                     )
-                    if !AppBuildEnvironment.isLocalDevicePersonalTeam {
+                    if AppBuildEnvironment.enablesProductionCloudFeatures {
                         cloudSyncManager.configure(
                             modelContext: sharedModelContainer.mainContext
                         )
@@ -158,7 +158,7 @@ struct SuggestMeSomeApp: App {
                     )
                     Task { @MainActor in
                         await purchaseManager.bootstrap()
-                        if !AppBuildEnvironment.isLocalDevicePersonalTeam {
+                        if AppBuildEnvironment.enablesProductionCloudFeatures {
                             await accountManager.restoreSessionIfNeeded()
                             await cloudSyncManager.syncOnAppDidBecomeActive()
                         }
@@ -177,7 +177,7 @@ struct SuggestMeSomeApp: App {
                     guard newPhase == .active else { return }
                     Task { @MainActor in
                         await purchaseManager.refreshEntitlements()
-                        if !AppBuildEnvironment.isLocalDevicePersonalTeam {
+                        if AppBuildEnvironment.enablesProductionCloudFeatures {
                             await accountManager.restoreSessionIfNeeded()
                             await cloudSyncManager.syncOnAppDidBecomeActive()
                             await collaborationCoordinator.refreshOnAppDidBecomeActive()

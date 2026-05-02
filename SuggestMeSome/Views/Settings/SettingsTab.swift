@@ -98,12 +98,16 @@ struct SettingsTab: View {
                 workoutSection
                 if AppBuildEnvironment.isLocalDevicePersonalTeam {
                     localDeviceBuildSection
-                } else {
+                } else if AppBuildEnvironment.enablesProductionCloudFeatures {
                     cloudSyncSection
                     collaborationSection
+                } else {
+                    v1LocalReleaseSection
                 }
                 quickLinksSection
-                accountSection
+                if AppBuildEnvironment.enablesProductionCloudFeatures {
+                    accountSection
+                }
                 premiumSection
                 legalPrivacySection
                 dataManagementSection
@@ -148,6 +152,7 @@ struct SettingsTab: View {
             .sheet(
                 item: Binding(
                     get: {
+                        guard AppBuildEnvironment.enablesProductionCloudFeatures else { return nil }
                         guard let route = appRouteCoordinator.activeRoute,
                               route.targetTab == .settings else {
                             return nil
@@ -320,6 +325,17 @@ struct SettingsTab: View {
                 .foregroundStyle(.secondary)
         } header: {
             Text("Local Device Build")
+        }
+    }
+
+    private var v1LocalReleaseSection: some View {
+        Section {
+            Label("Local-first v1 release", systemImage: "iphone.and.arrow.forward")
+            Text(ComplianceConfiguration.v1LocalReleaseDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } header: {
+            Text("App Store v1")
         }
     }
 
@@ -638,7 +654,9 @@ struct SettingsTab: View {
 
     private func markTrainingPreferencesUpdated(reason: String) {
         TrainingPreferencesStore.markUpdated()
-        cloudSyncManager.notifyLocalMutation(reason)
+        if AppBuildEnvironment.enablesProductionCloudFeatures {
+            cloudSyncManager.notifyLocalMutation(reason)
+        }
     }
 }
 

@@ -59,8 +59,8 @@ struct LegalDocumentRecord: Codable, Equatable {
 enum ComplianceConfiguration {
     static let appName = "SuggestMeSome"
     static let premiumUnlockProductID = "premium_unlock"
-    static let currentLegalVersion = "2.2"
-    static let legalEffectiveDateText = "2026-04-30"
+    static let currentLegalVersion = "2.3"
+    static let legalEffectiveDateText = "2026-05-02"
     static let sellerName = "Alexander Yao"
     static let supportEmail = "support@suggestmesome.app"
     static let privacyEmail = "privacy@suggestmesome.app"
@@ -71,66 +71,69 @@ enum ComplianceConfiguration {
     static let consumerHealthNoticeURL = URL(string: "https://www.suggestmesome.app/consumer-health")!
     static let privacyChoicesURL = URL(string: "https://www.suggestmesome.app/privacy-choices")!
     static let requiresOrganizationAccountBeforeRelease = false
-    static let accountBackendLaunchMode: AccountBackendLaunchMode = .productionBackend
+    static var accountBackendLaunchMode: AccountBackendLaunchMode {
+        AppBuildEnvironment.enablesProductionCloudFeatures ? .productionBackend : .localContractValidation
+    }
     static let accountBackendBaseURL = URL(string: "https://api.suggestmesome.app/v1")!
 
     static let adultsOnlyLegalDisclosure = "SuggestMeSome is intended for adults age 18 and older."
     static let onboardingEligibilityTitle = "Training eligibility"
     static let onboardingEligibilityDisclosure = "SuggestMeSome is designed for independent adult training use. By continuing, you confirm that you're 18 or older."
-    static let onboardingPrivacyDisclosure = "Keep logging workouts on this device, or choose Sign in with Apple to sync training across your devices and collaborate privately with people you invite. Apple Health-derived recovery data stays on device in this release."
+    static let onboardingPrivacyDisclosure = "Keep logging workouts on this device. This v1 App Store release does not include production cloud accounts, Sign in with Apple, coach collaboration, private sharing, backend sync, or push notifications."
     static let wellnessDisclaimerDisclosure = "SuggestMeSome provides fitness and wellness guidance only. It is not medical advice, diagnosis, or treatment, and it should not be used for emergency or medical decisions."
     static let doctorCheckDisclosure = "Check with a doctor before making medical decisions, changing care, or relying on recovery or readiness results after illness, injury, pain, pregnancy, or other health concerns."
     static let smartGuidanceDisclosure = "Some workouts, programs, and coaching explanations are generated from your logged training data and app logic. Review recommendations before acting on them."
     static let consumerHealthDataDisclosure = "Your workouts, readiness check-ins, recovery data, and coaching outputs can reveal health information. SuggestMeSome uses this data to provide the features you request and does not use Apple Health data for advertising."
-    static let cloudSyncStorageDisclosure = "SuggestMeSome syncs workouts, programs, daily coaching, adaptive history, and account privacy records through a dedicated backend. Apple Health-derived recovery data stays on device in this release and is not sent to CloudKit or the sync backend."
-    static let collaborationDataDisclosure = "If you connect cloud collaboration, SuggestMeSome may sync relationship records, invitee email addresses, visibility scope settings, coach notes, assignments, private program shares, private progress shares, notification preferences, and APNs device-token registrations through the dedicated backend."
-    static let accountSignInDisclosure = "If you choose Sign in with Apple, SuggestMeSome uses your Apple account identifier and the name or email you share to create your account, link backend sessions, sync workouts and programs across your devices, and fulfill privacy requests. You can stay signed out and keep using the local workout logger."
-    static let collaborationSharingDisclosure = "Coach invites, visibility scopes, and private sharing only disclose the training and coaching records you choose to share with the recipient account. Apple Health-derived recovery data stays on your device in this release."
-    static let collaborationRevocationDisclosure = "Revoking a relationship or private share stops future access from that point forward, but recipients may already have seen, copied, or acted on content that was shared before you revoked it."
-    static let pushNotificationDisclosure = "Push notifications are optional. If you turn them on, SuggestMeSome registers this device's APNs token and your notification preferences with the backend so it can send invite, assignment, coach note, reminder, and digest notifications through Apple Push Notification service. You can turn notifications off later in iOS Settings or in this app."
-    static let privacyRightsDisclosure = "Access, export, delete-data, and delete-account requests apply to backend-held account and synced training records. Local device data and Apple Health records are managed separately. Exports may identify categories of recipients or processors where required by law, and deletion requests may take time to propagate to backups or archival systems where legally permitted."
-    static let privacyAppealDisclosure = "If a privacy request is denied, you can appeal through the in-app privacy request flow or by contacting \(privacyEmail)."
+    static let v1LocalReleaseDisclosure = "This v1 App Store release stores workout, coaching, analytics, Apple Health-derived recovery summaries, and Premium Unlock entitlement state locally on this device. Production cloud accounts, Sign in with Apple, backend sync, coach collaboration, private sharing, and push notifications are not included in this release."
+    static let cloudSyncStorageDisclosure = v1LocalReleaseDisclosure
+    static let collaborationDataDisclosure = "Coach collaboration, private sharing, invite workflows, notification-preference sync, APNs backend registration, and backend account records are not included in this v1 App Store release."
+    static let accountSignInDisclosure = "This v1 App Store release does not create production cloud accounts or use Sign in with Apple. Manual workout logging remains available locally without an account."
+    static let collaborationSharingDisclosure = "Coach invites, visibility scopes, private program sharing, coach notes, assignments, and progress sharing are not available in this v1 App Store release."
+    static let collaborationRevocationDisclosure = "Because production collaboration is not included in v1, there are no coach relationships or private shares to revoke in this release."
+    static let pushNotificationDisclosure = "Push notifications are not included in this v1 App Store release. SuggestMeSome does not register an APNs token with a backend in v1."
+    static let privacyRightsDisclosure = "This v1 App Store release does not operate a production backend account system. Use the in-app local export, backup, and delete controls for device data, manage Apple Health records in Apple Health, and contact \(privacyEmail) for privacy questions."
+    static let privacyAppealDisclosure = "If you contact us about a privacy question and disagree with the response, you can appeal by replying to that email or contacting \(privacyEmail)."
     static let freeWorkoutLoggingDisclosure = "Manual workout logging, history, editing, export, and deletion remain available without Premium Unlock."
     static let premiumUnlockDisclosure = "Premium Unlock is a one-time purchase. It unlocks coaching, analytics, smart generation, Apple Health integration, and Apple Watch features. Manual workout logging remains free."
     static let appleHealthDisclosure = "If you choose to connect Apple Health, SuggestMeSome may read sleep, resting heart rate, heart rate variability, active energy, step count, body mass, and workouts, and may write workout summaries you save in SuggestMeSome. Apple Health access is optional and can be changed anytime."
     static let dailyCoachGuidanceDisclosure = "Recovery and readiness outputs are estimates based on your logged workouts, check-ins, and optional Apple Health data. They are not diagnostic measurements or medical advice."
     static let deleteLocalDataDisclosure = "Delete Local Data removes SuggestMeSome data from this device. It does not delete records stored in Apple Health."
-    static let accountLaunchModeDisclosure = "Account, privacy requests, and cloud sync in this build use the production backend path. Local workout logging still works while signed out, and Apple Health-derived recovery data remains on device."
-    static let dataRetentionDisclosure = "Local workout and coaching data remain on this device until you delete them. Backend-held account, training, and privacy request data are retained only as long as needed to provide the service, comply with law, resolve disputes, or enforce terms."
-    static let securityDisclosure = "SuggestMeSome uses encrypted network transport for backend connections and is intended to protect backend-held account and training records with role-limited access, auditable deletion, secrets management, and a documented incident-response plan."
+    static let accountLaunchModeDisclosure = "Account and cloud sync features are not available in this v1 App Store release. Local workout logging, export, deletion, Premium Unlock, optional Apple Health, Apple Watch, widgets, and Live Activity are the v1 focus."
+    static let dataRetentionDisclosure = "Local workout and coaching data remain on this device until you delete them. SuggestMeSome v1 does not retain production backend account, sync, collaboration, or push-notification records."
+    static let securityDisclosure = "SuggestMeSome v1 keeps app data local by default. Any support emails you send are handled through the support inboxes listed here."
     static let noAdvertisingDisclosure = "SuggestMeSome does not use Apple Health data for advertising and does not include ads or third-party analytics in this public launch baseline."
-    static let cloudFeaturePreviewDisclosure = "Preview Cloud Features shows sample account, collaboration, sharing, and notification surfaces using local read-only data. It does not create an account, send an invite, register for push notifications, or sync anything to the backend."
-    static let supportResponseDisclosure = "For support, privacy, or account questions, email us and include the device, iOS version, and app version when possible."
+    static let cloudFeaturePreviewDisclosure = "Cloud feature previews, where visible in development builds, use local sample data only. They do not create an account, send invites, register for push notifications, or sync anything to the backend."
+    static let supportResponseDisclosure = "For support or privacy questions, email us and include the device, iOS version, and app version when possible."
 
     static let consumerHealthConsentCategories = [
         "Workout history",
         "Readiness check-ins",
         "Recovery metrics",
         "Coaching outputs",
-        "Coach notes and assignments",
-        "Private sharing records",
-        "Account support records"
+        "Apple Health-derived recovery summaries stored in the app",
+        "Premium entitlement state",
+        "Support messages you choose to send"
     ]
-    static let consumerHealthConsentPurpose = "Account sync, collaboration sharing, and privacy-rights fulfillment for workouts, readiness, recovery, and coaching outputs."
+    static let consumerHealthConsentPurpose = "Local workout logging, coaching, recovery, analytics, optional Apple Health features, and support you request."
     static let consumerHealthConsentRequiredDocumentIDs: [String] = [
         "privacyPolicy::\(currentLegalVersion)",
         "termsOfUse::\(currentLegalVersion)",
         "consumerHealthNotice::\(currentLegalVersion)"
     ]
-    static let consumerHealthConsentRequiredCopy = "Cloud sync and collaboration stay paused until you record Consumer Health Data consent for version \(currentLegalVersion) of the Privacy Policy, Terms of Use, and Consumer Health Data Notice."
-    static let consumerHealthConsentMissingMessage = "Record Consumer Health Data consent in Privacy Choices before syncing or sharing training data."
+    static let consumerHealthConsentRequiredCopy = "This v1 release keeps consumer health data local by default and does not enable production cloud sync or collaboration sharing."
+    static let consumerHealthConsentMissingMessage = "Consumer health data stays local in this v1 release; production cloud sync and collaboration are not enabled."
 
     static var releaseGateChecklist: [String] {
         [
             "Publish the configured support, privacy, terms, and consumer health pages at their hosted URLs before App Store submission.",
             "Publish the privacy choices page so App Store Connect can link directly to in-app and hosted data-rights controls.",
-            "Complete the App Store Connect privacy questionnaire and product-page copy using the real production data flows for Premium Unlock, Sign in with Apple, cloud collaboration, private sharing, push registration, and Apple Health.",
+            "Complete the App Store Connect privacy questionnaire and product-page copy using only the v1 data flows: local workout logging, Premium Unlock, optional Apple Health, Apple Watch, widgets, and Live Activity.",
             "Sign the Paid Apps Agreement and finish the premium_unlock in-app purchase metadata and review notes.",
-            "Validate the production backend's Sign in with Apple, consumer-health consent, sync, export, deletion, and token-revocation flows against the shipped app before App Store submission.",
-            "Document the built-in Preview Cloud Features mode in App Review notes so reviewers can inspect premium and collaboration surfaces without a second live account.",
+            "Confirm the v1 App Store build hides production backend, Sign in with Apple, cloud sync, coach collaboration, private sharing, and push-notification surfaces.",
+            "Document in App Review notes that the app is free, Premium Unlock is a one-time IAP, Apple Health is optional, and v1 has no production account or cloud features.",
             "Finalize a custom U.S. Terms/EULA in App Store Connect and review the hosted legal text with counsel before release.",
             "Confirm the hosted legal pages match in-app version \(currentLegalVersion), effective date \(legalEffectiveDateText), contact, consent, appeal, retention, and Apple Health off-backend claims.",
-            "Complete retention, breach-response, and vendor-contract work before any off-device account or consumer health sync goes live."
+            "Keep production backend, account, collaboration, push, and backend privacy workflows out of v1 until they are fully operated and reviewed for a later launch."
         ]
     }
 

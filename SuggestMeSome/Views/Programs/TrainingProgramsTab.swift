@@ -34,7 +34,9 @@ struct TrainingProgramsTab: View {
         NavigationStack {
             VStack(spacing: 0) {
                 programButtonRow
-                coachHubRow
+                if AppBuildEnvironment.enablesProductionCloudFeatures {
+                    coachHubRow
+                }
                 Divider()
                 programRunList
             }
@@ -52,6 +54,7 @@ struct TrainingProgramsTab: View {
             .sheet(
                 item: Binding(
                     get: {
+                        guard AppBuildEnvironment.enablesProductionCloudFeatures else { return nil }
                         guard let route = appRouteCoordinator.activeRoute,
                               route.targetTab == .programs else {
                             return nil
@@ -86,24 +89,26 @@ struct TrainingProgramsTab: View {
                 programButtonLabel("Smart Gen", systemImage: "wand.and.stars")
             }
 
-            NavigationLink {
-                AssignmentInboxView()
-            } label: {
-                programButtonLabel(
-                    "From Coach",
-                    systemImage: "tray.full",
-                    badge: formatBadgeCount(collaborationCoordinator.inboxAssignments.count)
-                )
-            }
+            if AppBuildEnvironment.enablesProductionCloudFeatures {
+                NavigationLink {
+                    AssignmentInboxView()
+                } label: {
+                    programButtonLabel(
+                        "From Coach",
+                        systemImage: "tray.full",
+                        badge: formatBadgeCount(collaborationCoordinator.inboxAssignments.count)
+                    )
+                }
 
-            NavigationLink {
-                BlueprintLibraryView()
-            } label: {
-                programButtonLabel(
-                    "Saved",
-                    systemImage: "square.stack.3d.up.fill",
-                    badge: formatBadgeCount(collaborationCoordinator.blueprints.count)
-                )
+                NavigationLink {
+                    BlueprintLibraryView()
+                } label: {
+                    programButtonLabel(
+                        "Saved",
+                        systemImage: "square.stack.3d.up.fill",
+                        badge: formatBadgeCount(collaborationCoordinator.blueprints.count)
+                    )
+                }
             }
         }
         .padding(.horizontal)
