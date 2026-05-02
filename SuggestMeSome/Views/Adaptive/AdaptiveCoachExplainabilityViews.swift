@@ -296,6 +296,18 @@ struct CoachPresentationSummaryCard: View {
         copy.detailSections.first?.items.prefix(supportLimit).map { $0 } ?? []
     }
 
+    /// True when the action line just restates the headline (case- and
+    /// whitespace-insensitive). When this happens the action would render
+    /// as a near-duplicate row beneath the headline. Suppressing it keeps
+    /// the card's visual rhythm tight without touching the upstream
+    /// CoachPresentationService contract.
+    private var actionRestatesHeadline: Bool {
+        let normalize: (String) -> String = {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        return normalize(copy.action) == normalize(copy.headline)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let eyebrow, !eyebrow.isEmpty {
@@ -316,7 +328,7 @@ struct CoachPresentationSummaryCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if !copy.action.isEmpty {
+            if !copy.action.isEmpty, !actionRestatesHeadline {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "point.forward.to.point.capsulepath")
                         .font(.caption2.weight(.semibold))
