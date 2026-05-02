@@ -26,13 +26,31 @@ enum DSRadius {
 }
 
 enum DSColor {
-    static let primaryAction: Color     = .indigo
+    /// Primary brand accent. Reads from `Accent` asset catalog when v2 is on
+    /// (Whoop-leaning deep violet, with a vibrant dark-mode variant) and
+    /// falls back to `.indigo` so legacy surfaces still render correctly
+    /// when v2 is off.
+    static var primaryAction: Color {
+        FeatureFlag.uiRefreshV2.isEnabled
+            ? Color("Accent", bundle: .main)
+            : .indigo
+    }
+
+    /// Paired hue used in hero gradients and delta indicators. Deeper
+    /// magenta/pink that complements the primary accent.
+    static var accentSecondary: Color {
+        FeatureFlag.uiRefreshV2.isEnabled
+            ? Color("AccentSecondary", bundle: .main)
+            : .pink
+    }
+
     static let surface: Color           = Color(.secondarySystemBackground)
     static let surfaceElevated: Color   = Color(.tertiarySystemBackground)
-    static let signalPositive: Color    = .green
+
+    static var signalPositive: Color    { FeatureFlag.uiRefreshV2.isEnabled ? Color(red: 0.16, green: 0.78, blue: 0.49) : .green }
     static let signalNeutral: Color     = .blue
-    static let signalCaution: Color     = .orange
-    static let signalCritical: Color    = .red
+    static var signalCaution: Color     { FeatureFlag.uiRefreshV2.isEnabled ? Color(red: 1.00, green: 0.62, blue: 0.20) : .orange }
+    static var signalCritical: Color    { FeatureFlag.uiRefreshV2.isEnabled ? Color(red: 0.95, green: 0.30, blue: 0.40) : .red }
 }
 
 // MARK: - Elevation
@@ -103,12 +121,16 @@ enum DSOpacity {
     static let divider: Double  = 0.12
 }
 
-// MARK: - Gradients (stubs — real values land in P3)
+// MARK: - Gradients
 
+/// Whoop-style hero gradients. `heroAccent` is the workhorse — pair it with
+/// `dsHeroGradientFill()` on big numbers (rest timer, current weight, today
+/// readiness) for that confident expressive feel. Reduce-motion users still
+/// see the gradient (it's static); only animated variants honor the flag.
 enum DSGradient {
     static var heroAccent: LinearGradient {
         LinearGradient(
-            colors: [DSColor.primaryAction, DSColor.primaryAction],
+            colors: [DSColor.primaryAction, DSColor.accentSecondary],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -116,18 +138,18 @@ enum DSGradient {
 
     static var surfaceGlow: RadialGradient {
         RadialGradient(
-            colors: [DSColor.primaryAction.opacity(0.08), .clear],
-            center: .center,
+            colors: [DSColor.primaryAction.opacity(0.18), DSColor.accentSecondary.opacity(0.06), .clear],
+            center: UnitPoint(x: 0.15, y: 0.0),
             startRadius: 0,
-            endRadius: 200
+            endRadius: 320
         )
     }
 
     static var prCelebration: LinearGradient {
         LinearGradient(
-            colors: [DSColor.signalPositive, DSColor.primaryAction],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+            colors: [DSColor.signalCaution, DSColor.accentSecondary, DSColor.primaryAction],
+            startPoint: .leading,
+            endPoint: .trailing
         )
     }
 }

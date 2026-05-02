@@ -4369,6 +4369,26 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
   - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests` — 35 tests in 3 suites passed.
   - the full `xcodebuild test` parallel run trips the same `CoreSimulator` app-group store-migration flake the README notes for Feature 21 Prompt 2. Resetting the simulator and rerunning serially with focused suites cleared it.
 
+#### Prompt 3 [Visual language: Whoop-style accent + AccentSecondary, semantic typography ladder, gradient fills] — 2026-05-02
+
+- First *visible* change of Feature 22. Aesthetic direction is the user-chosen "Expressive / Whoop-style" — deeper saturated accent, paired hue for hero gradients, rounded type ladder.
+- Asset catalog work (touches all three asset catalogs in lockstep):
+  - Re-tinted `Assets.xcassets/AccentColor.colorset` from the existing bluer indigo to a deeper violet (light: `#603CE1`, dark: `#8F73FF`). This automatically lifts every `.tint(.accentColor)`, `.foregroundStyle(.tint)`, and `Color.accentColor` reference to the new aesthetic.
+  - Added `Assets.xcassets/AccentSecondary.colorset` (light: `#ED419E`, dark: `#FF87CE`) so hero gradients have a second hue to anchor against.
+  - Updated `SuggestMeSomeWatch/Assets.xcassets/AccentColor.colorset` and `SuggestMeSomeLiveActivity/Assets.xcassets/AccentColor.colorset` to match — Live Activity's previously-blank colorset now actually has light/dark values.
+- `Views/DesignSystem/DSTokens.swift`:
+  - `DSColor.primaryAction` and `.accentSecondary` are now feature-flag-aware computed properties: when `FeatureFlag.uiRefreshV2.isEnabled`, they read from `Color("Accent")` / `Color("AccentSecondary")` in the asset catalog; when off, they fall back to `.indigo` / `.pink` so legacy surfaces keep their previous look.
+  - `DSColor.signalPositive`, `.signalCaution`, and `.signalCritical` similarly switch to deeper saturated values under v2 (e.g. `Color(red: 0.16, green: 0.78, blue: 0.49)` for positive). `signalNeutral` stays on `.blue` because system blue already reads correctly across modes.
+  - `DSGradient` got real implementations: `heroAccent` is now a top-leading → bottom-trailing `Accent → AccentSecondary` linear gradient; `surfaceGlow` is a radial wash anchored to the top-leading edge for hero card backgrounds; `prCelebration` runs caution → secondary → primary across the row for PR moments.
+- `Views/DesignSystem/DSTypography.swift`:
+  - Added the semantic role ladder: `.dsHero()` (44pt rounded bold), `.dsDisplay()` (34pt rounded semibold), `.dsTitle()` (22pt rounded semibold), `.dsHeadline()` (17pt rounded semibold), `.dsBody()` (15pt rounded regular), and `.dsCaption()` (13pt rounded regular, secondary tint). All use `.rounded` design.
+  - Added sized metric variants `dsMetricLarge/Medium/Small` (preserving the existing `.contentTransition(.numericText())`).
+  - Added `.dsHeroGradientFill()` modifier — applies `DSGradient.heroAccent` via `.foregroundStyle(...)` when v2 is on, falls back to a flat primary tint when off so legacy callsites can't accidentally bloom violet during a controlled rollout.
+- Mass migration of `.font(.headline)` / `.caption` / etc. across view files is intentionally deferred to P5/P6. The new role modifiers are additive — switching surface-by-surface during the surface uplift gives a controlled visual transition and avoids touching ~100 files in a single commit.
+- Verification:
+  - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` (App, Tests, Watch, LiveActivity all green).
+  - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests`.
+
 ---
 
 ## Project Setup
