@@ -93,7 +93,7 @@ struct ContentView: View {
                     .tag(MainTab.settings.rawValue)
             }
         }
-        .tint(.indigo)
+        .tint(DSColor.primaryAction)
         .preferredColorScheme(preferredColorScheme)
         .sheet(isPresented: $showingActiveWorkout) {
             NavigationStack {
@@ -174,7 +174,7 @@ struct ActiveWorkoutBanner: View {
             .padding(.horizontal)
             .padding(.vertical, 10)
             .foregroundStyle(.white)
-            .background(Color.indigo)
+            .background(DSColor.primaryAction)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)

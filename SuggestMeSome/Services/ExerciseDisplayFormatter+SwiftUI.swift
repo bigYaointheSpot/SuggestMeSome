@@ -19,7 +19,7 @@ extension ExerciseDisplayFormatter {
     static func workingSetStyleColor(for exercise: ProgramSessionExercise) -> Color {
         if exercise.targetSets == nil { return .green }
         switch exercise.workingSetStyle {
-        case .topSet: return .indigo
+        case .topSet: return DSColor.primaryAction
         case .backoff: return .blue
         case .straight, .none: return .secondary
         }
