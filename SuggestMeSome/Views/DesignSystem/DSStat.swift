@@ -58,9 +58,8 @@ struct DSStat: View {
 
             HStack(alignment: .firstTextBaseline, spacing: DSSpacing.xs) {
                 Text(value)
-                    .modifier(DSMetricFont(.large))
+                    .dsMetricLarge()
                     .lineLimit(1)
-                    .minimumScaleFactor(0.6)
                 if let unit {
                     Text(unit)
                         .font(.subheadline.weight(.medium))
@@ -87,21 +86,3 @@ struct DSStat: View {
     }
 }
 
-// MARK: - Metric font modifier shim
-
-/// Internal adapter so DSStat can reference the existing DSMetricFont
-/// modifier without coupling to its sized variant API (pre-P3 only the
-/// `.large` modifier ships; `.medium`/`.small` land in P3).
-private struct DSMetricFont: ViewModifier {
-    enum Size { case large, medium, small }
-    let size: Size
-    init(_ size: Size) { self.size = size }
-
-    func body(content: Content) -> some View {
-        switch size {
-        case .large:  content.dsMetricLarge()
-        case .medium: content.font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
-        case .small:  content.font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
-        }
-    }
-}
