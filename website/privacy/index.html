@@ -18,17 +18,17 @@
 
     <section class="hero">
       <h1>Privacy Policy</h1>
-      <p>How SuggestMeSome handles workout data, cloud accounts, coach collaboration, Premium Unlock, Apple Health access, and privacy-rights workflows in the United States.</p>
+      <p>How SuggestMeSome v1 handles local workout data, Premium Unlock, optional Apple Health access, and privacy choices in the United States.</p>
     </section>
 
     <section class="card">
       <h2>Version</h2>
-      <p><strong>Version 2.2. Effective 2026-04-30.</strong></p>
+      <p><strong>Version 2.3. Effective 2026-05-02.</strong></p>
       <p>Support: <a href="mailto:support@suggestmesome.app">support@suggestmesome.app</a>. Privacy: <a href="mailto:privacy@suggestmesome.app">privacy@suggestmesome.app</a>.</p>
-      <p>Apple Health-derived recovery data stays on device in this release and is not sent to CloudKit or the sync backend.</p>
+      <p>Apple Health-derived recovery data stays on device in this release and is not sent to CloudKit or a sync backend.</p>
       <p>SuggestMeSome does not use Apple Health data for advertising and does not include ads or third-party analytics in this public launch baseline.</p>
       <p>Premium Unlock is a one-time in-app purchase. Manual workout logging remains free.</p>
-      <p>If a privacy request is denied, you can appeal through the in-app privacy request flow or by contacting privacy@suggestmesome.app. Withdraw Consumer Health Data consent from Privacy Choices to pause future backend sync and collaboration sharing.</p>
+      <p>Production cloud accounts, Sign in with Apple, backend sync, coach collaboration, private sharing, and push notifications are not included in this v1 App Store release.</p>
     </section>
 
     <section class="card">
@@ -49,11 +49,9 @@
         <li>Exercise library data and personal records</li>
         <li>Readiness check-ins, coaching outputs, trend summaries, and recovery estimates</li>
         <li>Optional Apple Health data you authorize, including sleep, resting heart rate, heart rate variability, active energy, step count, body mass, and workouts</li>
-        <li>Sign in with Apple identifiers plus the name and email you choose to share</li>
-        <li>Backend account session state, sync cursors, and privacy request records</li>
-        <li>Programs, daily coaching records, adaptive history, relationship records, visibility settings, coach notes, assignments, private program shares, and private progress shares</li>
-        <li>Invitee email addresses, notification preferences, and APNs device-token registrations used for coach collaboration and push delivery</li>
         <li>Device-side Premium Unlock entitlement state</li>
+        <li>Local backup or export files you choose to create</li>
+        <li>Support or privacy emails you choose to send</li>
       </ul>
     </section>
 
@@ -65,15 +63,14 @@
         <li>Calculate trend, readiness, recovery, and progress summaries</li>
         <li>Support optional Apple Health read and write flows that you request</li>
         <li>Validate Premium Unlock on your device and restore eligible purchases through Apple</li>
-        <li>Support account sync, collaboration, private sharing, deletion, export, and privacy-rights workflows</li>
-        <li>Register optional push notifications and store notification preferences</li>
+        <li>Respond to support or privacy messages you send</li>
       </ul>
     </section>
 
     <section class="card">
-      <h2>Local storage and cloud sync</h2>
-      <p>SuggestMeSome stores workout, coaching, Apple Health-derived recovery summaries, and purchase state on device. If you connect an account and record Consumer Health Data consent, workouts, programs, daily coaching records, adaptive history, privacy requests, relationship records, private sharing records, and key training preferences may also sync through the dedicated backend.</p>
-      <p>Apple Health-derived recovery data stays on device in this release and is not sent to CloudKit or the sync backend.</p>
+      <h2>Local storage</h2>
+      <p>This v1 App Store release stores workout, coaching, analytics, Apple Health-derived recovery summaries, and Premium Unlock entitlement state locally on this device.</p>
+      <p>Production cloud accounts, Sign in with Apple, backend sync, coach collaboration, private sharing, and push notifications are not included in this release.</p>
     </section>
 
     <section class="card">
@@ -81,18 +78,16 @@
       <p>SuggestMeSome does not use Apple Health data for advertising and does not include ads or third-party analytics in this public launch baseline.</p>
       <ul>
         <li>Apple handles in-app purchases and purchase restoration.</li>
-        <li>Sign in with Apple is used only when you choose to connect an account.</li>
         <li>Apple Health is accessed only when you grant permission.</li>
-        <li>Apple Push Notification service is used only when you enable notifications.</li>
-        <li>Coach collaboration and private sharing disclose only the training and coaching records you choose to share with invited recipients.</li>
+        <li>Support or privacy emails are sent only when you choose to contact us.</li>
       </ul>
     </section>
 
     <section class="card">
       <h2>Retention, deletion, and controls</h2>
-      <p>Local workout and coaching data remain on your device until you delete them. Backend-held account, training, and privacy request data are retained only as long as needed to provide the service, comply with law, resolve disputes, or enforce terms.</p>
-      <p>Use the app or the <a href="/privacy-choices">privacy choices page</a> to learn about access, export, delete-data, and delete-account options. Deleting local app data does not delete records stored in Apple Health.</p>
-      <p>Backend-held records are intended to use encrypted network transport, role-limited access, auditable deletion, secrets management, and a documented incident-response plan.</p>
+      <p>Local workout and coaching data remain on your device until you delete them. SuggestMeSome v1 does not retain production backend account, sync, collaboration, or push-notification records.</p>
+      <p>Use the app or the <a href="/privacy-choices">privacy choices page</a> to learn about local export, local backup, and local deletion options. Deleting local app data does not delete records stored in Apple Health.</p>
+      <p>For support or privacy questions, email <a href="mailto:privacy@suggestmesome.app">privacy@suggestmesome.app</a>.</p>
     </section>
   </main>
 </body>

@@ -65,7 +65,8 @@ struct SupportInfoView: View {
 
             Section("Help Topics") {
                 Text("Premium Unlock purchases and restores are handled through Apple. Use Restore Purchases in the app if your prior unlock does not appear on this device.")
-                Text("Sign in with Apple is optional. You can stay signed out and keep using the free local workout logger.")
+                Text("Redeem Offer Code opens Apple's offer-code redemption flow for Premium Unlock codes.")
+                Text("Production cloud accounts, Sign in with Apple, coach collaboration, private sharing, and push notifications are not included in this v1 App Store release.")
                 Text("Apple Health is optional and user-controlled. Deleting local app data does not delete records already stored in Apple Health.")
                 Text(ComplianceConfiguration.supportResponseDisclosure)
             }
@@ -108,7 +109,7 @@ struct AboutThisGuidanceView: View {
                     text: ComplianceConfiguration.appleHealthDisclosure
                 )
                 guidanceCallout(
-                    title: "Cloud storage limits",
+                    title: "Local storage",
                     text: ComplianceConfiguration.cloudSyncStorageDisclosure
                 )
             }
@@ -275,7 +276,7 @@ struct LocalDataInfoView: View {
                 Text(ComplianceConfiguration.deleteLocalDataDisclosure)
             }
 
-            Section("Apple Health and Cloud Storage") {
+            Section("Apple Health and Local Storage") {
                 Text(ComplianceConfiguration.cloudSyncStorageDisclosure)
             }
 
@@ -762,7 +763,7 @@ struct ComplianceOnboardingFlow: View {
                 Label("Manual workout logging stays free", systemImage: "checkmark.circle.fill")
                 Label("Premium Unlock is a one-time purchase", systemImage: "star.circle.fill")
                 Label("Apple Health and Apple Watch support are optional premium features", systemImage: "heart.text.square.fill")
-                Label("Optional cloud account sync and private coach collaboration", systemImage: "person.2.fill")
+                Label("Local-first v1 with no production cloud account", systemImage: "iphone")
             }
             .foregroundStyle(.secondary)
 

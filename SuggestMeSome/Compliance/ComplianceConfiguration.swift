@@ -142,13 +142,13 @@ enum ComplianceConfiguration {
             kind: .privacyPolicy,
             version: currentLegalVersion,
             title: "Privacy Policy",
-            summary: "How SuggestMeSome handles workout data, cloud accounts, coach collaboration, Premium Unlock, Apple Health access, and privacy-rights workflows in the United States.",
+            summary: "How SuggestMeSome v1 handles local workout data, Premium Unlock, optional Apple Health access, and privacy choices in the United States.",
             bodyMarkdown: """
             **Version \(currentLegalVersion). Effective \(legalEffectiveDateText).**
 
             ## Overview
 
-            \(appName) is published by **\(sellerName)**. This app is a fitness and wellness product. It helps you log workouts, review progress, unlock premium coaching, and optionally connect Apple Health. It is not designed for diagnosis, treatment, or emergency use.
+            \(appName) is published by **\(sellerName)**. This v1 App Store release is a local-first fitness and wellness product. It helps you log workouts, review progress, unlock premium coaching features with a one-time Apple in-app purchase, and optionally connect Apple Health. It is not designed for diagnosis, treatment, or emergency use.
 
             Contact:
 
@@ -166,11 +166,9 @@ enum ComplianceConfiguration {
             - exercise library data and personal records
             - readiness check-ins, coaching outputs, trend summaries, and recovery estimates
             - optional Apple Health data that you authorize, including sleep, resting heart rate, heart rate variability, active energy, step count, body mass, and workouts
-            - Sign in with Apple identifiers plus the name and email you choose to share when you connect an account
-            - backend account session state, sync cursors, and privacy request records tied to your connected account
-            - synced programs, daily coaching records, adaptive history, relationship records, visibility scope settings, coach notes, assignments, private program shares, and private progress shares
-            - invitee email addresses, notification preferences, and APNs device-token registrations used for coach collaboration and push delivery
             - device-side premium purchase entitlement state for Premium Unlock
+            - local backup or export files you choose to create
+            - support or privacy emails you choose to send to us
 
             ## How data is used
 
@@ -181,18 +179,11 @@ enum ComplianceConfiguration {
             - calculate trend, readiness, recovery, and progress summaries
             - support optional Apple Health read and write flows that you request
             - validate Premium Unlock on your device and restore eligible purchases through Apple
-            - support account sync, collaboration, private sharing, deletion, export, and privacy-rights workflows
-            - register optional push notifications and store your notification preferences
-            - show collaboration updates such as coach invites, assignments, notes, and digests to the people you choose to connect with
+            - respond to support or privacy messages you send
 
-            ## Local storage and cloud sync
-
-            The current build stores workout, coaching, Apple Health-derived recovery summaries, and purchase state on device. If you connect an account and record Consumer Health Data consent, workouts, programs, daily coaching records, adaptive history, privacy requests, relationship records, private sharing records, and key training preferences may also sync through the dedicated backend.
+            ## Local storage
 
             \(cloudSyncStorageDisclosure)
-            \(collaborationDataDisclosure)
-
-            The production account service should continue using a dedicated backend and documented privacy-rights workflow. Any backend-held consumer health data should follow the retention, deletion, and security commitments described in this policy and the Consumer Health Data Notice.
 
             ## Sharing and disclosures
 
@@ -201,10 +192,7 @@ enum ComplianceConfiguration {
             \(appName) may share data only as needed to:
 
             - process Apple in-app purchases and purchase restoration through Apple
-            - create and restore cloud accounts through Sign in with Apple when you choose that option
             - read from or write to Apple Health when you grant permission
-            - deliver optional push notifications through Apple Push Notification service
-            - disclose the specific programs, progress, coach notes, assignments, and visibility-scoped records you choose to share with coaches or training partners you invite or accept
             - comply with law, respond to valid legal requests, or protect rights and safety
             - support future vendors only after this policy and in-app notices are updated before those vendors receive your data
 
@@ -215,7 +203,7 @@ enum ComplianceConfiguration {
             \(dataRetentionDisclosure)
             \(privacyRightsDisclosure)
 
-            You can export local workout data, delete local workout data, revoke Apple Health permissions, revoke collaboration access, and use in-app account deletion and privacy request tools. Deleting local app data does not delete records stored in Apple Health.
+            You can export local workout data, create a local backup, delete local workout data, and revoke Apple Health permissions. Deleting local app data does not delete records stored in Apple Health.
 
             ## Security
 
@@ -228,11 +216,10 @@ enum ComplianceConfiguration {
             - use the free workout logger without purchasing Premium Unlock
             - choose whether to connect Apple Health
             - export local workout data from the app
+            - create a local backup file for device-to-device migration
             - delete local workout data from the app
             - restore prior Premium Unlock purchases through Apple
-            - manage notification preferences and revoke push permissions in iOS Settings
-            - revoke coach relationships or private shares from the collaboration surfaces
-            - submit access, export, deletion, and account-deletion requests from the in-app account screens
+            - email \(privacyEmail) with privacy questions
 
             ## Consumer health data
 
@@ -246,7 +233,7 @@ enum ComplianceConfiguration {
             kind: .termsOfUse,
             version: currentLegalVersion,
             title: "Terms of Use",
-            summary: "Use terms for SuggestMeSome, including wellness limitations, Premium Unlock terms, account sync, coach collaboration, and deletion expectations.",
+            summary: "Use terms for SuggestMeSome v1, including wellness limitations, Premium Unlock terms, Apple Health, and local data expectations.",
             bodyMarkdown: """
             **Version \(currentLegalVersion). Effective \(legalEffectiveDateText).**
 
@@ -256,7 +243,7 @@ enum ComplianceConfiguration {
 
             ## Product scope
 
-            \(appName) provides workout logging, analytics, smart workout and program suggestions, optional Apple Health integration, and wellness-oriented coaching support.
+            \(appName) v1 provides workout logging, analytics, smart workout and program suggestions, optional Apple Health integration, Apple Watch support, widgets, Live Activity support, and wellness-oriented coaching support. Production cloud accounts, Sign in with Apple, backend sync, coach collaboration, private sharing, and push notifications are not included in this v1 App Store release.
 
             ## No medical use
 
@@ -274,17 +261,11 @@ enum ComplianceConfiguration {
 
             ## Accounts and privacy requests
 
-            \(appName) provides optional account-backed cloud sync through the production backend and includes in-app account deletion and privacy-rights request tools for that service.
-
-            Cloud sync and collaboration features that transmit training or coaching records require Consumer Health Data consent. You can withdraw that consent in Privacy Choices; withdrawing it pauses future backend sync and collaboration writes until consent is recorded again.
+            \(appName) v1 does not create a production cloud account and does not include Sign in with Apple. Use the local export, local backup, and local delete controls for data stored on this device. Contact \(privacyEmail) for privacy questions.
 
             ## Collaboration and sharing
 
-            Coach collaboration and private sharing are optional account features. If you use them, you may share programs, progress, assignments, notes, invitee email addresses, and visibility settings with the specific people you choose to connect with.
-
-            You represent that you have the right to share any content, email address, or training information you submit through collaboration features, and that you are using those tools only with intended recipients.
-
-            You may not use collaboration features to harass, impersonate, spam, scrape, or disclose information you do not have the right to share. \(sellerName) may revoke collaboration access or suspend connected accounts that misuse these tools.
+            Coach collaboration, private sharing, invites, coach notes, assignments, visibility scopes, and push notifications are not available in this v1 App Store release. If those features return in a later release, the app and legal documents should be updated before they are enabled.
 
             ## Apple Health
 
@@ -292,7 +273,7 @@ enum ComplianceConfiguration {
 
             ## Revocation and deletion
 
-            You may revoke coach relationships, private shares, or push permissions at any time. Revocation stops future access from that point forward, but recipients may already have seen content shared before you revoked it. Deleting the connected account removes backend-held account and synced training data subject to legal retention limits, but does not automatically delete local data or Apple Health records.
+            You may delete local app data from the app. Local deletion does not automatically delete Apple Health records, local files you exported, or messages you sent to support. Since v1 has no production account or collaboration service, there is no backend account, coach relationship, private share, or APNs backend registration to revoke.
 
             ## Disclaimer of warranties
 
@@ -304,7 +285,7 @@ enum ComplianceConfiguration {
 
             ## Termination
 
-            You may stop using the app at any time. You may also delete local data from the app and, if you connected an account, delete your account in the app. Access may be suspended or terminated if you misuse the product or violate these terms.
+            You may stop using the app at any time. You may also delete local data from the app. Access may be suspended or terminated if you misuse the product or violate these terms.
 
             ## Governing law
 
@@ -324,7 +305,7 @@ enum ComplianceConfiguration {
             kind: .consumerHealthNotice,
             version: currentLegalVersion,
             title: "Consumer Health Data Notice",
-            summary: "Notice covering workout, readiness, recovery, coaching, account sync, collaboration, and Apple Health-derived information that may reveal health status.",
+            summary: "Notice covering local workout, readiness, recovery, coaching, Premium Unlock, support, and optional Apple Health-derived information that may reveal health status.",
             bodyMarkdown: """
             **Version \(currentLegalVersion). Effective \(legalEffectiveDateText).**
 
@@ -339,9 +320,9 @@ enum ComplianceConfiguration {
             - workout history and exercise performance
             - readiness check-ins, daily coach records, and training-recovery summaries
             - coaching, fatigue, adaptation, and progress outputs that may reveal health-related inferences
-            - coach notes, assignments, private program shares, private progress shares, and visibility settings that describe your training status or readiness
             - optional Apple Health data that you authorize
-            - account identifiers, invitee email addresses, notification preferences, and support records tied to privacy requests involving consumer health data
+            - local backup or export files you choose to create
+            - support records you choose to send that involve consumer health data
 
             ## Sources
 
@@ -350,13 +331,13 @@ enum ComplianceConfiguration {
             - data you manually enter in \(appName)
             - workouts and training history you log in \(appName)
             - optional Apple Health data you authorize the app to read
-            - collaboration invites, notes, assignments, private shares, and account/privacy-rights workflows you initiate
+            - support or privacy messages you choose to send
 
             ## Purposes
 
-            \(appName) uses this information to provide the workout logging, coaching, recovery, analytics, collaboration, private sharing, privacy-rights, support, and optional push-notification features you request.
+            \(appName) uses this information to provide the workout logging, coaching, recovery, analytics, optional Apple Health, Apple Watch, widgets, Live Activity, Premium Unlock, and support features you request.
 
-            Account-backed sync and collaboration writes require explicit Consumer Health Data consent for the current legal document version. You may withdraw that consent from Privacy Choices, which pauses future backend sync and collaboration sharing.
+            \(consumerHealthConsentRequiredCopy)
 
             ## Sharing
 
@@ -365,11 +346,9 @@ enum ComplianceConfiguration {
             \(cloudSyncStorageDisclosure)
             \(collaborationDataDisclosure)
 
-            If you invite or connect with a coach or training partner, the specific training and coaching records covered by your visibility settings or share action may be disclosed to that recipient.
+            Apple Health-derived recovery data stays on device in this release and is not sent to a sync backend.
 
-            Apple Health-derived recovery data stays on device in this release and is not sent to the sync backend.
-
-            Consumer health data may otherwise be disclosed only when necessary to deliver Apple-hosted push notifications, comply with law, respond to valid legal process, protect rights and safety, or support vendors that are disclosed to you in advance through an updated policy and notice.
+            Consumer health data may otherwise be disclosed only when necessary to process Apple-hosted purchases, comply with law, respond to valid legal process, protect rights and safety, or support vendors that are disclosed to you in advance through an updated policy and notice.
 
             ## Your rights
 
@@ -383,7 +362,7 @@ enum ComplianceConfiguration {
 
             ## How to exercise rights
 
-            Use the in-app account and privacy request screens, or contact:
+            Use the in-app local export, backup, and delete controls, or contact:
 
             - Privacy: \(privacyEmail)
             - Support: \(supportEmail)
@@ -396,7 +375,7 @@ enum ComplianceConfiguration {
 
             Deleting local app data does not delete records stored in Apple Health. Apple Health permissions can be changed at any time through Apple Health or iOS Settings.
 
-            Revoking collaboration access stops future sharing, but recipients may already have seen previously shared content. Deletion requests may require reasonable time to propagate to backups or archives where permitted by law.
+            Production cloud sync, coach collaboration, private sharing, and push notifications are not included in this v1 App Store release.
             """,
             hostedURL: consumerHealthNoticeURL,
             requiresOnboardingAcceptance: true,
@@ -444,7 +423,7 @@ enum ComplianceConfiguration {
             kind: .support,
             version: currentLegalVersion,
             title: "Support",
-            summary: "Support contacts, privacy choices, and help topics for SuggestMeSome accounts, Premium Unlock, Apple Health, and cloud sync.",
+            summary: "Support contacts, privacy choices, and help topics for SuggestMeSome v1, Premium Unlock, Apple Health, and local data controls.",
             bodyMarkdown: """
             **Version \(currentLegalVersion). Effective \(legalEffectiveDateText).**
 
@@ -460,10 +439,11 @@ enum ComplianceConfiguration {
             ## Getting help
 
             - Premium Unlock: Premium Unlock is a one-time in-app purchase. Purchases and restores are handled through Apple. Use Restore Purchases in the app if your prior unlock is missing on a device.
-            - Account & Cloud: Sign in with Apple is optional. If you stay signed out, manual workout logging still works locally on this device. Cloud sync and collaboration stay paused until current-version Consumer Health Data consent is recorded.
-            - Consumer Health Consent: Withdraw Consumer Health Data consent from Privacy Choices to pause future backend sync and collaboration sharing.
-            - Apple Health: Apple Health access is optional and user-controlled. Apple Health-derived recovery data stays on device in this release and is not sent to CloudKit or the sync backend. Deleting local app data does not delete Apple Health records.
-            - Privacy Rights: Use the in-app account and privacy request screens, or the privacy choices page, for access, export, delete-data, and delete-account requests. If a privacy request is denied, you can appeal through the in-app privacy request flow or by contacting \(privacyEmail).
+            - Redeem Offer Code: Use the in-app Redeem Offer Code button or the App Store redemption flow for Apple offer codes tied to Premium Unlock.
+            - Local Data: Manual workout logging, workout history, local backup, CSV export, and local deletion work without an account.
+            - Account & Cloud: Production cloud accounts, Sign in with Apple, backend sync, coach collaboration, private sharing, and push notifications are not included in this v1 App Store release.
+            - Apple Health: Apple Health access is optional and user-controlled. Apple Health-derived recovery data stays on device in this release and is not sent to CloudKit or a sync backend. Deleting local app data does not delete Apple Health records.
+            - Privacy Questions: Use in-app local export, backup, and delete controls for device data. Contact \(privacyEmail) for privacy questions.
 
             ## Privacy and security commitments
 

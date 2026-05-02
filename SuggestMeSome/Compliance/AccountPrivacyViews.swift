@@ -397,49 +397,113 @@ struct PrivacyChoicesView: View {
 
     var body: some View {
         List {
-            Section("Account and Sync") {
-                AccountSignInNoticeView()
-                Text(ComplianceConfiguration.cloudSyncStorageDisclosure)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text(ComplianceConfiguration.collaborationDataDisclosure)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Consumer Health Sync and Sharing") {
-                ConsumerHealthConsentControlsView()
-
-                Label("Apple Health-derived recovery data stays on this device", systemImage: "iphone")
-                    .foregroundStyle(.secondary)
-
-                Text(ComplianceConfiguration.consumerHealthDataDisclosure)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text(ComplianceConfiguration.collaborationSharingDisclosure)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text(ComplianceConfiguration.doctorCheckDisclosure)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                ForEach(ComplianceConfiguration.consumerHealthConsentCategories, id: \.self) { category in
-                    Text(category)
-                }
-            } header: {
-                Text("Categories Covered")
-            } footer: {
-                Text("These categories describe sensitive training and wellness context. Synced cloud data covers account, collaboration, notification-preference, and training records, while Apple Health-derived recovery inputs do not leave the device in this release.")
-            }
-
-            Section("Revocation, Deletion, and Appeals") {
-                PrivacyRevocationExplainerView()
+            if AppBuildEnvironment.enablesProductionCloudFeatures {
+                cloudPrivacyChoices
+            } else {
+                localV1PrivacyChoices
             }
         }
         .navigationTitle("Privacy Choices")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private var cloudPrivacyChoices: some View {
+        Section("Account and Sync") {
+            AccountSignInNoticeView()
+            Text(ComplianceConfiguration.cloudSyncStorageDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text(ComplianceConfiguration.collaborationDataDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+
+        Section("Consumer Health Sync and Sharing") {
+            ConsumerHealthConsentControlsView()
+
+            Label("Apple Health-derived recovery data stays on this device", systemImage: "iphone")
+                .foregroundStyle(.secondary)
+
+            Text(ComplianceConfiguration.consumerHealthDataDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text(ComplianceConfiguration.collaborationSharingDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text(ComplianceConfiguration.doctorCheckDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+
+        consumerHealthCategoriesSection(
+            footer: "These categories describe sensitive training and wellness context. Synced cloud data covers account, collaboration, notification-preference, and training records, while Apple Health-derived recovery inputs do not leave the device in this release."
+        )
+
+        Section("Revocation, Deletion, and Appeals") {
+            PrivacyRevocationExplainerView()
+        }
+    }
+
+    @ViewBuilder
+    private var localV1PrivacyChoices: some View {
+        Section("Local-First v1") {
+            Text(ComplianceConfiguration.v1LocalReleaseDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text(ComplianceConfiguration.privacyRightsDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+
+        Section("Apple Health") {
+            Label("Apple Health access is optional", systemImage: "heart.text.square.fill")
+                .foregroundStyle(.red)
+            Text(ComplianceConfiguration.appleHealthDisclosure)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text("Apple Health permissions can be changed anytime in Apple Health or iOS Settings. Deleting local app data does not delete Apple Health records.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+
+        consumerHealthCategoriesSection(
+            footer: "These categories describe sensitive training and wellness context stored locally in this v1 App Store release."
+        )
+
+        Section {
+            NavigationLink {
+                DataExportView()
+            } label: {
+                Label("Backup & Export Data", systemImage: "externaldrive.badge.icloud")
+            }
+
+            NavigationLink {
+                LocalDataInfoView()
+            } label: {
+                Label("Delete Local Data", systemImage: "trash")
+            }
+
+            Link(destination: URL(string: "mailto:\(ComplianceConfiguration.privacyEmail)")!) {
+                Label("Email Privacy", systemImage: "envelope")
+            }
+        } header: {
+            Text("Local Controls")
+        } footer: {
+            Text(ComplianceConfiguration.privacyAppealDisclosure)
+        }
+    }
+
+    private func consumerHealthCategoriesSection(footer: String) -> some View {
+        Section {
+            ForEach(ComplianceConfiguration.consumerHealthConsentCategories, id: \.self) { category in
+                Text(category)
+            }
+        } header: {
+            Text("Categories Covered")
+        } footer: {
+            Text(footer)
+        }
     }
 }
 
@@ -452,7 +516,13 @@ struct ConsumerHealthConsentControlsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if accountManager.currentUser == nil {
+            if !AppBuildEnvironment.enablesProductionCloudFeatures {
+                Label("Local-first v1", systemImage: "iphone")
+                    .foregroundStyle(.secondary)
+                Text(ComplianceConfiguration.consumerHealthConsentRequiredCopy)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if accountManager.currentUser == nil {
                 Label("Sign in required for cloud consent", systemImage: "person.crop.circle.badge.exclamationmark")
                     .foregroundStyle(.secondary)
                 Text(ComplianceConfiguration.consumerHealthConsentRequiredCopy)
