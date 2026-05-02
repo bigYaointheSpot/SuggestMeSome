@@ -118,7 +118,7 @@ struct TrainingProgramsTab: View {
             HStack(spacing: 10) {
                 Image(systemName: "person.2.wave.2.fill")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.indigo)
+                    .foregroundStyle(DSColor.primaryAction)
                 Text("Coach Hub")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
@@ -161,7 +161,7 @@ struct TrainingProgramsTab: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(Color.indigo.gradient)
+            .background(DSColor.primaryAction.gradient)
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: 12))
 
@@ -257,7 +257,7 @@ struct ProgramRunRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(run.program?.name ?? "Unknown Program")
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
                 Text(run.isCompleted ? "Completed" : "Active")
                     .font(.caption.weight(.semibold))

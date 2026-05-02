@@ -21,7 +21,7 @@ struct InsightSnapshotDetailView: View {
         List {
             Section("Overview") {
                 Text(snapshot.headline)
-                    .font(.headline)
+                    .dsHeadline()
                 Text(snapshot.summaryText)
                     .foregroundStyle(.secondary)
                 if let detailText = snapshot.detailText, !detailText.isEmpty {
@@ -194,7 +194,7 @@ struct CollaborationInsightSummaryCard: View {
     var body: some View {
         if let snapshot = collaborationCoordinator.athleteFacingSnapshots.first {
             VStack(alignment: .leading, spacing: DSSpacing.s) {
-                DSSectionHeader(icon: "sparkles", title: "Smart Coaching", iconColor: .indigo)
+                DSSectionHeader(icon: "sparkles", title: "Smart Coaching", iconColor: DSColor.primaryAction)
                 Text(snapshot.headline)
                     .font(.title3.weight(.semibold))
                 Text(snapshot.summaryText)
@@ -233,8 +233,8 @@ struct DailyCoachCloudUpdatesCard: View {
         if hasContent {
             VStack(alignment: .leading, spacing: 10) {
                 Label("From Your Coach", systemImage: "bell.badge.fill")
-                    .font(.headline)
-                    .foregroundStyle(.indigo)
+                    .dsHeadline()
+                    .foregroundStyle(DSColor.primaryAction)
 
                 if let nudge = pushNotificationManager.lastNudgeExplanation {
                     VStack(alignment: .leading, spacing: 4) {
@@ -328,7 +328,7 @@ struct InviteRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(invite.inviterDisplayName)
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
                 DSBadge(invite.status.title)
             }

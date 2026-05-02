@@ -303,7 +303,7 @@ private struct MesocycleHighlightsSection: View {
             Image(systemName: "arrow.up.circle.fill")
                 .foregroundStyle(.green)
             Text("What Improved")
-                .font(.headline)
+                .dsHeadline()
             Spacer()
         }
         .padding(.horizontal, 16)
@@ -386,7 +386,7 @@ private struct MesocycleFrictionSection: View {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(.orange)
             Text("What Held You Back")
-                .font(.headline)
+                .dsHeadline()
             Spacer()
         }
         .padding(.horizontal, 16)
@@ -410,7 +410,7 @@ private struct MesocyclePhaseRecapSection: View {
                     Image(systemName: "calendar.badge.checkmark")
                         .foregroundStyle(.blue)
                     Text("Phase Breakdown")
-                        .font(.headline)
+                        .dsHeadline()
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.bold))
@@ -482,7 +482,7 @@ private struct MesocycleNarrativeSection: View {
                 Image(systemName: "text.quote")
                     .foregroundStyle(.teal)
                 Text("Coach Summary")
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
             }
             .padding(.horizontal, 16)
@@ -517,7 +517,7 @@ private struct MesocycleNextBlockSection: View {
                 Image(systemName: "arrow.forward.circle.fill")
                     .foregroundStyle(.teal)
                 Text("What's Next")
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
                 if recommendations.count > 1 {
                     Text("\(recommendations.count) options")
@@ -580,7 +580,7 @@ private struct MesocycleReviewCTABar: View {
             HStack(spacing: 12) {
                 Button(action: onClose) {
                     Text("Close")
-                        .font(.headline)
+                        .dsHeadline()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(Color(.secondarySystemBackground))
@@ -590,7 +590,7 @@ private struct MesocycleReviewCTABar: View {
                 }
                 Button(action: onViewNextBlock) {
                     Text("View Next Block")
-                        .font(.headline)
+                        .dsHeadline()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(Color.teal)

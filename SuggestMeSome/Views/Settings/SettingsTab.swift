@@ -313,7 +313,7 @@ struct SettingsTab: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Label("What's included", systemImage: "sparkles")
-                        .font(.headline)
+                        .dsHeadline()
                     VStack(alignment: .leading, spacing: 10) {
                         infoBullet(ComplianceConfiguration.accountSignInDisclosure)
                         infoBullet("Invite coaches by email, share programs or progress privately, and update visibility scopes whenever you need to.")
@@ -322,7 +322,7 @@ struct SettingsTab: View {
                     }
 
                     Label("Your privacy", systemImage: "lock.shield")
-                        .font(.headline)
+                        .dsHeadline()
                         .padding(.top, 8)
                     VStack(alignment: .leading, spacing: 10) {
                         infoBullet(ComplianceConfiguration.collaborationSharingDisclosure)
@@ -346,7 +346,7 @@ struct SettingsTab: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "circle.fill")
                 .font(.system(size: 5))
-                .foregroundStyle(.indigo)
+                .foregroundStyle(DSColor.primaryAction)
                 .padding(.top, 7)
             Text(text)
                 .font(.subheadline)
@@ -363,7 +363,7 @@ struct SettingsTab: View {
                     purchaseManager.isPremiumUnlocked ? "Manage Premium" : "Unlock Premium",
                     systemImage: purchaseManager.isPremiumUnlocked ? "checkmark.seal.fill" : "star.circle.fill"
                 )
-                .foregroundStyle(purchaseManager.isPremiumUnlocked ? .green : .indigo)
+                .foregroundStyle(purchaseManager.isPremiumUnlocked ? .green : DSColor.primaryAction)
             }
 
             Button {

@@ -201,8 +201,8 @@ struct AccountSettingsView: View {
                                 .font(.caption.weight(.semibold))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
-                                .background(Color.indigo.opacity(0.12))
-                                .foregroundStyle(.indigo)
+                                .background(DSColor.primaryAction.opacity(0.12))
+                                .foregroundStyle(DSColor.primaryAction)
                                 .clipShape(Capsule())
                         }
                         Text(request.requestedAt, format: .dateTime.month(.abbreviated).day().year().hour().minute())

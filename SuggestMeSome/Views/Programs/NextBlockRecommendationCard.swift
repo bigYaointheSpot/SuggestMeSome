@@ -44,14 +44,14 @@ struct NextBlockRecommendationCard: View {
                     HStack(spacing: 6) {
                         capsule("Recommended", color: .teal, filled: true)
                         if let governance = recommendation.explanationBundle?.governance {
-                            capsule(governance.title, color: .indigo, filled: false)
+                            capsule(governance.title, color: DSColor.primaryAction, filled: false)
                         }
                         if let note = fitLabel {
                             capsule(note, color: fitColor, filled: false)
                         }
                     }
                     Text(recommendation.title)
-                        .font(.headline)
+                        .dsHeadline()
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -77,7 +77,7 @@ struct NextBlockRecommendationCard: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(Array(explanation.topReasons.prefix(3)), id: \.rawValue) { reason in
-                            capsule(reason.shortLabel, color: .indigo, filled: false)
+                            capsule(reason.shortLabel, color: DSColor.primaryAction, filled: false)
                         }
                     }
                     .padding(.vertical, 1)
@@ -132,7 +132,7 @@ struct NextBlockRecommendationCard: View {
                     capsule(recommendation.targetFocusDisplayName, color: .teal, filled: false)
                     capsule("\(recommendation.suggestedDurationWeeks)w · \(recommendation.suggestedSessionsPerWeek)×", color: .secondary, filled: false)
                     if let governance = recommendation.explanationBundle?.governance {
-                        capsule(governance.title, color: .indigo, filled: false)
+                        capsule(governance.title, color: DSColor.primaryAction, filled: false)
                     }
                     if let fit = fitLabel {
                         capsule(fit, color: fitColor, filled: false)

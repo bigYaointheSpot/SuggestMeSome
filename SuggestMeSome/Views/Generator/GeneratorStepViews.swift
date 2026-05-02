@@ -25,7 +25,7 @@ struct SuggestMeSomeConfigurationStepView: View {
     private var modeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Mode", systemImage: "dial.high")
-                .font(.headline)
+                .dsHeadline()
 
             let columns = [GridItem(.adaptive(minimum: 110), spacing: 8)]
             LazyVGrid(columns: columns, spacing: 8) {
@@ -44,7 +44,7 @@ struct SuggestMeSomeConfigurationStepView: View {
     private var goalSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Goal", systemImage: "target")
-                .font(.headline)
+                .dsHeadline()
 
             let columns = [GridItem(.adaptive(minimum: 130), spacing: 8)]
             LazyVGrid(columns: columns, spacing: 8) {
@@ -63,7 +63,7 @@ struct SuggestMeSomeConfigurationStepView: View {
     private var equipmentSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Equipment Profile", systemImage: "dumbbell")
-                .font(.headline)
+                .dsHeadline()
 
             Picker("Equipment", selection: $viewModel.configuration.equipmentProfile) {
                 ForEach(SuggestMeSomeEquipmentProfile.allCases) { profile in
@@ -84,7 +84,7 @@ struct SuggestMeSomeConfigurationStepView: View {
             onContinue()
         } label: {
             Label("Get Recommendation", systemImage: "sparkles")
-                .font(.headline)
+                .dsHeadline()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(Color.purple)
@@ -151,7 +151,7 @@ struct SuggestMeSomeRecommendationStepView: View {
         return VStack(alignment: .leading, spacing: 12) {
             // Header
             Label("Recommended Session", systemImage: "lightbulb.max.fill")
-                .font(.headline)
+                .dsHeadline()
                 .foregroundStyle(.primary)
 
             // Session title
@@ -292,7 +292,7 @@ struct SuggestMeSomeRecommendationStepView: View {
                 onBuildWorkout()
             } label: {
                 Label("Build This Session", systemImage: "hammer.fill")
-                    .font(.headline)
+                    .dsHeadline()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(Color.green)

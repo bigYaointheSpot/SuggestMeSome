@@ -115,7 +115,7 @@ extension ProgramVolumeMuscle {
         case .biceps:        return .red
         case .triceps:       return .red
         case .calves:        return .mint
-        case .abs:           return .indigo
+        case .abs:           return DSColor.primaryAction
         }
     }
 }

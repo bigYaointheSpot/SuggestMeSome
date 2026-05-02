@@ -396,7 +396,7 @@ struct PaywallView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Premium Unlock", systemImage: "star.circle.fill")
                 .font(.headline.weight(.bold))
-                .foregroundStyle(.indigo)
+                .foregroundStyle(DSColor.primaryAction)
 
             Text(feature?.headline ?? "Unlock coaching, analytics, smart generation, Apple Health integration, and Apple Watch features.")
                 .font(.title3.weight(.semibold))
@@ -410,7 +410,7 @@ struct PaywallView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.indigo.opacity(0.12))
+        .background(DSColor.primaryAction.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -473,7 +473,7 @@ struct PaywallView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(purchaseManager.isPremiumUnlocked ? Color.green : Color.indigo)
+                .background(purchaseManager.isPremiumUnlocked ? Color.green : DSColor.primaryAction)
                 .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
             }
@@ -825,7 +825,7 @@ struct ComplianceOnboardingFlow: View {
             .font(.headline.weight(.semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(canAdvanceCurrentStep ? Color.indigo : Color.gray)
+            .background(canAdvanceCurrentStep ? DSColor.primaryAction : Color.gray)
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .disabled(!canAdvanceCurrentStep)

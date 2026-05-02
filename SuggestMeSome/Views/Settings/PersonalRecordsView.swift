@@ -184,7 +184,7 @@ struct PRRow: View {
                     .foregroundStyle(.yellow)
                     .font(.caption)
                 Text(formattedWeight)
-                    .font(.headline)
+                    .dsHeadline()
             }
         }
         .padding(.vertical, 2)

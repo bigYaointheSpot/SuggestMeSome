@@ -151,7 +151,7 @@ struct CreateProgramView: View {
                         exerciseSelectionRow(exercise.name)
                     }
                 } label: {
-                    Text(group.name).font(.headline).foregroundStyle(.primary)
+                    Text(group.name).dsHeadline().foregroundStyle(.primary)
                 }
             }
 
@@ -264,7 +264,7 @@ struct CreateProgramView: View {
     @ViewBuilder
     private func exerciseAssignmentRow(for name: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(name).font(.headline)
+            Text(name).dsHeadline()
 
             HStack(spacing: 6) {
                 ForEach(Array(1...sessionsPerWeek), id: \.self) { sessionNum in
@@ -381,7 +381,7 @@ struct CreateProgramView: View {
                     saveProgram()
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                .font(.headline)
+                .dsHeadline()
                 .foregroundStyle(Color.white)
                 .listRowBackground(Color.blue)
             }
@@ -449,7 +449,7 @@ struct CreateProgramView: View {
         Button(action: toggle) {
             HStack {
                 Text("Week \(week.weekNumber)")
-                    .font(.headline)
+                    .dsHeadline()
                     .foregroundStyle(.primary)
                     .textCase(nil)
                 Spacer()
@@ -547,7 +547,7 @@ struct ProgramExercisePickerSheet: View {
                             }
                         }
                     } label: {
-                        Text(group.name).font(.headline).foregroundStyle(.primary)
+                        Text(group.name).dsHeadline().foregroundStyle(.primary)
                     }
                 }
             }
@@ -570,7 +570,7 @@ struct ProgramExercisePickerSheet: View {
         if let name = selectedExercise {
             Form {
                 Section("Exercise") {
-                    Text(name).font(.headline)
+                    Text(name).dsHeadline()
                 }
                 Section {
                     HStack {

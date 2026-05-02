@@ -97,7 +97,7 @@ struct ProgramListRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(program.name).font(.headline)
+            Text(program.name).dsHeadline()
             Text("\(program.lengthInWeeks) weeks · \(program.sessionsPerWeek) sessions/week · \(sourceLabel)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -173,7 +173,7 @@ struct CompleteProgramWorkoutSheet: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(run.program?.name ?? "Unknown Program")
-                            .font(.headline)
+                            .dsHeadline()
                             .foregroundStyle(.primary)
                         Text("Started \(run.startDate.formatted(date: .abbreviated, time: .omitted))")
                             .font(.subheadline)
@@ -323,7 +323,7 @@ private struct ProgramRunSessionPreviewView: View {
             Section {
                 HStack {
                     Text(run.program?.name ?? "Program")
-                        .font(.headline)
+                        .dsHeadline()
                     Spacer()
                     Text("Week \(weekNumber), Session \(sessionNumber)")
                         .font(.subheadline)
@@ -377,7 +377,7 @@ private struct ProgramRunSessionPreviewView: View {
                 dismiss()
             } label: {
                 Text("Start Workout")
-                    .font(.headline)
+                    .dsHeadline()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(Color.green)

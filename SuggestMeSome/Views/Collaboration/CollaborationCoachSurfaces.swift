@@ -137,7 +137,7 @@ struct MyCoachView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(relationship.participantDisplayName(for: collaborationCoordinator.currentAccountID))
-                                        .font(.headline)
+                                        .dsHeadline()
                                     Text(relationshipSubtitle(relationship))
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
@@ -205,7 +205,7 @@ struct CoachRosterView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(snapshot.accountDisplayName)
-                                        .font(.headline)
+                                        .dsHeadline()
                                     Text(snapshot.headline)
                                         .font(.subheadline)
                                     Text(snapshot.summaryText)
@@ -250,7 +250,7 @@ struct BlueprintLibraryView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(blueprint.name)
-                                        .font(.headline)
+                                        .dsHeadline()
                                     Text("\(blueprint.durationWeeks) weeks • \(blueprint.sessionsPerWeek) sessions/week")
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
@@ -419,7 +419,7 @@ struct AssignmentCard: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(counterpartName)
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
                 DSBadge(assignment.status.title)
             }
@@ -486,7 +486,7 @@ struct CoachNotesInboxView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(digest.titleText)
-                                        .font(.headline)
+                                        .dsHeadline()
                                     Text(digest.summaryText)
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
@@ -520,7 +520,7 @@ struct CoachNoteRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(note.authorDisplayName)
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
                 if note.isUnread {
                     DSBadge("New")
@@ -793,7 +793,7 @@ struct ShareRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.headline)
+                .dsHeadline()
             Text(subtitle)
                 .font(.footnote)
                 .foregroundStyle(.secondary)

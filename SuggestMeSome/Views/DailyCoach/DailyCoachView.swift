@@ -362,7 +362,7 @@ struct DailyCoachView: View {
                 Image(systemName: "pause.circle")
                     .foregroundStyle(.orange)
                 Text("Between Blocks")
-                    .font(.headline)
+                    .dsHeadline()
             }
 
             Divider()
@@ -411,7 +411,7 @@ struct DailyCoachView: View {
     private var todayTrainingCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Today's Training", systemImage: "figure.strengthtraining.traditional")
-                .font(.headline)
+                .dsHeadline()
 
             Divider()
 
@@ -469,7 +469,7 @@ struct DailyCoachView: View {
         let guidance = todayPlan.nextStepGuidance
         let contextColor: Color = switch guidance.contextMode {
         case .activeProgram: .secondary
-        case .standaloneHistoryInformed: .indigo
+        case .standaloneHistoryInformed: DSColor.primaryAction
         case .standaloneLowConfidence: .orange
         }
 
@@ -500,7 +500,7 @@ struct DailyCoachView: View {
     private var readinessCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Readiness", systemImage: "heart.text.square")
-                .font(.headline)
+                .dsHeadline()
 
             Divider()
 
@@ -547,7 +547,7 @@ struct DailyCoachView: View {
     private func readinessStatPill(label: String, value: Int) -> some View {
         VStack(spacing: 2) {
             Text("\(value)")
-                .font(.headline)
+                .dsHeadline()
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -564,9 +564,9 @@ struct DailyCoachView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "brain.head.profile")
-                        .foregroundStyle(.indigo)
+                        .foregroundStyle(DSColor.primaryAction)
                     Text("Coach Recommendation")
-                        .font(.headline)
+                        .dsHeadline()
                         .lineLimit(1)
                         .allowsTightening(true)
                     Spacer()
@@ -688,8 +688,8 @@ struct DailyCoachView: View {
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.indigo.opacity(0.4), lineWidth: 1.5))
-        .shadow(color: Color.indigo.opacity(0.12), radius: 10, x: 0, y: 2)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(DSColor.primaryAction.opacity(0.4), lineWidth: 1.5))
+        .shadow(color: DSColor.primaryAction.opacity(0.12), radius: 10, x: 0, y: 2)
     }
 
     private var guidanceSafetyRow: some View {
@@ -760,7 +760,7 @@ struct DailyCoachView: View {
     private func objectiveRecoveryBadge(_ status: ObjectiveRecoveryStatus) -> some View {
         let (label, color): (String, Color) = switch status {
         case .good: ("Good", .green)
-        case .neutral: ("Neutral", .indigo)
+        case .neutral: ("Neutral", DSColor.primaryAction)
         case .caution: ("Caution", .orange)
         }
 
@@ -782,7 +782,7 @@ struct DailyCoachView: View {
         case .insufficientBaseline:
             ("Building Baseline", .orange)
         case .awaitingCurrentDayMetrics:
-            ("Waiting", .indigo)
+            ("Waiting", DSColor.primaryAction)
         case .ready:
             ("Ready", .green)
         }
@@ -879,7 +879,7 @@ struct DailyCoachView: View {
     private func nextStepGuidanceSection(_ guidance: TodayPlanNextStepGuidance) -> some View {
         let accent: Color = switch guidance.contextMode {
         case .activeProgram: .secondary
-        case .standaloneHistoryInformed: .indigo
+        case .standaloneHistoryInformed: DSColor.primaryAction
         case .standaloneLowConfidence: .orange
         }
 
@@ -940,7 +940,7 @@ struct DailyCoachView: View {
     private func confidenceBadge(_ confidence: TodayPlanConfidence) -> some View {
         let (label, color): (String, Color) = switch confidence {
         case .high:   ("High Confidence", .green)
-        case .medium: ("Medium Confidence", .indigo)
+        case .medium: ("Medium Confidence", DSColor.primaryAction)
         case .low:    ("Low Confidence", .secondary)
         }
         return Text(label)
@@ -966,7 +966,7 @@ struct DailyCoachView: View {
                 Image(systemName: icon)
                     .foregroundStyle(accentColor)
                 Text("Adherence")
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
                 Text(rescue.guidanceType.rawValue)
                     .font(.caption2.weight(.semibold))
@@ -1025,7 +1025,7 @@ struct DailyCoachView: View {
         case .reduceWorkingLoadsSlightly:    return .orange
         case .suggestManualVariationSwap:    return .red
         case .standaloneRecoverySession:     return .teal
-        case .standaloneShortStrengthSession:return .indigo
+        case .standaloneShortStrengthSession:return DSColor.primaryAction
         }
     }
 
@@ -1039,7 +1039,7 @@ struct DailyCoachView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("Proposal Awareness", systemImage: "bell.badge")
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
                 Text("\(plan.proposalAwareness.count) pending")
                     .font(.caption.weight(.semibold))
@@ -1048,7 +1048,7 @@ struct DailyCoachView: View {
             Divider()
             HStack(spacing: 6) {
                 proposalImpactBadge("Today: \(todayCount)", color: todayCount > 0 ? .orange : .secondary)
-                proposalImpactBadge("Upcoming: \(upcomingCount)", color: upcomingCount > 0 ? .indigo : .secondary)
+                proposalImpactBadge("Upcoming: \(upcomingCount)", color: upcomingCount > 0 ? DSColor.primaryAction : .secondary)
                 proposalImpactBadge("Long Horizon: \(longCount)", color: longCount > 0 ? .secondary : .gray)
                 Spacer()
             }
@@ -1137,7 +1137,7 @@ struct DailyCoachView: View {
         switch source {
         case .pendingProposal: return .orange
         case .approvedOverlay: return .green
-        case .runtimeCoachOnly: return .indigo
+        case .runtimeCoachOnly: return DSColor.primaryAction
         case .plannedPrescription: return .secondary
         }
     }
@@ -1154,7 +1154,7 @@ struct DailyCoachView: View {
     private var latestSessionSummaryCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Last Session", systemImage: "checkmark.seal")
-                .font(.headline)
+                .dsHeadline()
 
             Divider()
 
@@ -1227,7 +1227,7 @@ struct DailyCoachView: View {
     private var latestWeeklyReviewCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Latest Weekly Review", systemImage: "chart.bar.doc.horizontal")
-                .font(.headline)
+                .dsHeadline()
 
             Divider()
 
@@ -1265,8 +1265,8 @@ struct DailyCoachView: View {
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.indigo.opacity(0.2))
-                        .foregroundStyle(.indigo)
+                        .background(DSColor.primaryAction.opacity(0.2))
+                        .foregroundStyle(DSColor.primaryAction)
                         .clipShape(Capsule())
                 }
             }

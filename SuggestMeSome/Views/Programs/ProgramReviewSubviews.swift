@@ -59,7 +59,7 @@ struct PhaseCardView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(group.title)
-                            .font(.headline)
+                            .dsHeadline()
                             .foregroundStyle(.primary)
                         if group.isDeload {
                             Text("Deload")
@@ -625,7 +625,7 @@ struct ReviewExercisePickerSheet: View {
                                 }) {
                                     HStack {
                                         Text(group.name)
-                                            .font(.headline)
+                                            .dsHeadline()
                                             .foregroundStyle(.primary)
                                             .textCase(nil)
                                         Spacer()

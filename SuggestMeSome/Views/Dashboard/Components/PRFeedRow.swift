@@ -54,7 +54,7 @@ struct PRFeedRow: View {
 
             VStack(alignment: .trailing, spacing: 3) {
                 Text(formattedWeight)
-                    .font(.headline)
+                    .dsHeadline()
                 if let deltaStr = formattedDelta {
                     Text(deltaStr)
                         .font(.caption.weight(.semibold))

@@ -17,9 +17,9 @@ struct LongHorizonSummaryCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.up.forward.circle")
-                    .foregroundStyle(.indigo)
+                    .foregroundStyle(DSColor.primaryAction)
                 Text("Multi-Block Trend")
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
                 blockCountBadge
             }
@@ -29,7 +29,7 @@ struct LongHorizonSummaryCard: View {
             CoachPresentationSummaryCard(
                 copy: coachCopy,
                 eyebrow: "Coach Take",
-                accent: .indigo,
+                accent: DSColor.primaryAction,
                 supportLimit: 2
             )
 
@@ -52,7 +52,7 @@ struct LongHorizonSummaryCard: View {
                         .font(.caption.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
-                        .background(Color.indigo)
+                        .background(DSColor.primaryAction)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
@@ -62,7 +62,7 @@ struct LongHorizonSummaryCard: View {
         .padding()
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.indigo.opacity(0.25), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(DSColor.primaryAction.opacity(0.25), lineWidth: 1))
     }
 
     private var blockCountBadge: some View {
@@ -70,8 +70,8 @@ struct LongHorizonSummaryCard: View {
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(Color.indigo.opacity(0.12))
-            .foregroundStyle(.indigo)
+            .background(DSColor.primaryAction.opacity(0.12))
+            .foregroundStyle(DSColor.primaryAction)
             .clipShape(Capsule())
     }
 

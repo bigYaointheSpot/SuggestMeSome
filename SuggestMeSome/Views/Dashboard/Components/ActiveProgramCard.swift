@@ -38,10 +38,10 @@ struct ActiveProgramCard: View {
             HStack(spacing: DSSpacing.l) {
                 ZStack {
                     Circle()
-                        .stroke(Color.indigo.opacity(0.2), lineWidth: 8)
+                        .stroke(DSColor.primaryAction.opacity(0.2), lineWidth: 8)
                     Circle()
                         .trim(from: 0, to: progress)
-                        .stroke(Color.indigo, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .stroke(DSColor.primaryAction, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                     Text("\(Int(progress * 100))%")
                         .font(.caption.weight(.semibold))
@@ -98,7 +98,7 @@ struct ActiveProgramCard: View {
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Color.indigo)
+                        .background(DSColor.primaryAction)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: DSRadius.s, style: .continuous))
                 }
@@ -109,8 +109,8 @@ struct ActiveProgramCard: View {
                             .font(.subheadline.weight(.semibold))
                             .padding(.vertical, 10)
                             .padding(.horizontal, 14)
-                            .background(Color.indigo.opacity(0.15))
-                            .foregroundStyle(.indigo)
+                            .background(DSColor.primaryAction.opacity(0.15))
+                            .foregroundStyle(DSColor.primaryAction)
                             .clipShape(RoundedRectangle(cornerRadius: DSRadius.s, style: .continuous))
                     }
                 }

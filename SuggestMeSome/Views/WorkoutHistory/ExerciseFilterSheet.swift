@@ -63,10 +63,10 @@ struct ExerciseFilterSheet: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: groupSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(groupSelected ? .indigo : Color(.systemGray3))
+                        .foregroundStyle(groupSelected ? DSColor.primaryAction : Color(.systemGray3))
                         .font(.title3)
                     Text(group.name)
-                        .font(.headline)
+                        .dsHeadline()
                         .foregroundStyle(.primary)
                         .textCase(nil)
                 }
@@ -107,7 +107,7 @@ struct ExerciseFilterSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? .indigo : Color(.systemGray3))
+                    .foregroundStyle(isSelected ? DSColor.primaryAction : Color(.systemGray3))
                     .font(.title3)
                 Text(exercise.name)
                     .foregroundStyle(.primary)

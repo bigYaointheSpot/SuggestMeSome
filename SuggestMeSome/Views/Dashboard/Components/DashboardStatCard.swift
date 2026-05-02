@@ -39,10 +39,10 @@ struct DashboardStatCard: View {
                     Text(value)
                 }
             }
-            .font(.title2.weight(.bold))
+            .dsMetricMedium()
+            .fontWeight(.bold)
             .lineLimit(1)
             .minimumScaleFactor(0.6)
-            .contentTransition(.numericText())
 
             Sparkline(values: sparkline, tint: iconColor, height: 18)
                 .padding(.top, 2)

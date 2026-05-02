@@ -210,17 +210,17 @@ struct DashboardView: View {
             Text("Start Workout")
                 .font(.title3.weight(.bold))
             HStack(spacing: DSSpacing.s) {
-                quickStartButton(icon: "play.fill", label: "Empty", color: .indigo) {
+                quickStartButton(icon: "play.fill", label: "Empty", color: DSColor.primaryAction) {
                     requestWorkoutStart(.empty)
                 }
-                quickStartButton(icon: "wand.and.stars", label: "Suggest", color: .indigo) {
+                quickStartButton(icon: "wand.and.stars", label: "Suggest", color: DSColor.primaryAction) {
                     viewModel.pendingGeneratedWorkout = nil
                     viewModel.showingGeneratorSheet = true
                 }
                 quickStartButton(
                     icon: "list.clipboard.fill",
                     label: "Program",
-                    color: .indigo,
+                    color: DSColor.primaryAction,
                     badge: viewModel.pendingProposals.isEmpty ? nil : "\(viewModel.pendingProposals.count)"
                 ) {
                     if viewModel.activeProgramRuns.isEmpty {
@@ -338,14 +338,14 @@ struct DashboardView: View {
         HStack(spacing: DSSpacing.s) {
             DashboardStatCard(
                 icon: "figure.strengthtraining.traditional",
-                iconColor: .indigo,
+                iconColor: DSColor.primaryAction,
                 value: "\(viewModel.workoutCount)",
                 label: "Workouts",
                 sparkline: viewModel.workoutsSparkline
             )
             DashboardStatCard(
                 icon: "clock.fill",
-                iconColor: .indigo,
+                iconColor: DSColor.primaryAction,
                 value: viewModel.timeTrainedLabel,
                 label: "Trained",
                 sparkline: viewModel.timeTrainedSparkline

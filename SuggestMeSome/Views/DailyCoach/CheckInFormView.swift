@@ -86,9 +86,9 @@ struct CheckInFormView: View {
         VStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 44))
-                .foregroundStyle(.indigo)
+                .foregroundStyle(DSColor.primaryAction)
             Text("Checked In")
-                .font(.headline)
+                .dsHeadline()
                 .foregroundStyle(.primary)
         }
         .padding(32)

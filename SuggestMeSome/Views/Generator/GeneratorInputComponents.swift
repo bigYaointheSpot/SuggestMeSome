@@ -9,7 +9,7 @@ struct DurationPickerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Duration", systemImage: "clock")
-                .font(.headline)
+                .dsHeadline()
 
             let columns = [GridItem(.adaptive(minimum: 64), spacing: 8)]
             LazyVGrid(columns: columns, spacing: 8) {
@@ -56,7 +56,7 @@ struct IntensitySelectorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Intensity", systemImage: "bolt.fill")
-                .font(.headline)
+                .dsHeadline()
 
             HStack(spacing: 8) {
                 ForEach(1...5, id: \.self) { level in

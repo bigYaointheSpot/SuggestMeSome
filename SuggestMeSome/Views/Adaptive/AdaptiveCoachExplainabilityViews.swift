@@ -20,7 +20,7 @@ struct AdaptiveSteeringControlsCard: View {
                     Image(systemName: "slider.horizontal.3")
                         .foregroundStyle(.teal)
                     Text(title)
-                        .font(.headline)
+                        .dsHeadline()
                 }
                 if let subtitle {
                     Text(subtitle)
@@ -134,7 +134,7 @@ struct AdaptiveExplanationCard: View {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.headline)
+                        .dsHeadline()
                     Text(bundle.summary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -225,9 +225,9 @@ struct AdaptiveExplanationCard: View {
             .background(
                 bundle.governance == .automatic
                     ? Color.green.opacity(0.14)
-                    : Color.indigo.opacity(0.14)
+                    : DSColor.primaryAction.opacity(0.14)
             )
-            .foregroundStyle(bundle.governance == .automatic ? Color.green : Color.indigo)
+            .foregroundStyle(bundle.governance == .automatic ? Color.green : DSColor.primaryAction)
             .clipShape(Capsule())
     }
 

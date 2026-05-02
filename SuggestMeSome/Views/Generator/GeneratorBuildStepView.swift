@@ -169,7 +169,7 @@ struct SuggestMeSomeBuildStepView: View {
                 .foregroundStyle(.red)
                 .font(.title3)
             VStack(alignment: .leading, spacing: 2) {
-                Text(exercise.exercise.name).font(.headline)
+                Text(exercise.exercise.name).dsHeadline()
                 Text(durationText).font(.subheadline).foregroundStyle(.secondary)
             }
             Spacer()
@@ -189,7 +189,7 @@ struct SuggestMeSomeBuildStepView: View {
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
-                    Text(exercise.exercise.name).font(.headline)
+                    Text(exercise.exercise.name).dsHeadline()
                     Spacer()
                     roleLabel(role)
                 }
@@ -317,7 +317,7 @@ struct SuggestMeSomeBuildStepView: View {
             onStart(workout)
         } label: {
             Label("Start Session", systemImage: "play.fill")
-                .font(.headline)
+                .dsHeadline()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(Color.green)

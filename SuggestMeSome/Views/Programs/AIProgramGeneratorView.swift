@@ -156,7 +156,7 @@ struct AIProgramGeneratorView: View {
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { cancelOrBackButton }
                         ToolbarItem(placement: .principal) {
-                            Text(navigationTitle).font(.headline)
+                            Text(navigationTitle).dsHeadline()
                         }
                     }
                 }
@@ -224,7 +224,7 @@ struct AIProgramGeneratorView: View {
 
                 Button(action: handleNextTapped) {
                     Text(isCardioFocus ? "Generate Program" : "Next")
-                        .font(.headline)
+                        .dsHeadline()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(step1Valid ? Color.teal : Color(.systemGray4))
@@ -243,7 +243,7 @@ struct AIProgramGeneratorView: View {
     private var focusSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Program Focus")
-                .font(.headline)
+                .dsHeadline()
 
             LazyVGrid(
                 columns: [GridItem(.flexible()), GridItem(.flexible())],
@@ -283,7 +283,7 @@ struct AIProgramGeneratorView: View {
     private var levelSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Experience Level")
-                .font(.headline)
+                .dsHeadline()
 
             HStack(spacing: 0) {
                 ForEach(ProgramLevel.allCases, id: \.self) { level in
@@ -323,7 +323,7 @@ struct AIProgramGeneratorView: View {
     private var durationSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Program Duration")
-                .font(.headline)
+                .dsHeadline()
 
             HStack(spacing: 0) {
                 ForEach([6, 8, 10, 12], id: \.self) { weeks in
@@ -349,7 +349,7 @@ struct AIProgramGeneratorView: View {
     private var frequencySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Sessions Per Week")
-                .font(.headline)
+                .dsHeadline()
 
             HStack(spacing: 0) {
                 ForEach(2...6, id: \.self) { freq in
@@ -389,7 +389,7 @@ struct AIProgramGeneratorView: View {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Enter your 1 Rep Max for key lifts")
-                        .font(.headline)
+                        .dsHeadline()
                     Text("Pre-filled from your PR history. Edit any value to override.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -403,7 +403,7 @@ struct AIProgramGeneratorView: View {
 
                 Button(action: triggerGeneration) {
                     Text("Generate Program")
-                        .font(.headline)
+                        .dsHeadline()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(step2Valid ? Color.teal : Color(.systemGray4))

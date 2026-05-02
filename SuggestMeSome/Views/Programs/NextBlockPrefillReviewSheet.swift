@@ -104,7 +104,7 @@ struct NextBlockPrefillReviewSheet: View {
                 Image(systemName: "sparkles")
                     .foregroundStyle(.teal)
                 Text("Why this is recommended")
-                    .font(.headline)
+                    .dsHeadline()
             }
             Text(recommendation.title)
                 .font(.subheadline.weight(.semibold))
@@ -147,9 +147,9 @@ struct NextBlockPrefillReviewSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.triangle.branch")
-                        .foregroundStyle(.indigo)
+                        .foregroundStyle(DSColor.primaryAction)
                     Text("Carried Forward")
-                        .font(.headline)
+                        .dsHeadline()
                 }
                 FlowingBadges(items: carriedForwardBadges(
                     preservedNames: preservedNames,
@@ -178,7 +178,7 @@ struct NextBlockPrefillReviewSheet: View {
     ) -> [BadgeItem] {
         var items: [BadgeItem] = []
         if let styleText {
-            items.append(BadgeItem(label: "Style · \(styleText)", color: .indigo))
+            items.append(BadgeItem(label: "Style · \(styleText)", color: DSColor.primaryAction))
         }
         if let intensityText, intensityText != styleText {
             items.append(BadgeItem(label: "Intensity · \(intensityText)", color: .purple))
@@ -200,7 +200,7 @@ struct NextBlockPrefillReviewSheet: View {
                 Image(systemName: "slider.horizontal.3")
                     .foregroundStyle(.teal)
                 Text("Program Shape")
-                    .font(.headline)
+                    .dsHeadline()
             }
 
             editorRow(label: "Focus", isEdited: focus != original.focus) {
@@ -262,7 +262,7 @@ struct NextBlockPrefillReviewSheet: View {
                 Image(systemName: "scalemass.fill")
                     .foregroundStyle(.orange)
                 Text("Starting 1RMs")
-                    .font(.headline)
+                    .dsHeadline()
             }
             ForEach(orderedLiftNames, id: \.self) { name in
                 oneRMRow(for: name)
@@ -333,7 +333,7 @@ struct NextBlockPrefillReviewSheet: View {
             HStack(spacing: 12) {
                 Button(action: onDecline) {
                     Text("Not now")
-                        .font(.headline)
+                        .dsHeadline()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(Color(.secondarySystemBackground))
@@ -343,7 +343,7 @@ struct NextBlockPrefillReviewSheet: View {
                 }
                 Button(action: confirm) {
                     Text("Continue")
-                        .font(.headline)
+                        .dsHeadline()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(canContinue ? Color.teal : Color.teal.opacity(0.4))

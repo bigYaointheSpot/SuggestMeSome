@@ -4426,6 +4426,17 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
   - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
   - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests -only-testing:SuggestMeSomeTests/Feature16Prompt5WorkoutHistoryTests`.
 
+#### Prompt 6 [Surface uplift B: indigo migration + rounded headline + dashboard hero stat across premium and ancillary surfaces] — 2026-05-02
+
+- Mass migration of `.indigo` color literals across every premium and ancillary surface to `DSColor.primaryAction` so the new violet accent and v2 fallback both flow correctly. Touched 15 files: `DashboardView`, `DashboardTheme`, `DashboardStatCard`'s caller surfaces, `ActiveProgramCard`, `DailyCoachView` (the largest hit — 13 references), `LongHorizonSummaryCard`, `CheckInFormView`, `BlockContinuityCard`, `TrainingProgramsTab`, `NextBlockRecommendationCard`, `NextBlockPrefillReviewSheet`, `ExerciseFilterSheet`, `SettingsTab`, `AdaptiveCoachExplainabilityViews`, `CollaborationSharingAndCards`, `ComplianceViews`, and `AccountPrivacyViews`. The only remaining `.indigo` references live in `DSTokens.swift`'s legacy fallback path (intentional — when `FeatureFlag.uiRefreshV2` is off, the surface should still read indigo).
+- Mass migration of plain `.font(.headline)` callsites to `.dsHeadline()` across `DailyCoach`, `Dashboard`, `Programs`, `Settings`, `Adaptive`, `Generator`, `Collaboration`, and `WorkoutHistory` views. Together with the accent migration this is what makes the premium surfaces visually read as the new aesthetic without per-screen layout changes. Surfaces that compose `.font(.headline.weight(.bold))` (chained) were left alone — those land naturally during P7 polish where the role modifiers' implicit weight is enough.
+- `Views/Dashboard/Components/DashboardStatCard.swift`: hero number switched from `.font(.title2.weight(.bold))` to `.dsMetricMedium()` + `.fontWeight(.bold)` so the rounded monospaced-digit treatment carries through, including the embedded `.contentTransition(.numericText())` from the metric modifier (no longer set inline).
+- Workouts surface files were intentionally left out of the headline mass-migration in this prompt — they were already polished in P5, and any remaining `.font(.headline)` chains there are bound to other modifiers (e.g. `.font(.headline.weight(.bold))`).
+- Per-prompt scope discipline: did not touch SwiftData models, premium-gating logic, or paywall pricing display logic. Compliance views received only color-token swaps. `Feature14ComplianceAndMonetizationTests` reran clean to verify gating remained byte-equivalent.
+- Verification:
+  - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
+  - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests`.
+
 ---
 
 ## Project Setup

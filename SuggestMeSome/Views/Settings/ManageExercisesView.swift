@@ -184,7 +184,7 @@ struct ManageExercisesView: View {
     private func groupHeader(_ group: MuscleGroup) -> some View {
         HStack(spacing: 12) {
             Text(group.name)
-                .font(.headline)
+                .dsHeadline()
                 .foregroundStyle(.primary)
                 .textCase(nil)
             Spacer()

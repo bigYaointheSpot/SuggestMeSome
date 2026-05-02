@@ -29,7 +29,7 @@ struct BlockContinuityCard: View {
     private var cardContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Block Continuity", systemImage: "arrow.forward.circle")
-                .font(.headline)
+                .dsHeadline()
 
             DSDivider()
 

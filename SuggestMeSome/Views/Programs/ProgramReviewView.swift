@@ -254,7 +254,7 @@ struct ProgramReviewView: View {
             HStack(spacing: 12) {
                 Button(action: { showRegenerateAlert = true }) {
                     Text("Regenerate")
-                        .font(.headline)
+                        .dsHeadline()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(Color(.secondarySystemBackground))
@@ -265,7 +265,7 @@ struct ProgramReviewView: View {
 
                 Button(action: startProgram) {
                     Text("Start Program")
-                        .font(.headline)
+                        .dsHeadline()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(Color.teal)
