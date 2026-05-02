@@ -97,12 +97,39 @@ enum DSIcon {
 
 // MARK: - Motion
 
-/// Named motion tokens. Resolves to plain springs in P1 — values become
-/// canonical in P4 (Motion language). Always respect reduce-motion.
+/// Named motion tokens. Three canonical springs; pick by intent, not by
+/// curve shape:
+/// - `.snap` for taps, toggles, picker changes (fast, well-damped)
+/// - `.standard` for sheets, card expansion, list reorder (workhorse)
+/// - `.expressive` for celebrations, hero entries, PR moments (slower bounce)
+///
+/// Call sites that should respect reduce-motion read
+/// `@Environment(\.accessibilityReduceMotion)` and pass `nil` (or
+/// `.linear(duration: 0.001)`) when on. The `.dsAnimate(_:reduceMotion:)`
+/// modifier on `View` handles this automatically.
 enum DSMotion {
-    static var snap: Animation       { .spring(response: 0.25, dampingFraction: 0.85) }
-    static var standard: Animation   { .spring(response: 0.35, dampingFraction: 0.85) }
-    static var expressive: Animation { .spring(response: 0.45, dampingFraction: 0.75) }
+    static var snap: Animation       { .spring(response: 0.18, dampingFraction: 0.9) }
+    static var standard: Animation   { .spring(response: 0.32, dampingFraction: 0.85) }
+    static var expressive: Animation { .spring(response: 0.45, dampingFraction: 0.7) }
+}
+
+extension Animation {
+    static var dsSnap: Animation       { DSMotion.snap }
+    static var dsStandard: Animation   { DSMotion.standard }
+    static var dsExpressive: Animation { DSMotion.expressive }
+}
+
+extension View {
+    /// Applies a DSMotion animation that automatically collapses to a
+    /// near-instant linear curve when accessibility reduce-motion is on.
+    /// Pass the animation token and the env-read reduce-motion flag.
+    func dsAnimate<V: Equatable>(
+        _ animation: Animation,
+        value: V,
+        reduceMotion: Bool
+    ) -> some View {
+        self.animation(reduceMotion ? .linear(duration: 0.001) : animation, value: value)
+    }
 }
 
 // MARK: - Hairline

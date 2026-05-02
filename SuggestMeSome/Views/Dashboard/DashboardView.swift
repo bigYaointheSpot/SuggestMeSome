@@ -308,7 +308,7 @@ struct DashboardView: View {
             ForEach(DashboardTimeWindow.allCases, id: \.self) { w in
                 let isActive = viewModel.timeWindow == w
                 Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    withAnimation(.dsSnap) {
                         viewModel.timeWindow = w
                     }
                 } label: {
@@ -329,6 +329,7 @@ struct DashboardView: View {
         .padding(DSSpacing.xs)
         .background(DSColor.primaryAction.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: DSRadius.m, style: .continuous))
+        .sensoryFeedback(.selection, trigger: viewModel.timeWindow)
     }
 
     // MARK: - Stats Bar

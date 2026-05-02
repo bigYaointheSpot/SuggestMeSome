@@ -587,7 +587,7 @@ struct WorkoutView: View {
 
         if prCount > 0 {
             newPRCount = prCount
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.65)) {
+            withAnimation(.dsExpressive) {
                 showPRCelebration = true
                 celebrationScale = 1.0
             }
@@ -683,8 +683,8 @@ struct WorkoutView: View {
             VStack(spacing: 20) {
                 Image(systemName: "star.fill")
                     .font(.system(size: 64))
-                    .foregroundStyle(.yellow)
-                    .shadow(color: .yellow.opacity(0.7), radius: 24)
+                    .foregroundStyle(DSGradient.prCelebration)
+                    .shadow(color: DSColor.signalCaution.opacity(0.55), radius: 24)
 
                 VStack(spacing: 8) {
                     Text(newPRCount == 1 ? "New Personal Record!" : "\(newPRCount) Personal Records!")

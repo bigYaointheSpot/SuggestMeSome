@@ -4389,6 +4389,25 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
   - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` (App, Tests, Watch, LiveActivity all green).
   - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests`.
 
+#### Prompt 4 [Motion language: canonical springs, Animation extensions, hero gradient on PR celebration, time-window haptic, field warning haptic] — 2026-05-02
+
+- Promoted `DSMotion` from P1 stubs to canonical spring values:
+  - `.snap` is now `.spring(response: 0.18, dampingFraction: 0.9)` — for taps, toggles, picker changes (fast, well-damped).
+  - `.standard` is `.spring(response: 0.32, dampingFraction: 0.85)` — workhorse for sheet presents, card expansion, list reorder.
+  - `.expressive` is `.spring(response: 0.45, dampingFraction: 0.7)` — for celebrations, hero entries, PR moments (slower, more bounce).
+  - Added `Animation.dsSnap` / `.dsStandard` / `.dsExpressive` static convenience so call sites can write `withAnimation(.dsStandard) { ... }`.
+  - Added `View.dsAnimate(_:value:reduceMotion:)` modifier that automatically collapses to a near-instant `.linear(duration: 0.001)` curve when accessibility reduce-motion is on. Existing call sites (e.g. `DSCard`, `ExpandableCard`) keep the env-read pattern; new code can opt into either.
+- Polished the PR celebration overlay in `WorkoutView`:
+  - The big star icon now uses `DSGradient.prCelebration` (caution → secondary → primary) for its foreground style, producing the expressive Whoop-leaning warm-to-cool sweep instead of a flat yellow.
+  - The shadow is retinted to `DSColor.signalCaution.opacity(0.55)` so the bloom matches the gradient's warm anchor.
+  - The pop-in animation switches from a hand-rolled `.spring(response: 0.5, dampingFraction: 0.65)` to `.dsExpressive` so this celebration shares the canonical curve.
+- `Views/Dashboard/DashboardView.swift`: time-window picker now animates with `.dsSnap` (was a hand-rolled spring) and fires a `.sensoryFeedback(.selection, trigger: viewModel.timeWindow)` so each window switch feels positive on hardware.
+- `Views/DesignSystem/DSField.swift`: added `.sensoryFeedback(.warning, trigger: error)` so a validation error appearing or changing produces a warning haptic — useful when a Generator step or Settings sheet rejects input.
+- Mass migration of every existing `.spring(response:dampingFraction:)` callsite is intentionally deferred to P5/P6 surface uplift. The four-or-so springs touched in this prompt are the ones whose feel was directly tied to a v2 visual change (PR celebration, time-window picker).
+- Verification:
+  - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
+  - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests`.
+
 ---
 
 ## Project Setup

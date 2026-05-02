@@ -50,6 +50,7 @@ struct DSTextField: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .sensoryFeedback(.warning, trigger: error)
     }
 }
 
