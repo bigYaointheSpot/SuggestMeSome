@@ -768,25 +768,3 @@ struct ExercisePickerSheet: View {
     }
 }
 
-// MARK: - List row helpers
-
-extension View {
-    /// Applies the baseline row treatment used by the live-workout List:
-    /// zero separator, transparent row background, and token-driven insets.
-    /// Centralized so every section row reads consistently without
-    /// repeating five modifiers.
-    func plainWorkoutRow(
-        horizontalInset: CGFloat = DSSpacing.l,
-        verticalInset: CGFloat = DSSpacing.s
-    ) -> some View {
-        self
-            .listRowInsets(EdgeInsets(
-                top: verticalInset,
-                leading: horizontalInset,
-                bottom: verticalInset,
-                trailing: horizontalInset
-            ))
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-    }
-}
