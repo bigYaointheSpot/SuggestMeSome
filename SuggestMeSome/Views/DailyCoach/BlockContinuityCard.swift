@@ -21,11 +21,17 @@ struct BlockContinuityCard: View {
     }
 
     var body: some View {
+        DSCard(.flat) {
+            cardContent
+        }
+    }
+
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Block Continuity", systemImage: "arrow.forward.circle")
                 .font(.headline)
 
-            Divider()
+            DSDivider()
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
@@ -56,9 +62,6 @@ struct BlockContinuityCard: View {
             }
             .buttonStyle(.plain)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private func blockNode(run: ProgramRun, isCurrent: Bool) -> some View {

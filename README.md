@@ -4347,6 +4347,28 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
   - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
   - succeeded: `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
 
+#### Prompt 2 [Component library: DSCard, DSListRow, DSField, DSSheetHeader, DSSurface, DSDivider, DSSkeleton, DSStat] — 2026-05-02
+
+- Added eight new design-system primitives so site-specific card/row/field/sheet implementations have one canonical destination instead of being reinvented per surface:
+  - `DSCard` — five variants (`.flat`, `.elevated`, `.outlined`, `.tinted(Color)`, `.gradient(LinearGradient)`) with optional header, optional press feedback, optional expand/collapse via a binding, and built-in elevation that reads from `DSElevation`. Animations honor `accessibilityReduceMotion`.
+  - `DSListRow` — leading SF Symbol slot, primary/secondary text, and a typed trailing accessory enum (`none`, `chevron`, `value`, `badge(text:tone:)`, `checkmark(isOn:)`). Combined accessibility label is built from whichever slots are present.
+  - `DSField` — `DSTextField`, `DSStepperField`, and `DSToggleRow` with consistent label / helper / error positioning.
+  - `DSSheetHeader` — title + subtitle + close button + optional trailing slot, replaces 8+ ad-hoc sheet headers.
+  - `DSSurface` — typed background enum (`primary`, `secondary`, `elevated`, `sunken`) so view code stops referencing raw `Color(.systemGroupedBackground)` style literals.
+  - `DSDivider` — hairline rule pulled from `DSHairline.width` and `DSOpacity.divider` so dividers track contrast settings.
+  - `DSSkeleton` — pulse-animated placeholder for `.line(width:)`, `.rect(width:height:)`, and `.circle(diameter:)`. Falls back to a static placeholder when reduce-motion is on.
+  - `DSStat` — "label + big number + delta" pattern with `DSStatDelta` (`up`/`down`/`neutral`/`none`); animates the value with `.contentTransition(.numericText())`.
+- Performed surgical migrations to prove the new primitives drop in cleanly without visual regressions:
+  - `Views/Dashboard/Components/ExpandableCard.swift` — outer chrome now wraps `DSCard(.flat)` / `DSCard(.tinted(...))` and uses `DSDivider` + `DSMotion.standard`. The original public API and accessibility hint are preserved so the existing dashboard call sites are untouched.
+  - `Views/DailyCoach/BlockContinuityCard.swift` — replaced the inline `padding/background/clipShape` chrome with `DSCard(.flat)` and `DSDivider`. Internal block-node chips remain hand-rolled because they're chip-shaped, not card-shaped.
+  - The legacy `.dsCardStyle()` modifier in `DSTokens.swift` continues to work unchanged. It already produces visuals identical to `DSCard(.flat)` because both consume the same `DSSpacing`/`DSRadius`/`DSColor` tokens, so call sites can migrate to `DSCard` opportunistically in P5/P6.
+  - `WorkoutRow.swift` was deliberately *not* migrated to `DSListRow` in this prompt: its current layout (date + PR star + source badge inline; clock icon + duration + exercise count subtitle) is richer than `DSListRow`'s three-slot model. P5 redesigns this row anyway.
+- Snapshot test scaffolding (Point-Free `swift-snapshot-testing`) is intentionally deferred to P5 — the SPM dep edit lives outside `xcodebuild`'s file-system-synchronized groups and is safer to add when the first snapshots are written.
+- Verification:
+  - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+  - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests` — 35 tests in 3 suites passed.
+  - the full `xcodebuild test` parallel run trips the same `CoreSimulator` app-group store-migration flake the README notes for Feature 21 Prompt 2. Resetting the simulator and rerunning serially with focused suites cleared it.
+
 ---
 
 ## Project Setup
