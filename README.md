@@ -4522,6 +4522,20 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
   - succeeded: `xcodebuild build -scheme SuggestMeSomeLiveActivityExtension -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
   - succeeded: `xcodebuild build -scheme SuggestMeSomeWatchWidget -destination 'id=94F35A22-FF54-42FE-A291-9353740A7788'`.
 
+#### Prompt 11 [v1 App Store local-first release hardening] — 2026-05-02
+
+- Implemented the v1 App Store scope decision: production releases now gate backend account restore, cloud sync, coach collaboration, private sharing, push setup, and backend mutation enqueueing behind `AppBuildEnvironment.enablesProductionCloudFeatures`. App Store v1 builds run local-first, while debug builds can still preview the deferred cloud stack.
+- Hid deferred account/cloud/collaboration surfaces from App Store v1 paths across startup, Settings, Dashboard, Daily Coach, and Training Programs. Review-visible copy now states that manual logging, history, local export/delete, Premium Unlock, optional Apple Health, Apple Watch, widgets, and Live Activity are the v1 product.
+- Updated bundled legal documents, compliance UI, account/privacy controls, data export copy, and `website/` pages to legal version `2.3` effective `2026-05-02`, using `support@suggestmesome.app` and `privacy@suggestmesome.app`, and describing the actual v1 behavior: local app data, optional Apple Health, one-time Premium Unlock, no production cloud account, no Sign in with Apple, no backend sync, no collaboration, and no push notifications.
+- Added privacy manifests for the iOS app, Watch app, Watch widget, and Live Activity extension. The app/watch manifests declare the required-reason API usage for `UserDefaults` and app-group defaults, plus system boot time where used; all manifests declare no tracking and no collected-data entries for the v1 binary.
+- Removed alpha channels from the app and Watch App Store icon PNGs, and removed deferred Push Notifications / Sign in with Apple entitlements and project capability flags from the production app target. HealthKit and App Groups remain enabled for the v1 feature set.
+- Updated compliance/legal regression tests so they now lock the local-first v1 contract and prevent Push Notifications / Sign in with Apple capabilities from returning accidentally.
+- Verification:
+  - succeeded: `plutil -lint SuggestMeSome/PrivacyInfo.xcprivacy SuggestMeSomeWatch/PrivacyInfo.xcprivacy SuggestMeSomeWatchWidget/Sources/PrivacyInfo.xcprivacy SuggestMeSomeLiveActivity/PrivacyInfo.xcprivacy`.
+  - succeeded: `sips -g hasAlpha -g pixelWidth -g pixelHeight` on the four App Store icon PNGs; all report `hasAlpha: no`.
+  - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature21LegalAndScopeHardeningTests` — 25 tests passed.
+  - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -configuration Release -destination generic/platform=iOS -derivedDataPath /tmp/SuggestMeSomeDerivedData CODE_SIGNING_ALLOWED=NO build`.
+
 ---
 
 ## Project Setup
