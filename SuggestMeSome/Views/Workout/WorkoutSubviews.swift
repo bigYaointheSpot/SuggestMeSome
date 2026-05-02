@@ -96,6 +96,7 @@ struct WorkoutElapsedTimerText: View {
             Text(presentation.formattedElapsed(at: context.date))
                 .dsMetricLarge()
                 .fontWeight(.thin)
+                .dsHeroGradientFill()
                 .animation(.snappy(duration: 0.25), value: presentation.formattedElapsed(at: context.date))
                 .frame(maxWidth: .infinity, alignment: .center)
                 .accessibilityLabel("Elapsed time \(presentation.formattedElapsed(at: context.date))")

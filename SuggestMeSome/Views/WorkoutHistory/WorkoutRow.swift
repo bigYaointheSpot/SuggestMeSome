@@ -10,9 +10,9 @@ struct WorkoutRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
+        HStack(spacing: DSSpacing.m) {
+            VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                HStack(spacing: DSSpacing.xs) {
                     Text(
                         workout.date,
                         format: .dateTime
@@ -21,25 +21,26 @@ struct WorkoutRow: View {
                             .day()
                             .year()
                     )
-                    .font(.headline)
+                    .dsHeadline()
 
                     if hasPersonalRecord {
                         Image(systemName: "star.fill")
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(DSGradient.prCelebration)
                             .font(.caption)
+                            .accessibilityHidden(true)
                     }
 
                     if let badge = workout.sourceBadgeLabel {
                         Text(badge)
                             .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 8)
+                            .padding(.horizontal, DSSpacing.s)
                             .padding(.vertical, 2)
-                            .background(Color(.tertiarySystemBackground))
+                            .background(DSSurface.elevated)
                             .clipShape(Capsule())
                     }
                 }
 
-                HStack(spacing: 6) {
+                HStack(spacing: DSSpacing.xs) {
                     Image(systemName: "clock")
                         .font(.caption)
                     Text(workout.formattedDuration)
@@ -55,13 +56,12 @@ struct WorkoutRow: View {
                         Text(exerciseCountLabel)
                     }
                 }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .dsCaption()
             }
 
             Spacer()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DSSpacing.xs)
     }
 
     private var exerciseCountLabel: String {

@@ -4408,6 +4408,24 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
   - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
   - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests`.
 
+#### Prompt 5 [Surface uplift A: free-tier Workouts + WorkoutsTab + WorkoutRow visible Whoop polish] — 2026-05-02
+
+- Live workout timer (`WorkoutElapsedTimerText`) now applies `.dsHeroGradientFill()` so the elapsed time renders as the brand gradient (accent → accent-secondary). Reduce-motion path is unaffected — the gradient is static.
+- `Views/WorkoutHistory/WorkoutRow.swift`:
+  - Date headline switched from `.font(.headline)` to `.dsHeadline()` so the rounded type design carries through.
+  - The PR star icon now reads `DSGradient.prCelebration` foreground style instead of flat yellow — same warm-to-cool sweep used on the live celebration overlay.
+  - Source badge background pulls from `DSSurface.elevated` (typed surface) instead of the raw `Color(.tertiarySystemBackground)` literal.
+  - Subtitle row migrated to `.dsCaption()` and all spacings switched to `DSSpacing.*` tokens.
+- `Views/WorkoutHistory/WorkoutsTab.swift`:
+  - Six `Color.indigo` literals (button backgrounds, tinted backgrounds, foreground styles, default tint param) replaced with `DSColor.primaryAction` so the new violet accent carries through every action button and selected-filter state.
+  - Three `cornerRadius: 12` literals on the action buttons promoted to `DSRadius.m, style: .continuous`.
+- WorkoutView's PR celebration was already lifted in P4 and remains untouched here.
+- Mass migration of `WorkoutDetailView` + `WorkoutEditView` cornerRadius/font literals is intentionally deferred — they're cosmetically stable under the new accent and the row-level changes already give the surface its Whoop feel. The remaining literals are flagged by SwiftLint and will fall out as those screens are touched in P6/P7.
+- The plan called for replacing `WorkoutRow` with `DSListRow`. On inspection, `WorkoutRow`'s layout (date + PR star + source badge inline; clock + duration + exercise count subtitle) is richer than `DSListRow`'s three-slot model — forcing the migration would lose the inline badge composition. Tokens-and-typography polish on the existing layout achieves the same Whoop feel without that loss.
+- Verification:
+  - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
+  - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests -only-testing:SuggestMeSomeTests/Feature16Prompt5WorkoutHistoryTests`.
+
 ---
 
 ## Project Setup

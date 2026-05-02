@@ -194,9 +194,9 @@ struct WorkoutsTab: View {
                     .minimumScaleFactor(0.75)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(Color.indigo)
+                    .background(DSColor.primaryAction)
                     .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: DSRadius.m, style: .continuous))
             }
 
             HStack(spacing: 8) {
@@ -218,8 +218,8 @@ struct WorkoutsTab: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(Color(.secondarySystemBackground))
-                        .foregroundStyle(Color.indigo)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(DSColor.primaryAction)
+                        .clipShape(RoundedRectangle(cornerRadius: DSRadius.m, style: .continuous))
                 }
 
                 if !activeProgramRuns.isEmpty {
@@ -241,8 +241,8 @@ struct WorkoutsTab: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(Color(.secondarySystemBackground))
-                            .foregroundStyle(Color.indigo)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(DSColor.primaryAction)
+                            .clipShape(RoundedRectangle(cornerRadius: DSRadius.m, style: .continuous))
                     }
                 }
             }
@@ -289,12 +289,12 @@ struct WorkoutsTab: View {
                     .padding(.vertical, 7)
                     .background(
                         derivedState.activeFilterSummary.exerciseFilterActive
-                            ? Color.indigo.opacity(0.25)
+                            ? DSColor.primaryAction.opacity(0.25)
                             : Color(.secondarySystemBackground)
                     )
                     .foregroundStyle(
                         derivedState.activeFilterSummary.exerciseFilterActive
-                            ? Color.indigo
+                            ? DSColor.primaryAction
                             : Color.primary
                     )
                     .clipShape(Capsule())
@@ -407,7 +407,7 @@ struct WorkoutsTab: View {
         label: String,
         systemImage: String,
         isActive: Bool,
-        tint: Color = .indigo,
+        tint: Color = DSColor.primaryAction,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
