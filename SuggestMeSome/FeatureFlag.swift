@@ -26,17 +26,44 @@ enum FeatureFlag: String, CaseIterable {
         true
     }
 
+    /// Process-wide cache so SwiftUI body re-evals don't pay a UserDefaults
+    /// read on every flag check. The cache is populated on first read for a
+    /// given key, and the setter writes through to both UserDefaults and the
+    /// cache so tests / debug menus / runtime toggles take effect immediately.
+    /// Reads from a different thread than writes are serialized via `lock`.
+    private static let lock = NSLock()
+    private nonisolated(unsafe) static var cache: [String: Bool] = [:]
+
     var isEnabled: Bool {
         get {
+            Self.lock.lock()
+            defer { Self.lock.unlock() }
+            if let cached = Self.cache[defaultsKey] { return cached }
             let defaults = UserDefaults.standard
+            let resolved: Bool
             if defaults.object(forKey: defaultsKey) == nil {
-                return compiledDefault
+                resolved = compiledDefault
+            } else {
+                resolved = defaults.bool(forKey: defaultsKey)
             }
-            return defaults.bool(forKey: defaultsKey)
+            Self.cache[defaultsKey] = resolved
+            return resolved
         }
         nonmutating set {
+            Self.lock.lock()
+            defer { Self.lock.unlock() }
             UserDefaults.standard.set(newValue, forKey: defaultsKey)
+            Self.cache[defaultsKey] = newValue
         }
+    }
+
+    /// Test-only: drop the cached value for this flag so the next read goes
+    /// through UserDefaults again. Useful when seeding UserDefaults directly
+    /// in test fixtures.
+    func resetCache() {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        Self.cache.removeValue(forKey: defaultsKey)
     }
 }
 
