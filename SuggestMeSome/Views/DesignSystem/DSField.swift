@@ -27,6 +27,7 @@ struct DSTextField: View {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
             TextField(placeholder, text: $text)
                 .keyboardType(keyboardType)
@@ -39,18 +40,33 @@ struct DSTextField: View {
                     RoundedRectangle(cornerRadius: DSRadius.s, style: .continuous)
                         .stroke(error == nil ? Color.clear : DSColor.signalCritical, lineWidth: 1)
                 )
+                .accessibilityLabel(title)
+                .accessibilityValue(text.isEmpty ? "Empty" : text)
+                .accessibilityHint(combinedAccessibilityHint)
 
             if let error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(DSColor.signalCritical)
+                    .accessibilityHidden(true)
             } else if let helper {
                 Text(helper)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
         }
         .sensoryFeedback(.warning, trigger: error)
+    }
+
+    /// Folds helper text and error text into the field's accessibility hint
+    /// so VoiceOver users hear the context that sighted users see beneath
+    /// the input. Error wins over helper. The visible labels stay hidden
+    /// from VoiceOver to avoid double-announcement.
+    private var combinedAccessibilityHint: String {
+        if let error { return "Error: \(error)" }
+        if let helper { return helper }
+        return ""
     }
 }
 
