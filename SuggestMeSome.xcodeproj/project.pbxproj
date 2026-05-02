@@ -536,12 +536,6 @@
 							com.apple.HealthKit = {
 								enabled = 1;
 							};
-							com.apple.Push = {
-								enabled = 1;
-							};
-							com.apple.SignInWithApple = {
-								enabled = 1;
-							};
 						};
 					};
 					F8FB3BCB2F82D7EE0002A1DF = {

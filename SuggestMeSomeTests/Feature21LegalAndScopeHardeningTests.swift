@@ -45,6 +45,16 @@ struct Feature21LegalAndScopeHardeningTests {
         #expect(entitlementText.contains("group.com.alexyao.SuggestMeSome"))
     }
 
+    @Test func mainAppEntitlementExcludesDeferredV1CloudCapabilities() throws {
+        let entitlementText = try repoText(at: "SuggestMeSome/SuggestMeSome.entitlements")
+        let projectText = try repoText(at: "SuggestMeSome.xcodeproj/project.pbxproj")
+
+        #expect(!entitlementText.contains("aps-environment"))
+        #expect(!entitlementText.contains("com.apple.developer.applesignin"))
+        #expect(!projectText.contains("com.apple.Push"))
+        #expect(!projectText.contains("com.apple.SignInWithApple"))
+    }
+
     @Test func healthKitDailySummariesAreExcludedFromSyncMetadataAudit() throws {
         let syncSupport = try repoText(at: "SuggestMeSome/SyncContracts/SyncMetadataSupport.swift")
         let auditService = try repoText(at: "SuggestMeSome/Services/Persistence/SyncMetadataAuditService.swift")
