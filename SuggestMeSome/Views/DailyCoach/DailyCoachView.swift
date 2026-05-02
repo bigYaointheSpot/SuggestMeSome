@@ -744,16 +744,22 @@ struct DailyCoachView: View {
     }
 
     private func objectiveRecoveryBaselineRow(_ evaluation: ObjectiveRecoveryEvaluation) -> some View {
-        HStack(spacing: 8) {
-            Text("Objective Recovery")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            objectiveRecoveryStateBadge(evaluation.state)
+        // Stack vertically so the description gets its own line and can
+        // wrap up to 3 lines instead of getting truncated by competing
+        // siblings inside a single HStack.
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text("Objective Recovery")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                objectiveRecoveryStateBadge(evaluation.state)
+                Spacer()
+            }
             Text(objectiveRecoveryBaselineSummary(for: evaluation.state))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-            Spacer()
+                .font(.caption)
+                .foregroundStyle(Color.primary.opacity(0.78))
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

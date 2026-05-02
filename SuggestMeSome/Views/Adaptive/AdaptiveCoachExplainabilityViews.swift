@@ -343,7 +343,11 @@ struct CoachPresentationSummaryCard: View {
             if !copy.whyShort.isEmpty {
                 Text(copy.whyShort)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    // Bump from .secondary to a primary-derived tone so the
+                    // explanation reads cleanly against the tinted card
+                    // background. Still visibly subordinate to the bold
+                    // headline above.
+                    .foregroundStyle(Color.primary.opacity(0.78))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -357,7 +361,7 @@ struct CoachPresentationSummaryCard: View {
                                 .padding(.top, 6)
                             Text(item)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.primary.opacity(0.78))
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
