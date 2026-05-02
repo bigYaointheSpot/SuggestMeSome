@@ -35,6 +35,103 @@ enum DSColor {
     static let signalCritical: Color    = .red
 }
 
+// MARK: - Elevation
+
+enum DSElevation {
+    case none
+    case level1
+    case level2
+
+    var shadowColor: Color {
+        switch self {
+        case .none: return .clear
+        case .level1: return Color.black.opacity(0.06)
+        case .level2: return Color.black.opacity(0.10)
+        }
+    }
+
+    var shadowRadius: CGFloat {
+        switch self {
+        case .none: return 0
+        case .level1: return 4
+        case .level2: return 12
+        }
+    }
+
+    var shadowYOffset: CGFloat {
+        switch self {
+        case .none: return 0
+        case .level1: return 1
+        case .level2: return 4
+        }
+    }
+}
+
+// MARK: - Icon sizes
+
+enum DSIcon {
+    static let xs: CGFloat = 14
+    static let s: CGFloat  = 18
+    static let m: CGFloat  = 22
+    static let l: CGFloat  = 28
+    static let xl: CGFloat = 36
+}
+
+// MARK: - Motion
+
+/// Named motion tokens. Resolves to plain springs in P1 — values become
+/// canonical in P4 (Motion language). Always respect reduce-motion.
+enum DSMotion {
+    static var snap: Animation       { .spring(response: 0.25, dampingFraction: 0.85) }
+    static var standard: Animation   { .spring(response: 0.35, dampingFraction: 0.85) }
+    static var expressive: Animation { .spring(response: 0.45, dampingFraction: 0.75) }
+}
+
+// MARK: - Hairline
+
+enum DSHairline {
+    static var width: CGFloat {
+        1 / max(UIScreen.main.scale, 1)
+    }
+}
+
+// MARK: - Opacity
+
+enum DSOpacity {
+    static let disabled: Double = 0.4
+    static let subdued: Double  = 0.6
+    static let divider: Double  = 0.12
+}
+
+// MARK: - Gradients (stubs — real values land in P3)
+
+enum DSGradient {
+    static var heroAccent: LinearGradient {
+        LinearGradient(
+            colors: [DSColor.primaryAction, DSColor.primaryAction],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static var surfaceGlow: RadialGradient {
+        RadialGradient(
+            colors: [DSColor.primaryAction.opacity(0.08), .clear],
+            center: .center,
+            startRadius: 0,
+            endRadius: 200
+        )
+    }
+
+    static var prCelebration: LinearGradient {
+        LinearGradient(
+            colors: [DSColor.signalPositive, DSColor.primaryAction],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
 // MARK: - Card style
 
 struct DSCardStyle: ViewModifier {

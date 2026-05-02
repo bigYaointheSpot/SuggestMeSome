@@ -123,6 +123,7 @@ struct SuggestMeSomeApp: App {
                 .environment(collaborationCoordinator)
                 .environment(pushNotificationManager)
                 .environment(appRouteCoordinator)
+                .environment(\.uiRefreshV2, FeatureFlag.uiRefreshV2.isEnabled)
                 .onAppear {
                     guard !hasPerformedStartupMaintenance else { return }
                     hasPerformedStartupMaintenance = true

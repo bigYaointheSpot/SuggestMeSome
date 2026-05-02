@@ -1,0 +1,50 @@
+# SwiftLint configuration for SuggestMeSome.
+# Introduced in Feature 22 Prompt 1 as a warn-only safety net.
+# Custom rules enforce DesignSystem token adoption introduced in Feature 22.
+# Severity stays at "warning" until P3 promotes them to error.
+
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - file_length
+  - type_body_length
+  - function_body_length
+  - cyclomatic_complexity
+  - todo
+  - identifier_name
+  - nesting
+
+excluded:
+  - SuggestMeSomeTests
+  - SuggestMeSomeUITests
+  - SuggestMeSomeWatch
+  - SuggestMeSomeWatchWidget
+  - SuggestMeSomeLiveActivity
+  - .build
+  - DerivedData
+
+# Custom rules nudge new code toward DSTokens. Existing violations are
+# tolerated via warning severity and a baseline (generated in CI).
+custom_rules:
+  no_raw_corner_radius:
+    name: "Raw corner radius"
+    regex: "cornerRadius:\\s*\\d+"
+    message: "Use DSRadius.s/m/l/xl tokens instead of a raw cornerRadius literal."
+    severity: warning
+    excluded:
+      - "SuggestMeSome/Views/DesignSystem"
+  no_indigo_literal:
+    name: "Bare .indigo color"
+    regex: "Color\\.indigo|\\.indigo\\b"
+    message: "Use DSColor.primaryAction or DSColor.accent instead of a bare .indigo literal."
+    severity: warning
+    excluded:
+      - "SuggestMeSome/Views/DesignSystem/DSTokens.swift"
+      - "SuggestMeSome/Compliance"
+  no_raw_padding_literal:
+    name: "Raw padding literal"
+    regex: "\\.padding\\(\\s*\\d+(?:\\.\\d+)?\\s*\\)"
+    message: "Use DSSpacing.xs/s/m/l/xl tokens (or .padding(.edge, DSSpacing.x)) instead of a raw numeric padding."
+    severity: warning
+    excluded:
+      - "SuggestMeSome/Views/DesignSystem"

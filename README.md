@@ -4326,6 +4326,27 @@ Exposed block continuity and multi-block trend information in Daily Coach as the
   - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17'`
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature15Prompt9PortableBackupTests -only-testing:SuggestMeSomeTests/Feature18AuditFixRegressionTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature21LegalAndScopeHardeningTests`
 
+### Feature 22 — Holistic UI refresh
+
+**Status:** In Progress
+
+Goal: bring the app from its current visual state to a refreshed, expressive (Whoop-style) language while preserving the data layer, performance characteristics, premium gating, Watch parity, and Live Activity behavior. Approach: foundation → components → visual → motion → per-surface uplift → polish, with a `uiRefreshV2` feature flag as a rollback safety hatch.
+
+#### Prompt 1 [Foundation: decompose monoliths, expand DSTokens, add FeatureFlag and SwiftLint config] — 2026-05-02
+
+- Expanded `DSTokens.swift` with `DSElevation` (none/level1/level2 shadow recipes), `DSIcon` size scale (xs–xl), `DSMotion` named springs (`snap`/`standard`/`expressive` — values stay current; finalized in P4), `DSHairline`, `DSOpacity` (disabled/subdued/divider), and `DSGradient` stubs (`heroAccent`/`surfaceGlow`/`prCelebration`) so downstream prompts can consume the vocabulary without ad-hoc literals.
+- Added `SuggestMeSome/FeatureFlag.swift` with `FeatureFlag.uiRefreshV2`, a UserDefaults-backed flag that defaults ON in DEBUG and OFF otherwise; exposed it through SwiftUI environment (`\.uiRefreshV2`) and resolved it once at the app root so reads don't hit UserDefaults during view-body re-evaluation.
+- Decomposed five monolithic view files without behavior changes (no `@State` moved, no `@StateObject` moved, no `.task` modifiers moved):
+  - `DashboardView.swift` 1008 → 842; helpers `ViewRefreshFingerprinting`, `DashboardRefreshFingerprint` extracted to `DashboardRefreshFingerprinting.swift`; `DashboardTimeWindow` to `DashboardTimeWindow.swift`.
+  - `ProgramReviewView.swift` 1010 → 362; phase/week/session/exercise row subviews and the picker/edit sheets extracted to `ProgramReviewSubviews.swift`.
+  - `WorkoutView.swift` 1483 → 703; in-workout chrome rows, set entry card, RPE stepper, set entry row, and exercise picker extracted to `WorkoutSubviews.swift`. The `plainWorkoutRow` list-row helper extension was promoted from `private` to `internal` so the parent can keep calling it after the move.
+  - `DailyCoachView.swift` 2188 → 1758; `DailyCoachCompletedBlockInsights` and `DailyCoachDerivedState` extracted to `DailyCoachDerivedState.swift`; the today-plan proposal review and draft review sheets to `DailyCoachSheets.swift`.
+  - `CollaborationViews.swift` 1446 → 205; coach-facing surfaces (notification preferences, my coach, coach roster, blueprint library/detail, assignment inbox, coach notes, relationship detail, visibility presets) extracted to `CollaborationCoachSurfaces.swift`; private sharing center, insight/digest detail, route sheet, summary cards, and signed-out helpers to `CollaborationSharingAndCards.swift`.
+- Added a warn-only `.swiftlint.yml` at the repo root with custom rules `no_raw_corner_radius`, `no_indigo_literal`, and `no_raw_padding_literal` to nudge new code toward DSTokens. Severity stays at `warning` until P3 promotes them. Build phase is intentionally not wired in this prompt so machines without `swiftlint` on PATH stay green.
+- Verification:
+  - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+  - succeeded: `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+
 ---
 
 ## Project Setup

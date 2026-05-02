@@ -427,10 +427,10 @@
 					F8FB3BBC2F82D7ED0002A1DF = {
 						CreatedOnToolsVersion = 26.4;
 						SystemCapabilities = {
-							com.apple.HealthKit = {
+							com.apple.ApplicationGroups = {
 								enabled = 1;
 							};
-							com.apple.ApplicationGroups = {
+							com.apple.HealthKit = {
 								enabled = 1;
 							};
 							com.apple.Push = {
