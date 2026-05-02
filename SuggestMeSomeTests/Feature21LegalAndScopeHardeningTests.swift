@@ -13,11 +13,11 @@ struct Feature21LegalAndScopeHardeningTests {
             ComplianceConfiguration.supportEmail,
             ComplianceConfiguration.privacyEmail,
             "Apple Health-derived recovery data stays on device",
-            "not sent to CloudKit or the sync backend",
+            "not sent to CloudKit or a sync backend",
             "does not include ads or third-party analytics",
             "Premium Unlock is a one-time",
-            "privacy request is denied",
-            "Withdraw Consumer Health Data consent"
+            "Production cloud accounts, Sign in with Apple",
+            "push notifications are not included"
         ]
 
         for (path, html) in pages {
@@ -61,7 +61,7 @@ struct Feature21LegalAndScopeHardeningTests {
         #expect(exportView.contains("user-initiated local file export"))
         #expect(exportView.contains("single unencrypted JSON file"))
         #expect(exportView.contains("cached Apple Health-derived recovery summaries"))
-        #expect(exportView.contains("not sent to CloudKit or the backend"))
+        #expect(exportView.contains("not sent to CloudKit or a backend"))
     }
 
     @Test func collaborationDisclosureAcknowledgementsAreAccountAndVersionScoped() {

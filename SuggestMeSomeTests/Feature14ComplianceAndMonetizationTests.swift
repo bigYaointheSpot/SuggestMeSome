@@ -141,7 +141,11 @@ struct Feature14ComplianceAndMonetizationTests {
             "Premium Unlock is a one-time purchase. It unlocks coaching, analytics, smart generation, Apple Health integration, and Apple Watch features. Manual workout logging remains free."
         )
         #expect(!ComplianceConfiguration.requiresOrganizationAccountBeforeRelease)
-        #expect(ComplianceConfiguration.accountBackendLaunchMode == .productionBackend)
+        if AppBuildEnvironment.enablesProductionCloudFeatures {
+            #expect(ComplianceConfiguration.accountBackendLaunchMode == .productionBackend)
+        } else {
+            #expect(ComplianceConfiguration.accountBackendLaunchMode == .localContractValidation)
+        }
         #expect(
             ComplianceConfiguration.onboardingEligibilityTitle == "Training eligibility"
         )
@@ -161,16 +165,19 @@ struct Feature14ComplianceAndMonetizationTests {
             ComplianceConfiguration.doctorCheckDisclosure.contains("doctor")
         )
         #expect(
-            ComplianceConfiguration.cloudSyncStorageDisclosure.contains("dedicated backend")
+            ComplianceConfiguration.cloudSyncStorageDisclosure.contains("v1 App Store release")
+        )
+        #expect(
+            ComplianceConfiguration.cloudSyncStorageDisclosure.contains("locally on this device")
+        )
+        #expect(
+            ComplianceConfiguration.onboardingPrivacyDisclosure.contains("does not include production cloud accounts")
         )
         #expect(
             ComplianceConfiguration.onboardingPrivacyDisclosure.contains("Sign in with Apple")
         )
         #expect(
-            ComplianceConfiguration.onboardingPrivacyDisclosure.contains("collaborate privately")
-        )
-        #expect(
-            ComplianceConfiguration.accountSignInDisclosure.contains("Apple account identifier")
+            ComplianceConfiguration.accountSignInDisclosure.contains("does not create production cloud accounts")
         )
         #expect(
             ComplianceConfiguration.pushNotificationDisclosure.contains("APNs token")
@@ -191,15 +198,15 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(ComplianceConfiguration.websiteURL.absoluteString == "https://www.suggestmesome.app")
         #expect(ComplianceConfiguration.privacyChoicesURL.absoluteString == "https://www.suggestmesome.app/privacy-choices")
         #expect(privacyPolicy.bodyMarkdown.contains("published by **\(ComplianceConfiguration.sellerName)**"))
-        #expect(privacyPolicy.bodyMarkdown.contains("invitee email addresses"))
-        #expect(privacyPolicy.bodyMarkdown.contains("APNs device-token registrations"))
-        #expect(privacyPolicy.bodyMarkdown.contains("private progress shares"))
+        #expect(privacyPolicy.bodyMarkdown.contains("optional Apple Health data"))
+        #expect(privacyPolicy.bodyMarkdown.contains("device-side premium purchase entitlement state"))
+        #expect(privacyPolicy.bodyMarkdown.contains("does not sell personal information or consumer health data"))
         #expect(privacyPolicy.bodyMarkdown.contains("Privacy Choices"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("does not use Apple Health data for advertising"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("Washington residents"))
-        #expect(consumerHealthNotice.bodyMarkdown.contains("visibility settings"))
+        #expect(consumerHealthNotice.bodyMarkdown.contains("keeps consumer health data local by default"))
         #expect(consumerHealthNotice.bodyMarkdown.contains("Privacy Choices URL"))
-        #expect(consumerHealthNotice.bodyMarkdown.contains("Revoking collaboration access stops future sharing"))
+        #expect(consumerHealthNotice.bodyMarkdown.contains("Production cloud sync, coach collaboration, private sharing, and push notifications are not included"))
         #expect(termsDocument.bodyMarkdown.contains("Premium Unlock is a one-time in-app purchase"))
         #expect(termsDocument.bodyMarkdown.contains("Santa Clara County, California"))
         #expect(supportDocument.summary.contains("privacy choices"))
@@ -207,10 +214,10 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(supportDocument.bodyMarkdown.contains("Restore Purchases"))
         #expect(!supportDocument.bodyMarkdown.contains("U.S. Launch Checklist"))
         #expect(
-            ComplianceConfiguration.releaseGateChecklist.contains(where: { $0.contains("Sign in with Apple") && $0.contains("push registration") })
+            ComplianceConfiguration.releaseGateChecklist.contains(where: { $0.contains("Sign in with Apple") && $0.contains("push-notification surfaces") })
         )
         #expect(
-            ComplianceConfiguration.releaseGateChecklist.contains(where: { $0.contains("Preview Cloud Features") })
+            ComplianceConfiguration.releaseGateChecklist.contains(where: { $0.contains("Premium Unlock") && $0.contains("one-time IAP") })
         )
         #expect(
             ComplianceConfiguration.legalDocuments.allSatisfy { !$0.containsPlaceholders }
@@ -232,7 +239,7 @@ struct Feature14ComplianceAndMonetizationTests {
         #expect(snapshot.programShareSummaries.contains(where: { $0.contains("read-only") }))
         #expect(snapshot.notificationSummaries.contains(where: { $0.contains("Coach invites") }))
         #expect(
-            ComplianceConfiguration.cloudFeaturePreviewDisclosure.contains("does not create an account")
+            ComplianceConfiguration.cloudFeaturePreviewDisclosure.contains("do not create an account")
         )
     }
 
