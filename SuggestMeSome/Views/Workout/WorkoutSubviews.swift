@@ -48,7 +48,7 @@ struct WorkoutSessionChromeSection: View {
             } else {
                 Button(action: onStartWorkout) {
                     Label("Start Workout", systemImage: "play.fill")
-                        .font(.headline)
+                        .dsHeadline()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(Color.green)
@@ -697,7 +697,7 @@ struct ExercisePickerSheet: View {
                     }
                 } label: {
                     Text(group.name)
-                        .font(.headline)
+                        .dsHeadline()
                         .foregroundStyle(.primary)
                 }
             }
@@ -737,7 +737,7 @@ struct ExercisePickerSheet: View {
         Form {
             Section {
                 Text(exerciseName)
-                    .font(.headline)
+                    .dsHeadline()
             } header: {
                 Text("Exercise")
             }

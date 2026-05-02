@@ -118,7 +118,7 @@ struct CloudFeaturePreviewView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(title, systemImage: systemImage)
-                .font(.headline)
+                .dsHeadline()
             ForEach(lines, id: \.self) { line in
                 Text(line)
                     .font(.footnote)

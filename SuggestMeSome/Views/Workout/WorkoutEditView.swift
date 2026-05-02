@@ -146,7 +146,7 @@ struct WorkoutEditView: View {
     private var importedEditingNotice: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Limited editing for imported workouts", systemImage: "lock.fill")
-                .font(.headline)
+                .dsHeadline()
             Text("You can edit date, calories, and notes. Exercise/set structure is read-only for Apple Health imports.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -159,7 +159,7 @@ struct WorkoutEditView: View {
     private var addExerciseButton: some View {
         Button { showingExercisePicker = true } label: {
             Label("Add Exercise", systemImage: "plus.circle.fill")
-                .font(.headline)
+                .dsHeadline()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(Color(.secondarySystemBackground))
@@ -185,7 +185,7 @@ struct WorkoutEditView: View {
     private var notesField: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Workout Notes", systemImage: "note.text")
-                .font(.headline)
+                .dsHeadline()
             TextEditor(text: $comments)
                 .frame(minHeight: 120)
                 .padding(6)
@@ -201,7 +201,7 @@ struct WorkoutEditView: View {
     private var saveButton: some View {
         Button { showingSaveConfirmation = true } label: {
             Label("Save Changes", systemImage: "checkmark.circle.fill")
-                .font(.headline)
+                .dsHeadline()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(Color.blue)

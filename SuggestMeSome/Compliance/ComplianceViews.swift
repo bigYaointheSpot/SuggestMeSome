@@ -121,7 +121,7 @@ struct AboutThisGuidanceView: View {
     private func guidanceCallout(title: String, text: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.headline)
+                .dsHeadline()
             Text(text)
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -141,7 +141,7 @@ private struct ComplianceDisclosureCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(title, systemImage: systemImage)
-                .font(.headline)
+                .dsHeadline()
             Text(text)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -417,7 +417,7 @@ struct PaywallView: View {
     private var benefitsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("What Premium Unlock includes")
-                .font(.headline)
+                .dsHeadline()
 
             ForEach(feature?.valueBullets ?? [
                 "Daily Coach and explainable premium guidance",
@@ -438,7 +438,7 @@ struct PaywallView: View {
     private var disclosureCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Disclosures")
-                .font(.headline)
+                .dsHeadline()
             Text(ComplianceConfiguration.premiumUnlockDisclosure)
                 .foregroundStyle(.secondary)
             Text(ComplianceConfiguration.freeWorkoutLoggingDisclosure)
@@ -793,7 +793,7 @@ struct ComplianceOnboardingFlow: View {
                     Toggle(isOn: binding(for: kind)) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("I have reviewed \(kind.title)")
-                                .font(.headline)
+                                .dsHeadline()
                             Button("Open \(kind.title)") {
                                 showingDocumentKind = kind
                             }
@@ -806,7 +806,7 @@ struct ComplianceOnboardingFlow: View {
                     showingLegalCenter = true
                 }
             }
-            .font(.headline)
+            .dsHeadline()
         }
     }
 

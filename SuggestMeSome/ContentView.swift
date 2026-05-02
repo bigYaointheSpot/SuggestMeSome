@@ -157,7 +157,7 @@ struct ActiveWorkoutBanner: View {
         Button(action: onResume) {
             HStack(spacing: 10) {
                 Image(systemName: "timer")
-                    .font(.headline)
+                    .dsHeadline()
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Workout in Progress")

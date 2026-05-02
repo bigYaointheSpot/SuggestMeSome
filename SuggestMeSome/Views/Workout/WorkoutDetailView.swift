@@ -120,7 +120,7 @@ struct WorkoutDetailView: View {
             if workout.isHealthKitImported {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("No set-by-set details imported", systemImage: "info.circle")
-                        .font(.headline)
+                        .dsHeadline()
                     Text("This Apple Health workout was imported without native exercise or set structure.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -142,7 +142,7 @@ struct WorkoutDetailView: View {
                 Image(systemName: "heart.text.square.fill")
                     .foregroundStyle(.pink)
                 Text("Imported from Apple Health")
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
                 if let badge = workout.sourceBadgeLabel {
                     Text(badge)
@@ -184,7 +184,7 @@ struct WorkoutDetailView: View {
     private func notesCard(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Workout Notes", systemImage: "note.text")
-                .font(.headline)
+                .dsHeadline()
             Text(text)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -239,7 +239,7 @@ struct ExerciseDetailCard: View {
     private var cardioCard: some View {
         HStack {
             Label(entry.exerciseName, systemImage: "figure.run")
-                .font(.headline)
+                .dsHeadline()
             Spacer()
             if let secs = entry.cardioDurationSeconds, secs > 0 {
                 Text(formattedDuration(secs))
@@ -267,7 +267,7 @@ struct ExerciseDetailCard: View {
             // Header
             HStack {
                 Text(entry.exerciseName)
-                    .font(.headline)
+                    .dsHeadline()
                 Spacer()
                 Text(entry.unit.rawValue)
                     .font(.caption.weight(.semibold))

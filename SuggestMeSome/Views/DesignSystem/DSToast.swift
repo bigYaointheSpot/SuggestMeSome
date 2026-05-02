@@ -32,7 +32,7 @@ struct DSToast: View {
             if isPresented {
                 HStack(spacing: DSSpacing.s) {
                     Image(systemName: systemImage)
-                        .font(.headline)
+                        .dsHeadline()
                         .foregroundStyle(tint)
                     Text(text)
                         .font(.subheadline.weight(.semibold))

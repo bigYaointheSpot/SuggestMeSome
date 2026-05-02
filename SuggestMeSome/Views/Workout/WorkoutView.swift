@@ -175,7 +175,7 @@ struct WorkoutView: View {
             showingExercisePicker = true
         } label: {
             Label("Add Exercise", systemImage: "plus.circle.fill")
-                .font(.headline)
+                .dsHeadline()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(DSColor.primaryAction.opacity(0.12))
@@ -202,7 +202,7 @@ struct WorkoutView: View {
     private var notesField: some View {
         VStack(alignment: .leading, spacing: DSSpacing.s) {
             Label("Workout Notes", systemImage: "note.text")
-                .font(.headline)
+                .dsHeadline()
             TextEditor(text: $comments)
                 .frame(minHeight: 120)
                 .padding(6)
@@ -220,7 +220,7 @@ struct WorkoutView: View {
             showingEndConfirmation = true
         } label: {
             Label("End Workout", systemImage: "checkmark.circle.fill")
-                .font(.headline)
+                .dsHeadline()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(DSColor.signalCritical)
