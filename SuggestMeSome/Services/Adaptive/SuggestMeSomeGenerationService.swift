@@ -309,7 +309,12 @@ struct SuggestMeSomeGenerationService {
                 availableExercises: originalPool
             )
             for sub in subs {
-                guard !augmentedIDs.contains(sub.exercise.persistentModelID) else { continue }
+                if augmentedIDs.contains(sub.exercise.persistentModelID) {
+                    if substitutionNotes[sub.exercise.persistentModelID] == nil {
+                        substitutionNotes[sub.exercise.persistentModelID] = sub.note
+                    }
+                    break   // existing compatible substitute already covers this removed lift
+                }
                 augmented.append(sub.exercise)
                 augmentedIDs.insert(sub.exercise.persistentModelID)
                 substitutionNotes[sub.exercise.persistentModelID] = sub.note

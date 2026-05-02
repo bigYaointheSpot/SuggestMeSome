@@ -4530,10 +4530,12 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
 - Added privacy manifests for the iOS app, Watch app, Watch widget, and Live Activity extension. The app/watch manifests declare the required-reason API usage for `UserDefaults` and app-group defaults, plus system boot time where used; all manifests declare no tracking and no collected-data entries for the v1 binary.
 - Removed alpha channels from the app and Watch App Store icon PNGs, and removed deferred Push Notifications / Sign in with Apple entitlements and project capability flags from the production app target. HealthKit and App Groups remain enabled for the v1 feature set.
 - Updated compliance/legal regression tests so they now lock the local-first v1 contract and prevent Push Notifications / Sign in with Apple capabilities from returning accidentally.
+- During broad unit-test verification, fixed an equipment-substitution note edge case: when a compatible replacement was already present in the filtered exercise pool, the generated workout now preserves the replacement note instead of only noting newly appended substitutes.
 - Verification:
   - succeeded: `plutil -lint SuggestMeSome/PrivacyInfo.xcprivacy SuggestMeSomeWatch/PrivacyInfo.xcprivacy SuggestMeSomeWatchWidget/Sources/PrivacyInfo.xcprivacy SuggestMeSomeLiveActivity/PrivacyInfo.xcprivacy`.
   - succeeded: `sips -g hasAlpha -g pixelWidth -g pixelHeight` on the four App Store icon PNGs; all report `hasAlpha: no`.
   - succeeded: `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature21LegalAndScopeHardeningTests` — 25 tests passed.
+  - attempted: broad unit-test pass with `-skip-testing:SuggestMeSomeUITests` initially surfaced the substitution-note edge case above, then a focused rerun of that suite hit the known simulator-runner hang before establishing a test connection.
   - succeeded: `xcodebuild -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -configuration Release -destination generic/platform=iOS -derivedDataPath /tmp/SuggestMeSomeDerivedData CODE_SIGNING_ALLOWED=NO build`.
 
 ---
