@@ -18,6 +18,10 @@ import SwiftUI
 import WidgetKit
 import ActivityKit
 
+private enum LiveActivityPalette {
+    static let primary = Color("AccentColor", bundle: .main)
+}
+
 @available(iOS 16.1, *)
 struct WorkoutLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
@@ -26,7 +30,7 @@ struct WorkoutLiveActivityWidget: Widget {
                 attributes: context.attributes,
                 state: context.state
             )
-            .activityBackgroundTint(.indigo.opacity(0.35))
+            .activityBackgroundTint(LiveActivityPalette.primary.opacity(0.35))
             .activitySystemActionForegroundColor(.white)
             .widgetURL(WorkoutLiveActivityAttributes.deepLinkURL(for: context.attributes.sessionID))
         } dynamicIsland: { context in
@@ -51,7 +55,7 @@ struct WorkoutLiveActivityWidget: Widget {
                 MinimalView(state: context.state)
             }
             .widgetURL(WorkoutLiveActivityAttributes.deepLinkURL(for: context.attributes.sessionID))
-            .keylineTint(.indigo)
+            .keylineTint(LiveActivityPalette.primary)
         }
     }
 }
@@ -193,7 +197,7 @@ private struct CenterExpanded: View {
             }
             ProgressView(value: state.progressFraction)
                 .progressViewStyle(.linear)
-                .tint(.indigo)
+                .tint(LiveActivityPalette.primary)
         }
         .padding(.horizontal, 8)
     }
@@ -206,7 +210,7 @@ private struct BottomExpanded: View {
     var body: some View {
         HStack {
             Image(systemName: "arrow.forward.circle")
-                .foregroundStyle(.indigo)
+                .foregroundStyle(LiveActivityPalette.primary)
             Text(state.nextSetTarget ?? "All sets logged")
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
@@ -224,11 +228,11 @@ private struct CompactLeading: View {
             Text(glyph)
                 .font(.caption2.weight(.bold))
                 .frame(width: 16, height: 16)
-                .background(Color.indigo, in: Circle())
+                .background(LiveActivityPalette.primary, in: Circle())
                 .foregroundStyle(.white)
         } else {
             Image(systemName: "dumbbell.fill")
-                .foregroundStyle(.indigo)
+                .foregroundStyle(LiveActivityPalette.primary)
         }
     }
 }
@@ -245,7 +249,7 @@ private struct CompactTrailing: View {
             Text(state.startDate, style: .timer)
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
-                .foregroundStyle(.indigo)
+                .foregroundStyle(LiveActivityPalette.primary)
         }
     }
 }
@@ -256,6 +260,6 @@ private struct MinimalView: View {
 
     var body: some View {
         Image(systemName: state.isPaused ? "pause.circle.fill" : "dumbbell.fill")
-            .foregroundStyle(.indigo)
+            .foregroundStyle(LiveActivityPalette.primary)
     }
 }

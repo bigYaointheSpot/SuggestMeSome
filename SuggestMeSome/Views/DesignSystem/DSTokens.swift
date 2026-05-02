@@ -26,13 +26,13 @@ enum DSRadius {
 }
 
 enum DSColor {
-    /// Primary brand accent. Reads from `Accent` asset catalog when v2 is on
+    /// Primary brand accent. Reads from `AccentColor` asset catalog when v2 is on
     /// (Whoop-leaning deep violet, with a vibrant dark-mode variant) and
     /// falls back to `.indigo` so legacy surfaces still render correctly
     /// when v2 is off.
     static var primaryAction: Color {
         FeatureFlag.uiRefreshV2.isEnabled
-            ? Color("Accent", bundle: .main)
+            ? Color("AccentColor", bundle: .main)
             : .indigo
     }
 

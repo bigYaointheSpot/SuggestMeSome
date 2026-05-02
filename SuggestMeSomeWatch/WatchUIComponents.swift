@@ -15,11 +15,11 @@ import SwiftUI
 // MARK: - Palette
 
 enum WatchPalette {
-    static let primary = Color.indigo
+    static let primary = Color("AccentColor", bundle: .main)
     // Bumped from 0.08 → 0.14 so card fills stay legible in direct sunlight
     // without losing their subtle feel indoors.
     static let surface = Color.white.opacity(0.14)
-    static let surfaceStrong = Color.indigo.opacity(0.18)
+    static let surfaceStrong = primary.opacity(0.18)
     static let strokeFaint = Color.white.opacity(0.16)
     static let positive = Color.green
     static let warning = Color.orange

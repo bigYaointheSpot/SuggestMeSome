@@ -486,7 +486,7 @@ struct NextBlockPrefillReviewSheet: View {
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
-                        .background(isSelected ? Color.accentColor : Color(.systemBackground))
+                        .background(isSelected ? DSColor.primaryAction : Color(.systemBackground))
                         .foregroundStyle(
                             isDisabled
                                 ? Color(.tertiaryLabel)

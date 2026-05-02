@@ -19,6 +19,7 @@ struct WorkoutView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(ActiveWorkoutSessionStore.self) private var activeWorkoutSessionStore
     @Environment(PurchaseManager.self) private var purchaseManager
 
@@ -587,9 +588,14 @@ struct WorkoutView: View {
 
         if prCount > 0 {
             newPRCount = prCount
-            withAnimation(.dsExpressive) {
+            if reduceMotion {
                 showPRCelebration = true
                 celebrationScale = 1.0
+            } else {
+                withAnimation(.dsExpressive) {
+                    showPRCelebration = true
+                    celebrationScale = 1.0
+                }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 dismissCelebration()
@@ -651,6 +657,17 @@ struct WorkoutView: View {
     }
 
     private func dismissCelebration() {
+        if reduceMotion {
+            celebrationScale = 0.5
+            showPRCelebration = false
+            if blockJustCompleted, pendingBlockReviewSnapshot != nil {
+                showBlockReview = true
+            } else {
+                dismiss()
+            }
+            return
+        }
+
         withAnimation(.easeOut(duration: 0.3)) {
             celebrationScale = 0.5
             showPRCelebration = false

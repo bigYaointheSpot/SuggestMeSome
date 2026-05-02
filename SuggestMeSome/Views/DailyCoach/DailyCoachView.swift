@@ -522,7 +522,7 @@ struct DailyCoachView: View {
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
-                        .background(Color.accentColor)
+                        .background(DSColor.primaryAction)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
@@ -615,7 +615,7 @@ struct DailyCoachView: View {
                     Image(systemName: recommendationExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption2)
                 }
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(DSColor.primaryAction)
             }
             .buttonStyle(.plain)
 
@@ -1378,7 +1378,7 @@ struct DailyCoachView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(Color.accentColor)
+                .background(DSColor.primaryAction)
                 .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 9))
                 .buttonStyle(.plain)
@@ -1391,7 +1391,7 @@ struct DailyCoachView: View {
             .font(.subheadline.weight(.medium))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(Color.accentColor)
+            .background(DSColor.primaryAction)
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: 9))
             .buttonStyle(.plain)
@@ -1755,4 +1755,3 @@ private extension ReadinessTier {
 }
 
 // MARK: - TodayPlanProposalReviewSheet
-

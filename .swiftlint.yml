@@ -17,9 +17,6 @@ disabled_rules:
 excluded:
   - SuggestMeSomeTests
   - SuggestMeSomeUITests
-  - SuggestMeSomeWatch
-  - SuggestMeSomeWatchWidget
-  - SuggestMeSomeLiveActivity
   - .build
   - DerivedData
 
@@ -33,14 +30,16 @@ custom_rules:
     severity: warning
     excluded:
       - "SuggestMeSome/Views/DesignSystem"
+      - "SuggestMeSomeWatch"
+      - "SuggestMeSomeWatchWidget"
+      - "SuggestMeSomeLiveActivity"
   no_indigo_literal:
     name: "Bare .indigo color"
     regex: "Color\\.indigo|\\.indigo\\b"
-    message: "Use DSColor.primaryAction or DSColor.accent instead of a bare .indigo literal."
+    message: "Use DSColor.primaryAction or a target-local accent palette instead of a bare .indigo literal."
     severity: warning
     excluded:
       - "SuggestMeSome/Views/DesignSystem/DSTokens.swift"
-      - "SuggestMeSome/Compliance"
   no_raw_padding_literal:
     name: "Raw padding literal"
     regex: "\\.padding\\(\\s*\\d+(?:\\.\\d+)?\\s*\\)"
@@ -48,3 +47,6 @@ custom_rules:
     severity: warning
     excluded:
       - "SuggestMeSome/Views/DesignSystem"
+      - "SuggestMeSomeWatch"
+      - "SuggestMeSomeWatchWidget"
+      - "SuggestMeSomeLiveActivity"

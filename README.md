@@ -4471,6 +4471,22 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
   - succeeded: `xcodebuild build -scheme SuggestMeSomeLiveActivityExtension -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
   - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature16Prompt5WorkoutHistoryTests`.
 
+#### Prompt 9 [UI audit remediation: rollback-safe accents, target parity, reduce-motion hardening] — 2026-05-02
+
+- Addressed the five follow-up Feature 22 UI audit findings without touching SwiftData models, engine services, workout save logic, purchase gating, HealthKit behavior, collaboration backend code, or Watch session payload contracts.
+- Fixed accent routing by changing `DSColor.primaryAction` to read the canonical `AccentColor` asset instead of the missing `Accent` asset, then migrated the remaining branded `Color.accentColor` controls in `DailyCoachView`, `AIProgramGeneratorView`, and `NextBlockPrefillReviewSheet` to `DSColor.primaryAction` so `uiRefreshV2 = false` rolls those controls back to the legacy indigo path.
+- Restored target parity for companion surfaces: `WatchPalette` now consumes the Watch target's local `AccentColor` asset, and the Live Activity extension routes all former indigo literals through a private `LiveActivityPalette` backed by its local `AccentColor` asset.
+- Hardened the PR celebration reduce-motion path in `WorkoutView`: show/hide now skip expressive motion when `accessibilityReduceMotion` is enabled, and the reduced-motion dismiss path no longer waits on the post-hide animation delay.
+- Tightened SwiftLint guardrails so `no_indigo_literal` scans the main app, Watch, and Live Activity targets; only the intentional `DSTokens.swift` legacy fallback remains excluded, while raw-radius/raw-padding churn stays scoped out for companion targets.
+- Verification:
+  - succeeded: `git diff --check`.
+  - succeeded: `rg -n "Color\\.accentColor|\\.indigo\\b|Color\\.indigo|Color\\(\"Accent\"" SuggestMeSome SuggestMeSomeWatch SuggestMeSomeLiveActivity` — only the intentional `DSTokens.swift` legacy fallback remains.
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'id=94F35A22-FF54-42FE-A291-9353740A7788'`.
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatchWidget -destination 'id=94F35A22-FF54-42FE-A291-9353740A7788'`.
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeLiveActivityExtension -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
+  - succeeded (focused): `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature16Prompt5WorkoutHistoryTests -only-testing:SuggestMeSomeTests/Feature20LiveActivityTests -only-testing:SuggestMeSomeTests/Feature16Prompt17TimerPresentationTests -only-testing:SuggestMeSomeTests/Feature12Prompt7WatchWorkoutLifecycleTests` — 94 tests in 8 suites passed, and the prior missing `Accent` asset warning did not reappear.
+
 ---
 
 ## Project Setup

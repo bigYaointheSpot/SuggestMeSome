@@ -293,7 +293,7 @@ struct AIProgramGeneratorView: View {
                             .font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
-                            .background(isSelected ? Color.accentColor : Color(.secondarySystemBackground))
+                            .background(isSelected ? DSColor.primaryAction : Color(.secondarySystemBackground))
                             .foregroundStyle(isSelected ? .white : .primary)
                     }
                     .buttonStyle(.plain)
@@ -333,7 +333,7 @@ struct AIProgramGeneratorView: View {
                             .font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
-                            .background(isSelected ? Color.accentColor : Color(.secondarySystemBackground))
+                            .background(isSelected ? DSColor.primaryAction : Color(.secondarySystemBackground))
                             .foregroundStyle(isSelected ? .white : .primary)
                     }
                     .buttonStyle(.plain)
@@ -360,7 +360,7 @@ struct AIProgramGeneratorView: View {
                             .font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
-                            .background(isSelected ? Color.accentColor : Color(.secondarySystemBackground))
+                            .background(isSelected ? DSColor.primaryAction : Color(.secondarySystemBackground))
                             .foregroundStyle(
                                 isDisabled
                                     ? Color(.tertiaryLabel)
