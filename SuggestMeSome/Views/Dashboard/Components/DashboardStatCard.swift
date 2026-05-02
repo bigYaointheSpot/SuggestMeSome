@@ -49,7 +49,11 @@ struct DashboardStatCard: View {
         }
         .padding(.vertical, DSSpacing.m)
         .padding(.horizontal, DSSpacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Stretch to the parent HStack's tallest tile so the four cards
+        // share a uniform height even when one tile's metric scales down
+        // via minimumScaleFactor. Width still distributes evenly via the
+        // surrounding HStack.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(DSColor.surface)
         .clipShape(RoundedRectangle(cornerRadius: DSRadius.m, style: .continuous))
         .onAppear {

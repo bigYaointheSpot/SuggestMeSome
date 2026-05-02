@@ -338,7 +338,12 @@ struct DashboardView: View {
     // MARK: - Stats Bar
 
     private var statsBar: some View {
-        HStack(spacing: DSSpacing.s) {
+        // alignment: .top + every child tile uses .frame(maxHeight: .infinity)
+        // so the HStack layout assigns the tallest tile's height to all four
+        // and they read as a uniform row. fixedSize on the vertical axis
+        // pins the row to natural max-content height instead of stretching
+        // into the parent's available vertical space.
+        HStack(alignment: .top, spacing: DSSpacing.s) {
             DashboardStatCard(
                 icon: "figure.strengthtraining.traditional",
                 iconColor: DSColor.primaryAction,
@@ -368,6 +373,7 @@ struct DashboardView: View {
                 sparkline: viewModel.streakSparkline
             )
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Strength Trends Card
