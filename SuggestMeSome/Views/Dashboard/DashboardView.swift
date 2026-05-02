@@ -93,6 +93,9 @@ struct DashboardView: View {
             }
             .navigationDestination(isPresented: $viewModel.showingGeneratedWorkout) {
                 WorkoutView(generatedWorkout: viewModel.pendingGeneratedWorkout)
+                    .onDisappear {
+                        viewModel.pendingGeneratedWorkout = nil
+                    }
             }
             .navigationDestination(isPresented: $viewModel.showingProgramWorkout) {
                 if let pw = viewModel.pendingProgramWorkout {

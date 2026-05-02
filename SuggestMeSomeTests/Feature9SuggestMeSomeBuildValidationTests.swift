@@ -9,6 +9,10 @@ import Testing
 @MainActor
 struct Feature9SuggestMeSomeBuildValidationTests {
 
+    @Test func productionBuildDoesNotUseLocalDevicePersonalTeamFlag() {
+        #expect(AppBuildEnvironment.isLocalDevicePersonalTeam == false)
+    }
+
     // MARK: - Equipment Filtering
 
     @Test func equipmentFilteringAllowsAllExercisesForFullGym() {
@@ -190,6 +194,31 @@ struct Feature9SuggestMeSomeBuildValidationTests {
 
     // MARK: - Goal-Aware Prescription
 
+    @Test func generatedExerciseSnapshotsSourceExerciseBeforeInvalidation() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let chest = MuscleGroup(name: "Chest")
+        let fly = Exercise(name: "Cable Fly", exerciseType: .isolation, muscleGroup: chest)
+        context.insert(chest)
+        context.insert(fly)
+        try context.save()
+
+        let generated = GeneratedExercise(
+            exercise: fly,
+            sets: [GeneratedSet(setNumber: 1, isWarmup: false, suggestedReps: 12, suggestedWeight: 35, unit: .lbs)],
+            effectiveTimeMinutes: 8,
+            substitutionNote: "Cable Fly (replaces Pec Deck)"
+        )
+
+        context.delete(fly)
+        try context.save()
+
+        #expect(generated.exerciseName == "Cable Fly")
+        #expect(generated.exerciseType == .isolation)
+        #expect(generated.substitutionNote == "Cable Fly (replaces Pec Deck)")
+        #expect(generated.sets.first?.suggestedWeight == 35)
+    }
+
     @Test func recoveryGoalProducesNoWarmupSets() throws {
         let container = try makeInMemoryContainer()
         let context = container.mainContext
@@ -308,11 +337,11 @@ struct Feature9SuggestMeSomeBuildValidationTests {
         #expect(!workout.exercises.isEmpty)
 
         // All non-cardio exercises should have no warmup sets (recovery mode)
-        let strengthExercises = workout.exercises.filter { $0.exercise.exerciseType != .cardio }
+        let strengthExercises = workout.exercises.filter { $0.exerciseType != .cardio }
         for genExercise in strengthExercises {
             let warmups = genExercise.sets.filter(\.isWarmup)
             #expect(warmups.isEmpty,
-                    "Recovery mode exercise '\(genExercise.exercise.name)' should have no warmup sets")
+                    "Recovery mode exercise '\(genExercise.exerciseName)' should have no warmup sets")
         }
     }
 
@@ -341,7 +370,7 @@ struct Feature9SuggestMeSomeBuildValidationTests {
         let workout = service.generateWorkout(request: request)
         #expect(!workout.exercises.isEmpty)
 
-        let hasCardio = workout.exercises.contains { $0.exercise.exerciseType == .cardio }
+        let hasCardio = workout.exercises.contains { $0.exerciseType == .cardio }
         #expect(hasCardio, "Conditioning mode should include at least one cardio exercise")
     }
 
@@ -368,10 +397,10 @@ struct Feature9SuggestMeSomeBuildValidationTests {
 
         let workout = service.generateWorkout(request: request)
         let cardioTime = workout.exercises
-            .filter { $0.exercise.exerciseType == .cardio }
+            .filter { $0.exerciseType == .cardio }
             .reduce(0.0) { $0 + $1.effectiveTimeMinutes }
         let strengthTime = workout.exercises
-            .filter { $0.exercise.exerciseType != .cardio }
+            .filter { $0.exerciseType != .cardio }
             .reduce(0.0) { $0 + $1.effectiveTimeMinutes }
 
         // In conditioning mode cardio should dominate the session
@@ -418,7 +447,7 @@ struct Feature9SuggestMeSomeBuildValidationTests {
         }
 
         let workout = generationService.generateWorkout(request: request)
-        let exerciseNames = workout.exercises.map(\.exercise.name)
+        let exerciseNames = workout.exercises.map(\.exerciseName)
 
         // Bench Press itself should not be in the anchor lifts or the built workout
         // (the conflict avoidance may redirect to a different mode/exercises)

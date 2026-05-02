@@ -4481,11 +4481,27 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
 - Verification:
   - succeeded: `git diff --check`.
   - succeeded: `rg -n "Color\\.accentColor|\\.indigo\\b|Color\\.indigo|Color\\(\"Accent\"" SuggestMeSome SuggestMeSomeWatch SuggestMeSomeLiveActivity` — only the intentional `DSTokens.swift` legacy fallback remains.
-  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator'`.
   - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatch -destination 'id=94F35A22-FF54-42FE-A291-9353740A7788'`.
   - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeWatchWidget -destination 'id=94F35A22-FF54-42FE-A291-9353740A7788'`.
   - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSomeLiveActivityExtension -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
   - succeeded (focused): `xcodebuild test -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature16Prompt5WorkoutHistoryTests -only-testing:SuggestMeSomeTests/Feature20LiveActivityTests -only-testing:SuggestMeSomeTests/Feature16Prompt17TimerPresentationTests -only-testing:SuggestMeSomeTests/Feature12Prompt7WatchWorkoutLifecycleTests` — 94 tests in 8 suites passed, and the prior missing `Accent` asset warning did not reappear.
+
+#### Prompt 10 [Local phone+watch build path + Smart Session SwiftData hardening] — 2026-05-02
+
+- Added a parallel local-device app/watch target pair for Personal Team installs while preserving the production app, Watch app, Watch Widget, Live Activity extension, bundle IDs, entitlements, and schemes unchanged.
+- New shared scheme: `SuggestMeSome Local Device + Watch`. It builds `SuggestMeSomeLocalDevice` (`com.alexyao.SuggestMeSome.localdevice`) and embeds `SuggestMeSomeLocalWatch` (`com.alexyao.SuggestMeSome.localdevice.watch`) only. The local path keeps HealthKit + WatchConnectivity and omits Watch Widget, Live Activity, App Groups, Push Notifications, and Sign in with Apple entitlements.
+- Added `LOCAL_DEVICE_PERSONAL_TEAM` to both local targets. Under that flag, startup skips account restore, cloud sync, collaboration refresh, and push setup/registration; Settings and Account surfaces show local-build copy instead of Sign in with Apple. Watch session handlers remain installed.
+- Hardened generated workout handoff by snapshotting `GeneratedExercise` to plain `exerciseName` / `exerciseType` values immediately, removing retained SwiftData `Exercise` model references from generated sessions.
+- Hardened workout save completion by returning `SavedWorkoutSummary` from `WorkoutSaveCoordinator.saveWorkoutResult` and routing PR celebration + Watch completion broadcasts through that value snapshot instead of reading a saved `Workout` instance after save-side effects.
+- Cleared pending generated workouts after generated-workout navigation disappears from Dashboard and Workouts tab so stale generated-session objects are not retained by parent navigation state.
+- Added regression coverage for generated exercise snapshots surviving source `Exercise` deletion, save summaries surviving saved `Workout` deletion, and production builds not accidentally using the local Personal Team flag.
+- Verification:
+  - succeeded: `plutil -lint SuggestMeSome.xcodeproj/project.pbxproj SuggestMeSome/SuggestMeSomeLocalDevice.entitlements SuggestMeSomeWatch/SuggestMeSomeLocalWatch.entitlements`.
+  - succeeded: `git diff --check`.
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme SuggestMeSome -destination 'generic/platform=iOS Simulator'`.
+  - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme 'SuggestMeSome Local Device + Watch' -destination 'generic/platform=iOS Simulator'` — target graph contained only `SuggestMeSomeLocalDevice` and `SuggestMeSomeLocalWatch`.
+  - attempted: focused `xcodebuild test` for workout-save, generator, substitution, coach voice, watch lifecycle, workout history, and Live Activity suites compiled through the test bundle, then failed after 374s with `The test runner hung before establishing connection.`
 
 ---
 

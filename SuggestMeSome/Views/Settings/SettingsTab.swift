@@ -96,8 +96,12 @@ struct SettingsTab: View {
             List {
                 preferencesSection
                 workoutSection
-                cloudSyncSection
-                collaborationSection
+                if AppBuildEnvironment.isLocalDevicePersonalTeam {
+                    localDeviceBuildSection
+                } else {
+                    cloudSyncSection
+                    collaborationSection
+                }
                 quickLinksSection
                 accountSection
                 premiumSection
@@ -305,6 +309,17 @@ struct SettingsTab: View {
             }
         } footer: {
             Text("Invite-only sharing with coaches. Tap the ? above to learn more.")
+        }
+    }
+
+    private var localDeviceBuildSection: some View {
+        Section {
+            Label("iPhone + Watch local build", systemImage: "applewatch.and.arrow.forward")
+            Text("Cloud sync, push notifications, Sign in with Apple, widgets, and Live Activities are disabled for Personal Team provisioning. WatchConnectivity and HealthKit remain available for local device testing.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } header: {
+            Text("Local Device Build")
         }
     }
 

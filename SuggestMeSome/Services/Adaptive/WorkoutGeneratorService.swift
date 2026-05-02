@@ -17,7 +17,8 @@ struct GeneratedSet {
 }
 
 struct GeneratedExercise {
-    let exercise: Exercise
+    let exerciseName: String
+    let exerciseType: ExerciseType
     let sets: [GeneratedSet]
     let effectiveTimeMinutes: Double
     /// Present when this exercise replaced a preferred exercise due to equipment constraints.
@@ -30,7 +31,22 @@ struct GeneratedExercise {
         effectiveTimeMinutes: Double,
         substitutionNote: String? = nil
     ) {
-        self.exercise = exercise
+        self.exerciseName = exercise.name
+        self.exerciseType = exercise.exerciseType
+        self.sets = sets
+        self.effectiveTimeMinutes = effectiveTimeMinutes
+        self.substitutionNote = substitutionNote
+    }
+
+    init(
+        exerciseName: String,
+        exerciseType: ExerciseType,
+        sets: [GeneratedSet],
+        effectiveTimeMinutes: Double,
+        substitutionNote: String? = nil
+    ) {
+        self.exerciseName = exerciseName
+        self.exerciseType = exerciseType
         self.sets = sets
         self.effectiveTimeMinutes = effectiveTimeMinutes
         self.substitutionNote = substitutionNote

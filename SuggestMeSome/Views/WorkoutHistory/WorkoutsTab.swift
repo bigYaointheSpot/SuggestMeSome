@@ -105,6 +105,9 @@ struct WorkoutsTab: View {
             }
             .navigationDestination(isPresented: $showingGeneratedWorkout) {
                 WorkoutView(generatedWorkout: pendingGeneratedWorkout)
+                    .onDisappear {
+                        pendingGeneratedWorkout = nil
+                    }
             }
             .sheet(isPresented: $showingCompleteProgramSheet, onDismiss: {
                 DeferredNavigationService.launchAfterSheetDismissIfNeeded(

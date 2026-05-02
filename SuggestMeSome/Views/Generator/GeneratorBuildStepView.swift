@@ -123,11 +123,11 @@ struct SuggestMeSomeBuildStepView: View {
 
     private func exerciseRole(at index: Int, in exercises: [GeneratedExercise]) -> String {
         let exercise = exercises[index]
-        switch exercise.exercise.exerciseType {
+        switch exercise.exerciseType {
         case .cardio:
             return "Cardio"
         case .compound:
-            let firstCompoundIndex = exercises.firstIndex { $0.exercise.exerciseType == .compound }
+            let firstCompoundIndex = exercises.firstIndex { $0.exerciseType == .compound }
             return firstCompoundIndex == index ? "Main Lift" : "Supporting"
         case .isolation:
             return "Isolation"
@@ -149,7 +149,7 @@ struct SuggestMeSomeBuildStepView: View {
 
     @ViewBuilder
     private func exerciseCard(_ exercise: GeneratedExercise, role: String) -> some View {
-        if exercise.exercise.exerciseType == .cardio {
+        if exercise.exerciseType == .cardio {
             cardioCard(exercise, role: role)
         } else {
             strengthCard(exercise, role: role)
@@ -169,7 +169,7 @@ struct SuggestMeSomeBuildStepView: View {
                 .foregroundStyle(.red)
                 .font(.title3)
             VStack(alignment: .leading, spacing: 2) {
-                Text(exercise.exercise.name).dsHeadline()
+                Text(exercise.exerciseName).dsHeadline()
                 Text(durationText).font(.subheadline).foregroundStyle(.secondary)
             }
             Spacer()
@@ -189,7 +189,7 @@ struct SuggestMeSomeBuildStepView: View {
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
-                    Text(exercise.exercise.name).dsHeadline()
+                    Text(exercise.exerciseName).dsHeadline()
                     Spacer()
                     roleLabel(role)
                 }

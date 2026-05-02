@@ -137,27 +137,31 @@ struct SuggestMeSomeApp: App {
                     HealthKitSettingsStorage.migrateLegacyRecoverySyncTimestampIfNeeded(
                         context: sharedModelContainer.mainContext
                     )
-                    cloudSyncManager.configure(
-                        modelContext: sharedModelContainer.mainContext
-                    )
-                    collaborationCoordinator.configure(
-                        modelContext: sharedModelContainer.mainContext
-                    )
-                    accountManager.configureCloudSyncManager(cloudSyncManager)
-                    accountManager.configureCollaborationCoordinator(collaborationCoordinator)
-                    collaborationCoordinator.configure(cloudSyncManager: cloudSyncManager)
-                    pushNotificationManager.configure(
-                        collaborationCoordinator: collaborationCoordinator,
-                        routeCoordinator: appRouteCoordinator
-                    )
+                    if !AppBuildEnvironment.isLocalDevicePersonalTeam {
+                        cloudSyncManager.configure(
+                            modelContext: sharedModelContainer.mainContext
+                        )
+                        collaborationCoordinator.configure(
+                            modelContext: sharedModelContainer.mainContext
+                        )
+                        accountManager.configureCloudSyncManager(cloudSyncManager)
+                        accountManager.configureCollaborationCoordinator(collaborationCoordinator)
+                        collaborationCoordinator.configure(cloudSyncManager: cloudSyncManager)
+                        pushNotificationManager.configure(
+                            collaborationCoordinator: collaborationCoordinator,
+                            routeCoordinator: appRouteCoordinator
+                        )
+                    }
                     WatchSessionCoordinator.shared.installCompanionHandlers(
                         activeWorkoutSessionStore: activeWorkoutSessionStore,
                         modelContext: sharedModelContainer.mainContext
                     )
                     Task { @MainActor in
-                        await accountManager.restoreSessionIfNeeded()
                         await purchaseManager.bootstrap()
-                        await cloudSyncManager.syncOnAppDidBecomeActive()
+                        if !AppBuildEnvironment.isLocalDevicePersonalTeam {
+                            await accountManager.restoreSessionIfNeeded()
+                            await cloudSyncManager.syncOnAppDidBecomeActive()
+                        }
                     }
                     if maintenanceReport.shouldRunDeferredSyncMetadataAudit {
                         let modelContainer = sharedModelContainer
@@ -172,10 +176,12 @@ struct SuggestMeSomeApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     guard newPhase == .active else { return }
                     Task { @MainActor in
-                        await accountManager.restoreSessionIfNeeded()
-                        await cloudSyncManager.syncOnAppDidBecomeActive()
-                        await collaborationCoordinator.refreshOnAppDidBecomeActive()
                         await purchaseManager.refreshEntitlements()
+                        if !AppBuildEnvironment.isLocalDevicePersonalTeam {
+                            await accountManager.restoreSessionIfNeeded()
+                            await cloudSyncManager.syncOnAppDidBecomeActive()
+                            await collaborationCoordinator.refreshOnAppDidBecomeActive()
+                        }
                         guard purchaseManager.isPremiumUnlocked else { return }
                         _ = await HealthKitRecoveryAutoRefreshCoordinator.shared.refreshIfNeeded(
                             trigger: .appDidBecomeActive,

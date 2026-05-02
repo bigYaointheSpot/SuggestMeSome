@@ -62,7 +62,7 @@ struct Feature15Prompt2DailyGenerationAdaptiveTests {
         let workout1 = service.generateWorkout(request: request)
         let workout2 = service.generateWorkout(request: request)
 
-        #expect(workout1.exercises.map { $0.exercise.name } == workout2.exercises.map { $0.exercise.name })
+        #expect(workout1.exercises.map(\.exerciseName) == workout2.exercises.map(\.exerciseName))
     }
 
     @Test func activeProgramContextPreventsInterferingAnchorLiftSelection() throws {
@@ -94,7 +94,7 @@ struct Feature15Prompt2DailyGenerationAdaptiveTests {
         )
 
         let workout = service.generateWorkout(request: request)
-        let names = workout.exercises.map { $0.exercise.name }
+        let names = workout.exercises.map(\.exerciseName)
 
         #expect(!names.contains("Bench Press"))
         #expect(names.contains("Barbell Row") || names.contains("Pull-ups"))

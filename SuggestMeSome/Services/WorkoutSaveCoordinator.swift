@@ -100,8 +100,16 @@ struct WorkoutSaveSideEffectReport: Equatable {
     }
 }
 
+struct SavedWorkoutSummary: Equatable {
+    let workoutID: UUID
+    let completedAt: Date
+    let durationSeconds: Int
+    let personalRecordCount: Int
+}
+
 struct WorkoutSaveResult {
     let workout: Workout
+    let savedWorkoutSummary: SavedWorkoutSummary
     let transactionStatus: WorkoutSaveTransactionStatus
     let sideEffectReports: [WorkoutSaveSideEffectReport]
 
@@ -183,12 +191,14 @@ final class WorkoutSaveCoordinator {
 
         var personalRecords = TrainingReadRepository.fetchPersonalRecords(context: modelContext)
         persistExerciseEntries(request.exerciseEntries, for: workout, at: request.endTime, personalRecords: &personalRecords)
+        let savedWorkoutSummary = makeSummary(for: workout)
 
         let transactionStatus = persistPrimaryTransaction()
         issueLogger.record(transactionStatus: transactionStatus)
         guard case .persisted = transactionStatus else {
             return WorkoutSaveResult(
                 workout: workout,
+                savedWorkoutSummary: savedWorkoutSummary,
                 transactionStatus: transactionStatus,
                 sideEffectReports: []
             )
@@ -198,6 +208,7 @@ final class WorkoutSaveCoordinator {
         CloudSyncManager.shared.notifyLocalMutation("Saved workout")
         return WorkoutSaveResult(
             workout: workout,
+            savedWorkoutSummary: savedWorkoutSummary,
             transactionStatus: transactionStatus,
             sideEffectReports: sideEffectReports
         )
@@ -276,6 +287,18 @@ final class WorkoutSaveCoordinator {
         } catch {
             return .failed(error.localizedDescription)
         }
+    }
+
+    private func makeSummary(for workout: Workout) -> SavedWorkoutSummary {
+        SavedWorkoutSummary(
+            workoutID: workout.id,
+            completedAt: workout.date,
+            durationSeconds: workout.durationSeconds,
+            personalRecordCount: workout.exerciseEntries
+                .flatMap { $0.sets }
+                .filter(\.isPR)
+                .count
+        )
     }
 
     private func runPostSavePipeline(

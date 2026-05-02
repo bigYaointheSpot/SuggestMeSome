@@ -499,12 +499,12 @@ struct WorkoutView: View {
 
     private func draftEntries(from generatedWorkout: GeneratedWorkout) -> [DraftExerciseEntry] {
         generatedWorkout.exercises.enumerated().map { index, genExercise in
-            if genExercise.exercise.exerciseType == .cardio {
+            if genExercise.exerciseType == .cardio {
                 let totalSeconds = Int(genExercise.effectiveTimeMinutes * 60)
                 let mins = totalSeconds / 60
                 let secs = totalSeconds % 60
                 return DraftExerciseEntry(
-                    exerciseName: genExercise.exercise.name,
+                    exerciseName: genExercise.exerciseName,
                     unit: AppPreferences.defaultWeightUnit,
                     orderIndex: index,
                     sets: [],
@@ -525,7 +525,7 @@ struct WorkoutView: View {
                 )
             }
             return DraftExerciseEntry(
-                exerciseName: genExercise.exercise.name,
+                exerciseName: genExercise.exerciseName,
                 unit: unit,
                 orderIndex: index,
                 sets: draftSets
@@ -569,18 +569,15 @@ struct WorkoutView: View {
             healthKitWritebackEnabled: writeAppWorkoutsToHealthKit && purchaseManager.isPremiumUnlocked,
             skipHealthKitWriteback: skipHealthKitWriteback
         )
-        let savedWorkout = coordinator.saveWorkout(using: request)
-        let prCount = savedWorkout.exerciseEntries
-            .flatMap { $0.sets }
-            .filter { $0.isPR }
-            .count
+        let result = coordinator.saveWorkoutResult(using: request)
+        let saveSummary = result.savedWorkoutSummary
+        let prCount = saveSummary.personalRecordCount
         let didCompleteBlock = !wasAlreadyComplete && (runForSave?.isCompleted ?? false)
         blockJustCompleted = didCompleteBlock
         pendingBlockReviewSnapshot = didCompleteBlock ? mesocycleReviewSnapshot(for: runForSave) : nil
         broadcastWatchCompletion(
             activeSession: activeSessionForCompletion,
-            savedWorkout: savedWorkout,
-            prCount: prCount
+            saveSummary: saveSummary
         )
         activeWorkoutSessionStore.discardSession()
         isActive = false
@@ -612,22 +609,21 @@ struct WorkoutView: View {
 
     private func broadcastWatchCompletion(
         activeSession: ActiveWorkoutSession?,
-        savedWorkout: Workout,
-        prCount: Int
+        saveSummary: SavedWorkoutSummary
     ) {
-        let workoutID = activeSession?.id ?? savedWorkout.id
+        let workoutID = activeSession?.id ?? saveSummary.workoutID
         let label = watchCompletionLabel(activeSession: activeSession)
         Task { @MainActor in
             await WatchSessionCoordinator.shared.broadcastSessionCompletion(
                 workoutID: workoutID,
-                completedAt: savedWorkout.date,
-                totalElapsedSeconds: savedWorkout.durationSeconds,
+                completedAt: saveSummary.completedAt,
+                totalElapsedSeconds: saveSummary.durationSeconds,
                 entries: exerciseEntries,
                 sessionLabel: label,
                 sessionPlanKind: activeSession?.sessionPlanKind,
                 sessionSourceLabels: activeSession?.sessionSourceLabels,
                 sessionVersionStableID: activeSession?.sessionVersionStableID,
-                newPersonalRecordCount: prCount
+                newPersonalRecordCount: saveSummary.personalRecordCount
             )
         }
     }

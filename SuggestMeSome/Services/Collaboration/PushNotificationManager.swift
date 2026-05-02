@@ -40,6 +40,9 @@ final class PushNotificationManager: NSObject {
         collaborationCoordinator: CollaborationCoordinator,
         routeCoordinator: AppRouteCoordinator
     ) {
+        guard !AppBuildEnvironment.isLocalDevicePersonalTeam else {
+            return
+        }
         self.collaborationCoordinator = collaborationCoordinator
         self.routeCoordinator = routeCoordinator
         UNUserNotificationCenter.current().delegate = self
@@ -60,6 +63,10 @@ final class PushNotificationManager: NSObject {
 
     @discardableResult
     func requestAuthorization() async -> Bool {
+        guard !AppBuildEnvironment.isLocalDevicePersonalTeam else {
+            lastErrorMessage = "Push notifications are disabled in Local Device builds."
+            return false
+        }
         do {
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(
                 options: [.alert, .badge, .sound]

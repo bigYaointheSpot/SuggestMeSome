@@ -232,7 +232,7 @@ struct Feature9Prompt8EquipmentSubstitutionTests {
 
         // Either substitution happened OR no compounds needed substitution (if DB exercises were prioritized)
         // The key check: if Bench Press was in the pool and excluded, a note should appear
-        let exerciseNames = workout.exercises.map(\.exercise.name)
+        let exerciseNames = workout.exercises.map(\.exerciseName)
         let benchExcluded = !exerciseNames.contains("Bench Press")
 
         if benchExcluded {
@@ -270,7 +270,7 @@ struct Feature9Prompt8EquipmentSubstitutionTests {
 
         // Barbell exercises should not be present
         let barbellExercises = ["Back Squats", "Romanian Deadlift", "Deadlift", "Good Mornings"]
-        let exerciseNames = workout.exercises.map(\.exercise.name)
+        let exerciseNames = workout.exercises.map(\.exerciseName)
         for barbellEx in barbellExercises {
             #expect(!exerciseNames.contains(barbellEx),
                     "\(barbellEx) should not be present in bodyweight-only workout")
@@ -306,14 +306,14 @@ struct Feature9Prompt8EquipmentSubstitutionTests {
 
         // Cable exercises should not be present
         let cableExercises = workout.exercises.filter { ex in
-            ex.exercise.name.lowercased().contains("cable") ||
-            ex.exercise.name == "Lat Pulldown" ||
-            ex.exercise.name == "Face Pulls"
+            ex.exerciseName.lowercased().contains("cable") ||
+            ex.exerciseName == "Lat Pulldown" ||
+            ex.exerciseName == "Face Pulls"
         }
         #expect(cableExercises.isEmpty, "Cable exercises should be excluded for Home Gym profile")
 
         // Barbell compound should still be present (home gym supports barbell)
-        let hasCompound = workout.exercises.contains { $0.exercise.exerciseType == .compound }
+        let hasCompound = workout.exercises.contains { $0.exerciseType == .compound }
         #expect(hasCompound, "Home Gym should still allow barbell compounds")
     }
 
@@ -342,7 +342,7 @@ struct Feature9Prompt8EquipmentSubstitutionTests {
             #expect(!note.isEmpty, "Adaptation note should not be empty")
         }
         // Barbell exercises should be absent
-        let exerciseNames = workout.exercises.map(\.exercise.name)
+        let exerciseNames = workout.exercises.map(\.exerciseName)
         let hasBarbellExercise = exerciseNames.contains { name in
             ["Back Squats", "Bench Press", "Deadlift", "Overhead Press"].contains(name)
         }

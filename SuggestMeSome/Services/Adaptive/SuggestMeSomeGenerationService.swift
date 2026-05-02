@@ -116,7 +116,8 @@ struct SuggestMeSomeGenerationService {
                 prescriptionStyle: constructionProfile.prescriptionStyle
             )
             return GeneratedExercise(
-                exercise: prescribed.exercise,
+                exerciseName: prescribed.exerciseName,
+                exerciseType: prescribed.exerciseType,
                 sets: prescribed.sets,
                 effectiveTimeMinutes: prescribed.effectiveTimeMinutes,
                 substitutionNote: substitutionNotes[exercise.persistentModelID]
@@ -131,10 +132,12 @@ struct SuggestMeSomeGenerationService {
             (targetCardioMinutes >= 8 || (constructionProfile.allowAutomaticCardioAppend && remaining >= 8))
 
         var appendedCardio = false
+        var explanationExercises = selectedStrength
         if shouldAppendCardio, let cardioExercise = bestCardioExercise(from: cardioPool, request: request) {
             let cardioMinutes = targetCardioMinutes > 0
                 ? min(remaining, max(8.0, targetCardioMinutes))
                 : min(remaining, 10.0)
+            explanationExercises.append(cardioExercise)
             generatedExercises.append(
                 workoutPrescriptionService.prescribeCardioExercise(
                     cardioExercise,
@@ -159,7 +162,7 @@ struct SuggestMeSomeGenerationService {
                 snapshot: stateSnapshot,
                 dailyProgramContext: dailyProgramContext,
                 constructionProfile: constructionProfile,
-                selectedExercises: generatedExercises.map(\.exercise),
+                selectedExercises: explanationExercises,
                 appendedCardio: appendedCardio,
                 prescribedIntensity: prescribedIntensity
             )
@@ -229,6 +232,7 @@ struct SuggestMeSomeGenerationService {
             )
         }
         var finalExercises = generatedExercises
+        var explanationExercises = selected
         let strengthTime = generatedExercises.reduce(0.0) { $0 + $1.effectiveTimeMinutes }
         let remaining = max(0.0, request.durationMinutes - strengthTime)
         var appendedCardio = false
@@ -238,6 +242,7 @@ struct SuggestMeSomeGenerationService {
             let cardioDuration = constructionProfile.cardioTimeShare > 0
                 ? min(remaining, max(8.0, request.durationMinutes * constructionProfile.cardioTimeShare))
                 : min(remaining, 10.0)
+            explanationExercises.append(cardioExercise)
             finalExercises.append(
                 workoutPrescriptionService.prescribeCardioExercise(
                     cardioExercise,
@@ -260,7 +265,7 @@ struct SuggestMeSomeGenerationService {
                 snapshot: stateSnapshot,
                 dailyProgramContext: dailyProgramContext,
                 constructionProfile: constructionProfile,
-                selectedExercises: finalExercises.map(\.exercise),
+                selectedExercises: explanationExercises,
                 appendedCardio: appendedCardio,
                 prescribedIntensity: prescribedIntensity
             )

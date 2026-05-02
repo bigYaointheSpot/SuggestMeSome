@@ -45,6 +45,10 @@ struct BackendScalabilityWorkoutSavePipelineTests {
 
         #expect(result.didPersistWorkout)
         #expect(workouts.contains { $0.id == result.workout.id })
+        #expect(result.savedWorkoutSummary.workoutID == result.workout.id)
+        #expect(result.savedWorkoutSummary.completedAt == day(0).addingTimeInterval(1_800))
+        #expect(result.savedWorkoutSummary.durationSeconds == 1_800)
+        #expect(result.savedWorkoutSummary.personalRecordCount == 1)
         #expect(result.sideEffectReports.contains {
             $0.kind == .healthKitWriteback && $0.status == .skipped
         })
@@ -54,6 +58,46 @@ struct BackendScalabilityWorkoutSavePipelineTests {
             WorkoutSaveSideEffectKind.weeklyAnalysis,
         ]))
         #expect(logger.recordedReports.count == 2)
+    }
+
+    @Test func saveSummarySurvivesSavedWorkoutInvalidation() throws {
+        let container = try makeInMemoryContainer()
+        let context = container.mainContext
+        let coordinator = WorkoutSaveCoordinator(
+            modelContext: context,
+            outcomePersistor: { _, _ in },
+            weeklyAnalyzer: { _, _ in }
+        )
+
+        let result = coordinator.saveWorkoutResult(using: WorkoutSaveRequest(
+            startTime: day(3),
+            endTime: day(3).addingTimeInterval(1_200),
+            caloriesText: "120",
+            comments: "summary survives delete",
+            exerciseEntries: [
+                DraftExerciseEntry(
+                    exerciseName: "Front Squat",
+                    unit: .lbs,
+                    orderIndex: 0,
+                    sets: [DraftSet(setNumber: 1, repsText: "3", weightText: "225")]
+                )
+            ],
+            programContext: nil,
+            healthKitEnabled: false,
+            healthKitWritebackEnabled: false
+        ))
+        let summary = result.savedWorkoutSummary
+        let savedWorkout = result.workout
+        let savedWorkoutID = savedWorkout.id
+        #expect(summary.workoutID == savedWorkoutID)
+
+        context.delete(savedWorkout)
+        try context.save()
+
+        #expect(summary.workoutID == savedWorkoutID)
+        #expect(summary.completedAt == day(3).addingTimeInterval(1_200))
+        #expect(summary.durationSeconds == 1_200)
+        #expect(summary.personalRecordCount == 1)
     }
 
     @Test func saveResultMarksProgramCompletionAndReportsSuccess() throws {

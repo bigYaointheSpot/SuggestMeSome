@@ -143,7 +143,7 @@ final class WorkoutLiveActivityController: WorkoutLiveActivityBridging {
     /// iOS 16.1+, user-enabled Live Activities in Settings, and the app
     /// to be active at start time.
     var isAvailable: Bool {
-        driver.areActivitiesEnabled
+        shouldUseLiveActivities
     }
 
     init(
@@ -158,7 +158,7 @@ final class WorkoutLiveActivityController: WorkoutLiveActivityBridging {
     /// are unavailable, if one is already running for this session, or if
     /// the system rejects the request (user-disabled, throttled, etc.).
     func start(for session: ActiveWorkoutSession, now: Date = .now) {
-        guard driver.areActivitiesEnabled else { return }
+        guard shouldUseLiveActivities else { return }
         guard !driver.hasRunningActivity(for: session.id) else { return }
 
         let attributes = WorkoutLiveActivityAttributes(
@@ -175,7 +175,7 @@ final class WorkoutLiveActivityController: WorkoutLiveActivityBridging {
     /// session so pause/resume bursts and watch-driven deltas stay
     /// ordered before reaching ActivityKit.
     func update(for session: ActiveWorkoutSession, now: Date = .now) {
-        guard driver.areActivitiesEnabled else { return }
+        guard shouldUseLiveActivities else { return }
         guard driver.hasRunningActivity(for: session.id) else {
             start(for: session, now: now)
             return
@@ -191,7 +191,7 @@ final class WorkoutLiveActivityController: WorkoutLiveActivityBridging {
     /// policy so the activity disappears from the lock screen and
     /// Dynamic Island as soon as the user leaves the workout.
     func endAll() {
-        guard driver.areActivitiesEnabled else { return }
+        guard shouldUseLiveActivities else { return }
         let pending = operationSequencer.invalidateAllAndAwaitPending()
         Task { [driver] in
             _ = await pending.result
@@ -202,11 +202,15 @@ final class WorkoutLiveActivityController: WorkoutLiveActivityBridging {
     /// End a specific session's activity (if any). Used when sessions
     /// swap identity — e.g., user discards, then starts a fresh one.
     func end(sessionID: UUID) {
-        guard driver.areActivitiesEnabled else { return }
+        guard shouldUseLiveActivities else { return }
         guard driver.hasRunningActivity(for: sessionID) else { return }
         operationSequencer.enqueueTerminal(for: sessionID) { [driver] in
             await driver.endActivity(sessionID: sessionID)
         }
+    }
+
+    private var shouldUseLiveActivities: Bool {
+        !AppBuildEnvironment.isLocalDevicePersonalTeam && driver.areActivitiesEnabled
     }
 
     // MARK: - Helpers

@@ -108,7 +108,17 @@ struct AccountSettingsView: View {
 
     private var signedOutSection: some View {
         Section {
-            if accountManager.launchMode == .productionBackend {
+            if AppBuildEnvironment.isLocalDevicePersonalTeam {
+                Text("Apple sign-in and cloud accounts are disabled in the Local Device build so a Personal Team can install the iPhone and Watch apps. Use the production scheme to test account, push, and sync flows.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                NavigationLink {
+                    CloudFeaturePreviewView()
+                } label: {
+                    Label("Preview Cloud Features", systemImage: "sparkles.rectangle.stack")
+                }
+            } else if accountManager.launchMode == .productionBackend {
                 AccountSignInNoticeView()
 
                 SignInWithAppleButton(.signIn) { request in
@@ -167,9 +177,11 @@ struct AccountSettingsView: View {
                 .padding(.top, 4)
             }
         } header: {
-            Text(accountManager.launchMode == .productionBackend ? "Connect Account or Preview" : "Create or Sign In")
+            Text(AppBuildEnvironment.isLocalDevicePersonalTeam || accountManager.launchMode == .productionBackend ? "Connect Account or Preview" : "Create or Sign In")
         } footer: {
-            Text(accountManager.launchMode == .productionBackend
+            Text(AppBuildEnvironment.isLocalDevicePersonalTeam
+                 ? "This build keeps local workout logging, WatchConnectivity, and HealthKit available while omitting Personal Team provisioning blockers."
+                 : accountManager.launchMode == .productionBackend
                  ? "Sign in is optional. The app remains fully usable while signed out, and Preview Cloud Features shows sample collaboration surfaces without creating an account or contacting the backend."
                  : "This build does not transmit account data off device. Replace the local contract service with your production backend before public cloud launch.")
         }
