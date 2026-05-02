@@ -4503,6 +4503,25 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
   - succeeded: `xcodebuild build -project SuggestMeSome.xcodeproj -scheme 'SuggestMeSome Local Device + Watch' -destination 'generic/platform=iOS Simulator'` — target graph contained only `SuggestMeSomeLocalDevice` and `SuggestMeSomeLocalWatch`.
   - attempted: focused `xcodebuild test` for workout-save, generator, substitution, coach voice, watch lifecycle, workout history, and Live Activity suites compiled through the test bundle, then failed after 374s with `The test runner hung before establishing connection.`
 
+#### Prompt 9 [Post-launch polish: dashboard tile heights + Daily Coach card readability] — 2026-05-02
+
+- Two pieces of user feedback after the Feature 22 ship:
+  1. The four `DashboardStatCard` tiles under the time-window picker drifted in height because `dsMetricMedium` applies `minimumScaleFactor(0.6)`, so longer values like `1h 23m` and `12wk` shrank vertically while shorter values rendered at full size. The row visibly bowed.
+  2. The Daily Coach "Coach Recommendation" card rendered the same string twice (`Full Body session recommended today.` once as `copy.headline` and once as `copy.action`), and the `.foregroundStyle(.secondary)` text in `whyShort`, supporting bullets, and the objective recovery baseline summary read too faintly against the tinted card surface in dark mode. The recovery summary also truncated mid-sentence even though it asked for `lineLimit(2)`.
+- Fix 1 — `Views/Dashboard/Components/DashboardStatCard.swift` + `Views/Dashboard/DashboardView.swift`: the stat card now sizes via `.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)`, and `statsBar` wraps the HStack with `.fixedSize(horizontal: false, vertical: true)` plus `HStack(alignment: .top)`. SwiftUI assigns the tallest natural-content height to every tile and the row reads as a uniform group. `minimumScaleFactor(0.6)` stays as a defensive fallback so AX5 / very long values still fit. (commit `214c487`)
+- Fix 2 — `Views/Adaptive/AdaptiveCoachExplainabilityViews.swift`: render-side dedup in `CoachPresentationSummaryCard`. When `copy.action` matches `copy.headline` (case- and whitespace-insensitive), the action row is skipped. Upstream `CoachPresentationService` contract untouched, so any other view consuming `CoachPresentationCopy` continues to see both fields. (commit `d31b5aa`)
+- Fix 3 — `Views/DailyCoach/DailyCoachView.swift` + `Views/Adaptive/AdaptiveCoachExplainabilityViews.swift`: bumped readability on three caption-tier lines that read too faint against the coach card surface:
+  - `objectiveRecoveryBaselineRow` restructured from a single HStack (which was crowding the description into truncation) into a 2-row VStack: label + state badge on top, description on its own row with `lineLimit(3)` and `fixedSize(horizontal: false, vertical: true)` so the message wraps cleanly.
+  - The recovery description, the coach `whyShort` line, and the supporting bullet items moved from `.foregroundStyle(.secondary)` to `Color.primary.opacity(0.78)`. Visibly subordinate to the bold headline above but legible at caption size. Headline / eyebrow / accent colors untouched. (commit `ecd9c2c`)
+- All edits live in source files that are members of every iOS app target via the project's `PBXFileSystemSynchronizedRootGroup`s, so the production `SuggestMeSome` build, the local-team `SuggestMeSomeLocalDevice` build, and both Watch companions pick up the fixes without per-target source duplication.
+- Verification:
+  - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
+  - succeeded: `xcodebuild build -scheme SuggestMeSomeWatch -destination 'id=94F35A22-FF54-42FE-A291-9353740A7788'`.
+  - succeeded: `xcodebuild build -scheme 'SuggestMeSome Local Device + Watch' -destination 'generic/platform=iOS'` — both `SuggestMeSomeLocalDevice` and `SuggestMeSomeLocalWatch` in the target graph compiled clean.
+  - succeeded: `xcodebuild build -scheme SuggestMeSomeLocalWatch -destination 'id=94F35A22-FF54-42FE-A291-9353740A7788'`.
+  - succeeded: `xcodebuild build -scheme SuggestMeSomeLiveActivityExtension -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
+  - succeeded: `xcodebuild build -scheme SuggestMeSomeWatchWidget -destination 'id=94F35A22-FF54-42FE-A291-9353740A7788'`.
+
 ---
 
 ## Project Setup
