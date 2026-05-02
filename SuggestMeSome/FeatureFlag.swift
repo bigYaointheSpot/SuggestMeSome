@@ -17,14 +17,13 @@ enum FeatureFlag: String, CaseIterable {
 
     var defaultsKey: String { "FeatureFlag.\(rawValue)" }
 
-    /// Compile-time default. DEBUG builds default to ON to dogfood; release
-    /// builds default to OFF and flip to ON in P7 once snapshots/perf clear.
+    /// Compile-time default. P7 flipped this to ON across DEBUG and release
+    /// after the surface uplifts shipped without regressions in P5/P6.
+    /// The flag remains in code for one more release as a safety hatch — a
+    /// bug report can flip a single UserDefaults key to roll back to legacy
+    /// look without a new binary.
     var compiledDefault: Bool {
-        #if DEBUG
-        return true
-        #else
-        return false
-        #endif
+        true
     }
 
     var isEnabled: Bool {

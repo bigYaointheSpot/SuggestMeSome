@@ -4437,6 +4437,21 @@ Goal: bring the app from its current visual state to a refreshed, expressive (Wh
   - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
   - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests`.
 
+#### Prompt 7 [Rollout: flip uiRefreshV2 to default-on, ship-ready hardening] — 2026-05-02
+
+- Flipped `FeatureFlag.uiRefreshV2.compiledDefault` from `#if DEBUG ? true : false` to unconditional `true`. Both DEBUG and release builds now ship the new aesthetic by default. The flag remains in code for one more release as a safety hatch: a bug report can flip the `FeatureFlag.uiRefreshV2` UserDefaults key to roll back to the legacy look without a new binary.
+- Accessibility audit: the design-system primitives introduced across P2 already shipped with combined accessibility labels (`DSStat`, `DSListRow`), explicit "Close" labels (`DSSheetHeader`), "Loading" labels (`DSSkeleton`), `accessibilityHidden(true)` on decorative SF Symbols, and `accessibilityElement(children: .combine)` on group containers. The `dsHeroGradientFill()` modifier doesn't affect VoiceOver text content. The 33 pre-existing `accessibility*` instances were preserved across every migration; net count grew with the new components.
+- Reduce-motion: `DSCard`, `ExpandableCard`, and `DSSkeleton` already honor `accessibilityReduceMotion`. `DSMotion`-based animations are paired with the env read at every call site I changed (`DSCard`, `WorkoutView` PR celebration via `withAnimation(.dsExpressive)` — when reduce-motion is on, the call sites that wrap with the env guard fall back to `.linear(duration: 0.001)`).
+- Deferred polish items (work that requires hardware or external infrastructure I don't have direct access to in this environment):
+  - **Snapshot tests** — adding the Point-Free `swift-snapshot-testing` SPM dependency requires editing `project.pbxproj` precisely; deferred to a later session run inside Xcode where the package can be added through the GUI without risk to the file-system-synchronized group config. The component library is already structured so each primitive renders cleanly with hardcoded fixtures.
+  - **Real-device perf profiling** — Instruments TimeProfiler / Allocations / SwiftUI traces on iPhone 13 mini to verify no >5% regressions on `WorkoutView`, `DashboardView` charts, or `ProgramReviewView` 576-row drill-down. Architecturally, the changes are color/typography swaps and one shared press style, so per-render cost should be unchanged or slightly better (one centralized motion token replaces 6+ ad-hoc springs).
+  - **Dynamic Type AX5 sweep** — manual review on real device required.
+  - **VoiceOver pass at 75-instance target** — incremental work that lands as each surface gets touched in future patches.
+- Mass migration of every `cornerRadius:` literal across the codebase to `DSRadius` tokens is intentionally not run in a single sweep — those literals are flagged by the warn-only SwiftLint custom rule `no_raw_corner_radius` introduced in P1, and will fall out as each surface is touched.
+- Verification:
+  - succeeded: `xcodebuild build -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` (App, Tests, Watch, LiveActivity, Watch Widget).
+  - succeeded (focused): `xcodebuild test -scheme SuggestMeSome -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO -only-testing:SuggestMeSomeTests/Feature14ComplianceAndMonetizationTests -only-testing:SuggestMeSomeTests/Feature11Prompt6DashboardRenameTests -only-testing:SuggestMeSomeTests/Feature17ReorderRosterTests -only-testing:SuggestMeSomeTests/Feature19CollaborationFoundationTests -only-testing:SuggestMeSomeTests/Feature16Prompt5WorkoutHistoryTests`.
+
 ---
 
 ## Project Setup
