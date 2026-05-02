@@ -24,9 +24,14 @@ enum DSCardVariant {
 
 /// A neutral container with consistent padding, corner radius, and optional
 /// header + expansion. Variants control fill/stroke. Always uses DSTokens.
-struct DSCard<Content: View>: View {
+///
+/// Header type is a generic parameter (rather than `AnyView`) so SwiftUI's
+/// identity-based diffing engine can short-circuit re-renders when the
+/// header subtree is structurally stable. Callers that don't need a header
+/// pick up `Header == EmptyView` via the convenience inits below.
+struct DSCard<Header: View, Content: View>: View {
     private let variant: DSCardVariant
-    private let header: AnyView?
+    private let header: Header
     private let expandable: Bool
     private let isExpanded: Binding<Bool>?
     private let onTap: (() -> Void)?
@@ -34,60 +39,28 @@ struct DSCard<Content: View>: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Designated init — every other init forwards here.
     init(
-        _ variant: DSCardVariant = .flat,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.variant = variant
-        self.header = nil
-        self.expandable = false
-        self.isExpanded = nil
-        self.onTap = nil
-        self.content = content()
-    }
-
-    init<Header: View>(
         _ variant: DSCardVariant = .flat,
         @ViewBuilder header: () -> Header,
+        isExpanded: Binding<Bool>? = nil,
+        onTap: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.variant = variant
-        self.header = AnyView(header())
-        self.expandable = false
-        self.isExpanded = nil
-        self.onTap = nil
-        self.content = content()
-    }
-
-    init(
-        _ variant: DSCardVariant = .flat,
-        isExpanded: Binding<Bool>,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.variant = variant
-        self.header = nil
-        self.expandable = true
+        self.header = header()
+        self.expandable = isExpanded != nil
         self.isExpanded = isExpanded
-        self.onTap = nil
-        self.content = content()
-    }
-
-    init(
-        _ variant: DSCardVariant = .flat,
-        onTap: @escaping () -> Void,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.variant = variant
-        self.header = nil
-        self.expandable = false
-        self.isExpanded = nil
         self.onTap = onTap
         self.content = content()
     }
 
     var body: some View {
         let inner = VStack(alignment: .leading, spacing: DSSpacing.m) {
-            if let header { header }
+            // EmptyView renders no content and contributes no spacing in
+            // VStack, so the no-header convenience inits visually look
+            // identical to the old `if let header` branch.
+            header
             if expandable, let isExpanded {
                 if isExpanded.wrappedValue {
                     content
@@ -176,6 +149,36 @@ struct DSCard<Content: View>: View {
         case .elevated, .gradient: return DSElevation.level1.shadowYOffset
         default:                   return 0
         }
+    }
+}
+
+// MARK: - Convenience inits (no header)
+
+extension DSCard where Header == EmptyView {
+    /// Card without a header slot — the most common form.
+    init(
+        _ variant: DSCardVariant = .flat,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.init(variant, header: { EmptyView() }, isExpanded: nil, onTap: nil, content: content)
+    }
+
+    /// Tap-to-expand card without a header slot.
+    init(
+        _ variant: DSCardVariant = .flat,
+        isExpanded: Binding<Bool>,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.init(variant, header: { EmptyView() }, isExpanded: isExpanded, onTap: nil, content: content)
+    }
+
+    /// Tappable card without a header slot.
+    init(
+        _ variant: DSCardVariant = .flat,
+        onTap: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.init(variant, header: { EmptyView() }, isExpanded: nil, onTap: onTap, content: content)
     }
 }
 
